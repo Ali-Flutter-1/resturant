@@ -1,0 +1,169 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+
+import '../../../core/animations/motion.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/app_buttons.dart';
+
+/// The first screen: photograph, logo, promise, two ways forward.
+///
+/// Built as an orchestrated entrance rather than scattered effects — the
+/// photograph settles, then the logo, headline and actions arrive in sequence.
+class WelcomeScreen extends StatelessWidget {
+  const WelcomeScreen({super.key, this.onGetStarted, this.onLogin});
+
+  final VoidCallback? onGetStarted;
+  final VoidCallback? onLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const _HeroBackdrop(),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.gutter,
+                AppSpacing.gutter,
+                AppSpacing.gutter,
+                AppSpacing.x12,
+              ),
+              child: Column(
+                children: [
+                  Expanded(child: _Branding()),
+                  _Actions(onGetStarted: onGetStarted, onLogin: onLogin),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroBackdrop extends StatelessWidget {
+  const _HeroBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+          fit: StackFit.expand,
+          children: [
+            // The Figma frame sized this 512×279 image at top-left inside an
+            // 852pt-tall frame, so the photograph tiled visibly. Cover fixes the
+            // repeat; the source asset is still low-resolution — see the note in
+            // the handover.
+            Image.asset(
+              'assets/images/welcome_hero.jpg',
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+            ),
+            // Bottom-up scrim, so the actions always sit on enough contrast
+            // regardless of what the photograph is doing behind them.
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  stops: [0.0, 0.5, 1.0],
+                  colors: [
+                    Color(0xE6000000),
+                    Color(0x80000000),
+                    Color(0x33000000),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        )
+        .animate()
+        .fadeIn(duration: Motion.slow, curve: Motion.enter)
+        .scale(
+          begin: const Offset(1.06, 1.06),
+          end: const Offset(1, 1),
+          duration: const Duration(milliseconds: 900),
+          curve: Motion.enter,
+        );
+  }
+}
+
+class _Branding extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Image.asset(
+                'assets/images/logo.jpg',
+                width: 192,
+                fit: BoxFit.contain,
+              ),
+            )
+            .animate()
+            .fadeIn(delay: 200.ms, duration: Motion.moderate)
+            .slideY(begin: 0.15, end: 0, curve: Motion.enter),
+        const SizedBox(height: AppSpacing.x8),
+        Text(
+              'Heritage in Every Bite',
+              textAlign: TextAlign.center,
+              style: context.textTheme.displayLarge?.copyWith(
+                color: Colors.white,
+              ),
+            )
+            .animate()
+            .fadeIn(delay: 380.ms, duration: Motion.moderate)
+            .slideY(begin: 0.2, end: 0, curve: Motion.enter),
+        const SizedBox(height: AppSpacing.x2),
+        Text(
+              'Experience a symphony of British and Sri Lankan flavors.',
+              textAlign: TextAlign.center,
+              style: context.textTheme.bodyLarge?.copyWith(
+                color: Colors.white.withValues(alpha: 0.8),
+              ),
+            )
+            .animate()
+            .fadeIn(delay: 500.ms, duration: Motion.moderate)
+            .slideY(begin: 0.2, end: 0, curve: Motion.enter),
+      ],
+    );
+  }
+}
+
+class _Actions extends StatelessWidget {
+  const _Actions({this.onGetStarted, this.onLogin});
+
+  final VoidCallback? onGetStarted;
+  final VoidCallback? onLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PrimaryButton(
+              label: 'Get Started',
+              onPressed: onGetStarted,
+              onDark: true,
+            ),
+            const SizedBox(height: AppSpacing.x3),
+            SecondaryButton(
+              label: 'Login to your account',
+              onPressed: onLogin,
+              onDark: true,
+            ),
+          ],
+        )
+        .animate()
+        .fadeIn(delay: 640.ms, duration: Motion.moderate)
+        .slideY(begin: 0.25, end: 0, curve: Motion.enter);
+  }
+}
+
+extension on BuildContext {
+  TextTheme get textTheme => Theme.of(this).textTheme;
+}

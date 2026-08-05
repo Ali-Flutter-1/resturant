@@ -1,0 +1,194 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:practice/core/theme/app_theme.dart';
+import 'package:practice/shared/shell/tabbed_shell.dart';
+
+/// The shell's contract: tab stacks survive switching, the bar is never
+/// unmounted, and detail screens push into the tab rather than over the shell.
+///
+/// These run on the non-iOS path (tests report as linux/macos), so the bar is
+/// the Flutter one — but the navigator behaviour under test is identical.
+/// Stateful so a test can prove the tab survives a switch rather than being
+/// rebuilt from scratch.
+class _TabOneRoot extends StatefulWidget {
+  const _TabOneRoot();
+
+  @override
+  State<_TabOneRoot> createState() => _TabOneRootState();
+}
+
+class _TabOneRootState extends State<_TabOneRoot> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('tab-one-root'),
+            Text('count: $_count'),
+            ElevatedButton(
+              onPressed: () => setState(() => _count++),
+              child: const Text('bump'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const Scaffold(
+                    body: Center(child: Text('tab-one-detail')),
+                  ),
+                ),
+              ),
+              child: const Text('open detail'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void main() {
+  Widget harness() => MaterialApp(
+    theme: AppTheme.light,
+    home: TabbedShell(
+      tabs: [
+        ShellTab(
+          label: 'One',
+          sfSymbol: 'circle',
+          icon: Icons.circle_outlined,
+          selectedIcon: Icons.circle,
+          builder: (context) => const _TabOneRoot(),
+        ),
+        ShellTab(
+          label: 'Two',
+          sfSymbol: 'square',
+          icon: Icons.square_outlined,
+          selectedIcon: Icons.square,
+          builder: (_) =>
+              const Scaffold(body: Center(child: Text('tab-two-root'))),
+        ),
+      ],
+    ),
+  );
+
+  testWidgets('renders the first tab and its bar', (tester) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    expect(find.text('tab-one-root'), findsOneWidget);
+    expect(find.text('One'), findsOneWidget);
+    expect(find.text('Two'), findsOneWidget);
+  });
+
+  testWidgets('switching tabs keeps both navigators mounted', (tester) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Two'));
+    await tester.pumpAndSettle();
+
+    // IndexedStack keeps the inactive tab in the tree, just not visible —
+    // that is what preserves each tab's stack.
+    expect(find.text('tab-two-root'), findsOneWidget);
+    expect(
+      find.text('tab-one-root', skipOffstage: false),
+      findsOneWidget,
+      reason: 'tab one must stay mounted so its stack survives',
+    );
+  });
+
+  testWidgets('a detail screen pushes inside the tab, bar stays in the tree', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('tab-one-detail'), findsOneWidget);
+    // The bar slides away but is never removed — the whole point of the
+    // architecture. Finding it offstage proves it was not unmounted.
+    expect(find.text('One', skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('the bar is not tappable while a detail screen is open', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+
+    // The bar slid away and is wrapped in IgnorePointer, so this tap is
+    // swallowed. Consequence: tabs cannot be switched from a detail screen,
+    // and "re-tap the active tab to pop to root" can never fire — the user
+    // must use back or the screen's own control.
+    await tester.tap(find.text('Two'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('tab-one-detail'), findsOneWidget);
+    expect(find.text('tab-two-root'), findsNothing);
+  });
+
+  testWidgets('switching tabs preserves each tab\'s state', (tester) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('bump'));
+    await tester.tap(find.text('bump'));
+    await tester.pumpAndSettle();
+    expect(find.text('count: 2'), findsOneWidget);
+
+    await tester.tap(find.text('Two'));
+    await tester.pumpAndSettle();
+    expect(find.text('tab-two-root'), findsOneWidget);
+
+    await tester.tap(find.text('One'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('count: 2'),
+      findsOneWidget,
+      reason: 'IndexedStack must keep the tab alive across a switch',
+    );
+  });
+
+  testWidgets('back pops the tab stack before leaving the shell', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+
+    final popped = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(popped, isTrue);
+    expect(find.text('tab-one-detail'), findsNothing);
+    expect(find.text('tab-one-root'), findsOneWidget);
+  });
+
+  testWidgets('back from a secondary tab returns to the first tab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Two'));
+    await tester.pumpAndSettle();
+    expect(find.text('tab-two-root'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('tab-one-root'), findsOneWidget);
+  });
+}
