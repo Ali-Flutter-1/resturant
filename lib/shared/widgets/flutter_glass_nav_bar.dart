@@ -122,8 +122,8 @@ class _NavButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
-                duration: Motion.quick,
-                curve: Motion.standard,
+                duration: context.motion.fade(Motion.fast),
+                curve: context.motion.standard,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.x4,
                   vertical: AppSpacing.x1 + 1,
@@ -136,7 +136,7 @@ class _NavButton extends StatelessWidget {
                 ),
                 child: Icon(
                   selected ? item.selectedIcon : item.icon,
-                  size: 20,
+                  size: AppIconSize.xl,
                   color: selected ? accent : inactive,
                 ),
               ),

@@ -1,22 +1,36 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/preview/sample_content.dart';
 import '../../../shared/widgets/admin_nav.dart';
-import '../../../shared/widgets/order_row.dart';
 import '../../../shared/widgets/status_pill.dart';
 import 'order_actions_sheet.dart';
 
 /// The live order queue.
 ///
-/// NOT transcribed from Figma — the Figma MCP quota was exhausted before the
-/// "Admin Mobile: Manage Orders (Polished)" frame (`1:3482`) could be read.
-/// This is built from the design language the Dashboard establishes, so it is
-/// internally consistent but unverified. Check it against the frame before
-/// treating it as final.
+/// Transcribed from "Admin Mobile: Manage Orders (Polished)" (`1:3482`), from
+/// the frame's *metadata* only — the Figma MCP quota on this plan allows no
+/// more than a call or two, so geometry and structure are the design's while
+/// every colour and weight is this app's existing token, inferred rather than
+/// read off the frame. Treat the styling as unverified.
+///
+/// The frame replaces this screen's filter chips and compact rows with one
+/// expanded card per order: a 4pt status stripe down the left edge, reference
+/// and status chip on a line, destination, detail and amount, then the order's
+/// line items and the actions that apply to it.
+///
+/// Two things in the frame are deliberately *not* adopted. Its cards are
+/// labelled Pending / Preparing / Out for Delivery, which is a different
+/// status vocabulary from this app's; changing that touches the dashboard, the
+/// order row, the actions sheet and their tests, and the frame shows only
+/// three of the states so the full set cannot be recovered from it. And the
+/// per-card action buttons cannot express every transition, so tapping a card
+/// still opens the actions sheet.
 class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
 
@@ -115,6 +129,16 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       ? _orders
       : _orders.where((o) => o.status == _filter).toList();
 
+  /// The one transition a card's primary button offers. Anything else — going
+  /// back, or marking an order late — stays in the actions sheet, which is why
+  /// the card itself remains tappable.
+  static OrderStatus? _advanceFrom(OrderStatus status) => switch (status) {
+    OrderStatus.preparing => OrderStatus.ready,
+    OrderStatus.overdue => OrderStatus.ready,
+    OrderStatus.ready => OrderStatus.served,
+    OrderStatus.served => null,
+  };
+
   @override
   Widget build(BuildContext context) {
     final counts = <OrderStatus, int>{
@@ -133,25 +157,37 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
               AppSpacing.gutter,
               0,
             ),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Manage Orders', style: context.texts.headlineLarge),
-                const SizedBox(height: AppSpacing.x1),
-                Text(
-                  '${counts[OrderStatus.preparing]} in the kitchen, '
-                  '${counts[OrderStatus.ready]} awaiting collection.',
-                  style: context.texts.bodyMedium,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Manage Orders',
+                        style: context.texts.headlineLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: AppSpacing.x1),
+                      Text(
+                        '${counts[OrderStatus.preparing]} in the kitchen, '
+                        '${counts[OrderStatus.ready]} awaiting collection.',
+                        style: context.texts.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.x2),
+                // The frame carries one small control here rather than a row
+                // of chips, so filtering became a menu.
+                _FilterButton(
+                  selected: _filter,
+                  onSelected: (s) => setState(() => _filter = s),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: AppSpacing.x4),
-          _StatusFilters(
-            selected: _filter,
-            counts: counts,
-            total: _orders.length,
-            onSelected: (s) => setState(() => _filter = s),
           ),
           const SizedBox(height: AppSpacing.x4),
           Expanded(
@@ -166,23 +202,28 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                     ),
                     itemCount: _visible.length,
                     separatorBuilder: (_, _) =>
-                        const SizedBox(height: AppSpacing.x2),
+                        const SizedBox(height: AppSpacing.x4),
                     itemBuilder: (context, index) {
                       final order = _visible[index];
-                      return OrderRow(
-                            reference: order.reference,
-                            destination: order.destination,
-                            detail: order.detail,
-                            amount: order.amount,
-                            status: _statusOf(order),
-                            onTap: () => _openOrder(order),
-                          )
-                          .animate()
-                          .fadeIn(
-                            delay: Motion.staggerFor(index),
-                            duration: Motion.quick,
-                          )
-                          .slideX(begin: 0.05, end: 0, curve: Motion.enter);
+                      final status = _statusOf(order);
+                      return _OrderCard(
+                        reference: order.reference,
+                        destination: order.destination,
+                        detail: order.detail,
+                        amount: order.amount,
+                        status: status,
+                        onTap: () => _openOrder(order),
+                        onAdvance: _advanceFrom(status) == null
+                            ? null
+                            : () => setState(() {
+                                _statusOverrides[order.reference] =
+                                    _advanceFrom(status)!;
+                              }),
+                      ).revealItem(
+                        index,
+                        duration: Motion.fast,
+                        direction: AxisDirection.left,
+                      );
                     },
                   ),
           ),
@@ -192,41 +233,252 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   }
 }
 
-class _StatusFilters extends StatelessWidget {
-  const _StatusFilters({
-    required this.selected,
-    required this.counts,
-    required this.total,
-    required this.onSelected,
-  });
+/// The frame's single trailing control, in place of a chip row.
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({required this.selected, required this.onSelected});
 
   final OrderStatus? selected;
-  final Map<OrderStatus, int> counts;
-  final int total;
   final ValueChanged<OrderStatus?> onSelected;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 36,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
-        children: [
-          _FilterChip(
-            label: 'All',
-            count: total,
-            selected: selected == null,
-            onTap: () => onSelected(null),
+      height: 32,
+      child: PopupMenuButton<OrderStatus?>(
+        tooltip: 'Filter by status',
+        initialValue: selected,
+        onSelected: (value) {
+          AppHaptics.selection();
+          onSelected(value);
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem<OrderStatus?>(value: null, child: Text('All')),
+          for (final status in OrderStatus.values)
+            PopupMenuItem<OrderStatus?>(
+              value: status,
+              child: Text(status.label),
+            ),
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: context.surfaces.line),
           ),
-          for (final status in OrderStatus.values) ...[
-            const SizedBox(width: AppSpacing.x2),
-            _FilterChip(
-              label: status.label,
-              count: counts[status] ?? 0,
-              colour: status.foreground(context),
-              selected: selected == status,
-              onTap: () => onSelected(status),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.filter_list,
+                size: AppIconSize.sm,
+                color: context.surfaces.inkMuted,
+              ),
+              const SizedBox(width: AppSpacing.x1),
+              Text(selected?.label ?? 'All', style: context.texts.labelLarge),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One order as the frame draws it: a status stripe down the left edge, the
+/// reference beside a status chip, destination, detail and amount, then — for
+/// an order the kitchen has yet to finish — its line items, and the action
+/// that moves it on.
+class _OrderCard extends StatelessWidget {
+  const _OrderCard({
+    required this.reference,
+    required this.destination,
+    required this.detail,
+    required this.amount,
+    required this.status,
+    this.onTap,
+    this.onAdvance,
+  });
+
+  final String reference;
+  final String destination;
+  final String detail;
+  final String amount;
+  final OrderStatus status;
+  final VoidCallback? onTap;
+
+  /// Null once the order is finished, which is when the frame's action row has
+  /// nothing left to offer.
+  final VoidCallback? onAdvance;
+
+  /// The frame shows line items only on the card that still needs cooking.
+  bool get _showsItems => status != OrderStatus.served;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final settled = status == OrderStatus.served;
+
+    return AnimatedOpacity(
+      duration: context.motion.fade(Motion.fast),
+      opacity: settled ? 0.72 : 1,
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          // A Stack rather than a stretched Row: inside a ListView the card's
+          // height is unbounded, and `CrossAxisAlignment.stretch` cannot
+          // resolve against that. The Stack takes its size from the padded
+          // content and the stripe stretches to match.
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 4,
+                child: AnimatedContainer(
+                  duration: context.motion.fade(Motion.fast),
+                  color: status.foreground(context),
+                ),
+              ),
+              Padding(
+                // Left padding clears the stripe.
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.x4 + 4,
+                  AppSpacing.x4,
+                  AppSpacing.x4,
+                  AppSpacing.x4,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  // The frame's reference box is about five
+                                  // characters wide, so it carries the bare
+                                  // reference rather than "Order #042".
+                                  Flexible(
+                                    child: Text(
+                                      reference,
+                                      style: context.texts.labelLarge,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.x2),
+                                  Flexible(child: StatusPill(status: status)),
+                                ],
+                              ),
+                              const SizedBox(height: AppSpacing.x2),
+                              Text(
+                                destination,
+                                style: context.texts.titleMedium,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: AppSpacing.x1),
+                              Text(
+                                detail,
+                                style: context.texts.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.x2),
+                        Text(
+                          amount,
+                          style: AppTypography.money(scheme.onSurface),
+                        ),
+                      ],
+                    ),
+                    if (_showsItems) ...[
+                      const SizedBox(height: AppSpacing.x3),
+                      _LineItems(),
+                    ],
+                    if (onAdvance != null) ...[
+                      const SizedBox(height: AppSpacing.x3),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: onTap,
+                              child: const Text('Change status'),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.x3),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                AppHaptics.commit();
+                                onAdvance!();
+                              },
+                              child: Text(
+                                'Mark ${_AdminOrdersScreenState._advanceFrom(status)!.label.toLowerCase()}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The tinted panel of line items inside a card.
+///
+/// The frame shows two rows here but names neither, so the copy is not
+/// recoverable from metadata — this reuses the basket the rest of the app
+/// previews with. Per-order line items will come from the API.
+class _LineItems extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final items = SampleContent.basket.take(2);
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x3),
+      decoration: BoxDecoration(
+        color: context.surfaces.ground,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Column(
+        children: [
+          for (final (index, item) in items.indexed) ...[
+            if (index > 0) const SizedBox(height: AppSpacing.x2),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${item.quantity}× ${item.name}',
+                    style: context.texts.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.x2),
+                Text(
+                  '£${(item.price * item.quantity).toStringAsFixed(2)}',
+                  style: context.texts.bodySmall,
+                ),
+              ],
             ),
           ],
         ],
@@ -235,69 +487,6 @@ class _StatusFilters extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
-    required this.label,
-    required this.count,
-    required this.selected,
-    required this.onTap,
-    this.colour,
-  });
-
-  final String label;
-  final int count;
-  final bool selected;
-  final VoidCallback onTap;
-  final Color? colour;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final accent = colour ?? scheme.primary;
-
-    return GestureDetector(
-      onTap: () {
-        AppHaptics.selection();
-        onTap();
-      },
-      child: AnimatedContainer(
-        duration: Motion.quick,
-        curve: Motion.standard,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.x3,
-          vertical: AppSpacing.x2,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? accent.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: selected ? accent : context.surfaces.line),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: context.texts.labelMedium?.copyWith(
-                color: selected ? accent : context.surfaces.inkMuted,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.x1 + 2),
-            Text(
-              '$count',
-              style: context.texts.labelSmall?.copyWith(
-                color: selected ? accent : context.surfaces.inkSoft,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The design file contains no empty state for any screen. This is invented.
 class _EmptyQueue extends StatelessWidget {
   const _EmptyQueue({this.status});
 
@@ -313,7 +502,7 @@ class _EmptyQueue extends StatelessWidget {
           children: [
             Icon(
               Icons.check_circle_outline,
-              size: 44,
+              size: AppIconSize.hero,
               color: context.surfaces.inkSoft,
             ),
             const SizedBox(height: AppSpacing.x4),
@@ -332,7 +521,7 @@ class _EmptyQueue extends StatelessWidget {
             ),
           ],
         ),
-      ).animate().fadeIn(duration: Motion.moderate),
+      ).reveal(),
     );
   }
 }

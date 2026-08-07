@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'core/animations/motion.dart';
+import 'core/animations/page_transitions.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_cubit.dart';
@@ -65,7 +66,7 @@ class AppRoot extends StatelessWidget {
         };
 
         return AnimatedSwitcher(
-          duration: Motion.moderate,
+          duration: context.motion.fade(Motion.base),
           child: KeyedSubtree(key: ValueKey(state.role), child: child),
         );
       },
@@ -80,7 +81,7 @@ class _SignedOutFlow extends StatelessWidget {
 
   static void _pushLogin(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (context) =>
             LoginScreen(onBack: () => Navigator.of(context).pop()),
       ),
@@ -90,7 +91,7 @@ class _SignedOutFlow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Navigator(
-      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+      onGenerateRoute: (settings) => AppPageRoute<void>(
         settings: settings,
         builder: (context) => WelcomeScreen(
           // No sign-up screen is designed yet, so both paths land on Login.

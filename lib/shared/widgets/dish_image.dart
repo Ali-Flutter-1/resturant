@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/animations/motion.dart';
+import '../../core/animations/skeleton.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 
@@ -39,7 +40,7 @@ class DishImage extends StatelessWidget {
         frameBuilder: (context, child, frame, wasSyncLoaded) {
           if (wasSyncLoaded) return child;
           return AnimatedSwitcher(
-            duration: Motion.moderate,
+            duration: context.motion.fade(Motion.base),
             child: frame == null
                 ? _Placeholder(name: name, shimmer: true)
                 : child,
@@ -103,63 +104,6 @@ class _Placeholder extends StatelessWidget {
     );
 
     if (!shimmer) return field;
-    return _Shimmer(child: field);
-  }
-}
-
-/// A slow highlight sweeping across the surface while an image loads.
-class _Shimmer extends StatefulWidget {
-  const _Shimmer({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_Shimmer> createState() => _ShimmerState();
-}
-
-class _ShimmerState extends State<_Shimmer>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: Motion.ambient,
-  )..repeat();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
-
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return ShaderMask(
-          blendMode: BlendMode.srcATop,
-          shaderCallback: (bounds) {
-            final slide = _controller.value * 2 - 0.5;
-            return LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              stops: [
-                (slide - 0.3).clamp(0.0, 1.0),
-                slide.clamp(0.0, 1.0),
-                (slide + 0.3).clamp(0.0, 1.0),
-              ],
-              colors: [
-                Colors.white.withValues(alpha: 0),
-                Colors.white.withValues(alpha: 0.45),
-                Colors.white.withValues(alpha: 0),
-              ],
-            ).createShader(bounds);
-          },
-          child: child,
-        );
-      },
-      child: widget.child,
-    );
+    return Shimmer(child: field);
   }
 }

@@ -62,7 +62,11 @@ class _NotificationsList extends StatelessWidget {
                 color: context.surfaces.accentContainer,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
-              child: Icon(item.icon, size: 18, color: scheme.primary),
+              child: Icon(
+                item.icon,
+                size: AppIconSize.lg,
+                color: scheme.primary,
+              ),
             ),
             const SizedBox(width: AppSpacing.x3),
             Expanded(

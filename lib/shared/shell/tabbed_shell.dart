@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/animations/motion.dart';
+import '../../core/animations/page_transitions.dart';
 import '../../core/haptics/app_haptics.dart';
 import '../widgets/flutter_glass_nav_bar.dart';
 
@@ -122,28 +124,30 @@ class _TabbedShellState extends State<TabbedShell> {
       (bottomInset > 0 ? bottomInset : (_useNativeBar ? 0.0 : 16.0));
 
   Widget _tabNavigator(int index, double barExtent) {
-    final navigator = Navigator(
+    return Navigator(
       key: _navigatorKeys[index],
       observers: [_BarVisibilityObserver(_scheduleBarVisibilityRefresh)],
-      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+      // Report the bar as bottom padding so the tab's screen clears it via its
+      // existing `MediaQuery.paddingOf(context).bottom`, without having to know
+      // a magic number.
+      //
+      // Only the tab's *root* route gets this. The override used to wrap the
+      // whole navigator, which meant every pushed screen reserved room for a
+      // bar that isn't there — a detail screen slides the bar away, so the
+      // padding became dead space under whatever sat at the bottom, most
+      // visibly the add-to-cart bar on a dish.
+      onGenerateRoute: (settings) => AppPageRoute<void>(
         settings: settings,
-        builder: widget.tabs[index].builder,
+        builder: (context) {
+          final media = MediaQuery.of(context);
+          return MediaQuery(
+            data: media.copyWith(
+              padding: media.padding.copyWith(bottom: barExtent),
+            ),
+            child: widget.tabs[index].builder(context),
+          );
+        },
       ),
-    );
-
-    // Report the bar as bottom padding so every screen's existing
-    // `MediaQuery.paddingOf(context).bottom` clears it without each screen
-    // having to know a magic number.
-    return Builder(
-      builder: (context) {
-        final media = MediaQuery.of(context);
-        return MediaQuery(
-          data: media.copyWith(
-            padding: media.padding.copyWith(bottom: barExtent),
-          ),
-          child: navigator,
-        );
-      },
     );
   }
 
@@ -151,6 +155,7 @@ class _TabbedShellState extends State<TabbedShell> {
 
   @override
   Widget build(BuildContext context) {
+    final motion = context.motion;
     final tint = widget.tint ?? Theme.of(context).colorScheme.primary;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
@@ -182,8 +187,8 @@ class _TabbedShellState extends State<TabbedShell> {
                 // Slid away, never removed. 1.6 clears the bar and its
                 // shadow even on the tallest safe-area inset.
                 offset: _showBar ? Offset.zero : const Offset(0, 1.6),
-                duration: const Duration(milliseconds: 280),
-                curve: Curves.easeOutCubic,
+                duration: motion.move(Motion.base),
+                curve: motion.enter,
                 child: IgnorePointer(
                   ignoring: !_showBar,
                   child: _buildNavBar(tint, bottomInset),

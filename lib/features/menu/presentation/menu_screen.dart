@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
-import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
+import '../../../core/haptics/app_haptics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/preview/sample_content.dart';
+import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/dish_image.dart';
 import '../../../shared/widgets/notifications_sheet.dart';
 import '../../../shared/widgets/pressable.dart';
@@ -62,9 +63,11 @@ class _MenuScreenState extends State<MenuScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // No drawer is designed, and the tab bar already handles navigation,
-        // so a hamburger here would be a control that leads nowhere.
-        automaticallyImplyLeading: false,
+        // This screen is always pushed (from Discover), so it needs a way
+        // back. Suppressing the implied leading had removed it: the flag
+        // was added to keep a hamburger out, but with no Drawer attached
+        // what it actually withheld was the back button, leaving the screen
+        // escapable only by the Android system gesture.
         title: const Text("T's Cafe"),
         actions: [
           IconButton(
@@ -90,11 +93,11 @@ class _MenuScreenState extends State<MenuScreen> {
               onChanged: (value) => setState(() => _query = value),
               decoration: InputDecoration(
                 hintText: 'Search the menu...',
-                prefixIcon: const Icon(Icons.search, size: 20),
+                prefixIcon: const Icon(Icons.search, size: AppIconSize.xl),
                 suffixIcon: _query.isEmpty
                     ? null
                     : IconButton(
-                        icon: const Icon(Icons.close, size: 18),
+                        icon: const Icon(Icons.close, size: AppIconSize.lg),
                         tooltip: 'Clear search',
                         onPressed: () {
                           _search.clear();
@@ -133,15 +136,9 @@ class _MenuScreenState extends State<MenuScreen> {
                         const SizedBox(height: AppSpacing.x4),
                     itemBuilder: (context, index) {
                       return _MenuCard(
-                            dish: _visible[index],
-                            onTap: widget.onOpenDish,
-                          )
-                          .animate()
-                          .fadeIn(
-                            delay: Motion.staggerFor(index),
-                            duration: Motion.moderate,
-                          )
-                          .slideY(begin: 0.08, end: 0, curve: Motion.enter);
+                        dish: _visible[index],
+                        onTap: widget.onOpenDish,
+                      ).revealItem(index);
                     },
                   ),
           ),
@@ -159,8 +156,6 @@ class _FilterStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return SizedBox(
       height: 40,
       child: ListView.separated(
@@ -171,33 +166,10 @@ class _FilterStrip extends StatelessWidget {
         itemBuilder: (context, index) {
           final isSelected = index == selected;
 
-          return GestureDetector(
-            onTap: () {
-              AppHaptics.selection();
-              onSelected(index);
-            },
-            child: AnimatedContainer(
-              duration: Motion.quick,
-              curve: Motion.standard,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.x4,
-                vertical: AppSpacing.x2,
-              ),
-              decoration: BoxDecoration(
-                color: isSelected ? scheme.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                border: Border.all(
-                  color: isSelected ? scheme.primary : context.surfaces.line,
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                SampleContent.menuFilters[index],
-                style: context.texts.labelLarge?.copyWith(
-                  color: isSelected ? scheme.onPrimary : scheme.onSurface,
-                ),
-              ),
-            ),
+          return SelectableChip(
+            label: SampleContent.menuFilters[index],
+            selected: isSelected,
+            onSelected: () => onSelected(index),
           );
         },
       ),
@@ -216,7 +188,9 @@ class _MenuCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Pressable(
-      scale: 0.985,
+      // A full-width row: the same 4% as a button would be a much larger
+      // absolute movement here.
+      scale: Motion.pressScaleLarge,
       onTap: onTap == null ? null : () => onTap!(dish),
       child: Material(
         color: scheme.surface,
@@ -249,7 +223,15 @@ class _MenuCard extends StatelessWidget {
                     Positioned(
                       left: AppSpacing.x3,
                       bottom: AppSpacing.x3,
-                      child: _Tag(label: dish.tag!),
+                      child: AppChip(
+                        label: dish.tag!,
+                        foreground: dish.tag!.toLowerCase() == 'vegan'
+                            ? context.orderColors.ready
+                            : context.orderColors.preparing,
+                        background: dish.tag!.toLowerCase() == 'vegan'
+                            ? context.orderColors.readyContainer
+                            : context.orderColors.preparingContainer,
+                      ),
                     ),
                   Positioned(
                     right: AppSpacing.x3,
@@ -305,35 +287,6 @@ class _MenuCard extends StatelessWidget {
   }
 }
 
-class _Tag extends StatelessWidget {
-  const _Tag({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final isVegan = label.toLowerCase() == 'vegan';
-    final colours = context.orderColors;
-    final fg = isVegan ? colours.ready : colours.preparing;
-    final bg = isVegan ? colours.readyContainer : colours.preparingContainer;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: context.texts.labelSmall?.copyWith(
-          color: fg,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
 class _FavouriteButton extends StatefulWidget {
   const _FavouriteButton({required this.active});
 
@@ -349,6 +302,7 @@ class _FavouriteButtonState extends State<_FavouriteButton> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final motion = context.motion;
 
     return GestureDetector(
       onTap: () {
@@ -362,16 +316,23 @@ class _FavouriteButtonState extends State<_FavouriteButton> {
           color: scheme.surface.withValues(alpha: 0.92),
           shape: BoxShape.circle,
         ),
-        child:
-            Icon(
-                  _active ? Icons.favorite : Icons.favorite_border,
-                  size: 18,
-                  color: _active ? scheme.primary : context.surfaces.inkSoft,
-                )
-                .animate(target: _active ? 1 : 0)
-                .scaleXY(begin: 1, end: 1.18, duration: Motion.instant)
-                .then()
-                .scaleXY(begin: 1, end: 1 / 1.18, duration: Motion.instant),
+        // Swapping outline for fill is the state change; the scale-in gives
+        // it a moment of confirmation. Overshoot is warranted here in a way
+        // it never is on a list — this is the user's own deliberate act
+        // answering back.
+        child: AnimatedSwitcher(
+          duration: motion.move(Motion.fast),
+          transitionBuilder: (child, animation) => ScaleTransition(
+            scale: CurvedAnimation(parent: animation, curve: motion.playful),
+            child: child,
+          ),
+          child: Icon(
+            _active ? Icons.favorite : Icons.favorite_border,
+            key: ValueKey(_active),
+            size: AppIconSize.lg,
+            color: _active ? scheme.primary : context.surfaces.inkSoft,
+          ),
+        ),
       ),
     );
   }
@@ -394,7 +355,11 @@ class _NoMatches extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.search_off, size: 42, color: context.surfaces.inkSoft),
+            Icon(
+              Icons.search_off,
+              size: AppIconSize.hero,
+              color: context.surfaces.inkSoft,
+            ),
             const SizedBox(height: AppSpacing.x4),
             Text(
               query.isEmpty ? 'Nothing on this filter' : 'No dishes match',
@@ -416,7 +381,7 @@ class _NoMatches extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      ).reveal(),
     );
   }
 }

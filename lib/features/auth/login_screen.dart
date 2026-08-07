@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/animations/motion.dart';
+import '../../core/animations/shake.dart';
+import '../../core/animations/reveal.dart';
 import '../../core/haptics/app_haptics.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -72,96 +73,115 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         },
         builder: (context, state) {
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.gutter,
-              AppSpacing.x4,
-              AppSpacing.gutter,
-              AppSpacing.x12,
-            ),
-            children:
-                [
-                      Text('Welcome back', style: context.texts.displayLarge),
-                      const SizedBox(height: AppSpacing.x2),
-                      Text(
-                        'Sign in to order, book a table, or manage the restaurant.',
-                        style: context.texts.bodyLarge?.copyWith(
-                          color: context.surfaces.inkMuted,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.x8),
+          final motion = context.motion;
+          // The error text sits well below the fold on a small phone, so the
+          // shake is often the only signal the user actually sees.
+          return Shake(
+            trigger: state.error,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.gutter,
+                AppSpacing.x4,
+                AppSpacing.gutter,
+                AppSpacing.x12,
+              ),
+              children: [
+                Text('Welcome back', style: context.texts.displayLarge),
+                const SizedBox(height: AppSpacing.x2),
+                Text(
+                  'Sign in to order, book a table, or manage the restaurant.',
+                  style: context.texts.bodyLarge?.copyWith(
+                    color: context.surfaces.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.x8),
 
-                      Text('Email', style: context.texts.titleMedium),
-                      const SizedBox(height: AppSpacing.x2),
-                      TextField(
-                        controller: _email,
-                        keyboardType: TextInputType.emailAddress,
-                        autocorrect: false,
-                        decoration: const InputDecoration(
-                          hintText: 'you@example.com',
-                          prefixIcon: Icon(Icons.mail_outline, size: 19),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.x5),
+                Text('Email', style: context.texts.titleMedium),
+                const SizedBox(height: AppSpacing.x2),
+                TextField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    hintText: 'you@example.com',
+                    prefixIcon: Icon(Icons.mail_outline, size: AppIconSize.lg),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.x5),
 
-                      Text('Password', style: context.texts.titleMedium),
-                      const SizedBox(height: AppSpacing.x2),
-                      TextField(
-                        controller: _password,
-                        obscureText: _obscure,
-                        onSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(
-                          hintText: 'Your password',
-                          prefixIcon: const Icon(Icons.lock_outline, size: 19),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscure
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              size: 19,
-                            ),
-                            onPressed: () =>
-                                setState(() => _obscure = !_obscure),
-                            tooltip: _obscure
-                                ? 'Show password'
-                                : 'Hide password',
+                Text('Password', style: context.texts.titleMedium),
+                const SizedBox(height: AppSpacing.x2),
+                TextField(
+                  controller: _password,
+                  obscureText: _obscure,
+                  onSubmitted: (_) => _submit(),
+                  decoration: InputDecoration(
+                    hintText: 'Your password',
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      size: AppIconSize.lg,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscure
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        size: AppIconSize.lg,
+                      ),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                      tooltip: _obscure ? 'Show password' : 'Hide password',
+                    ),
+                  ),
+                ),
+
+                // The note occupies a permanent slot that grows to fit
+                // it, rather than being spliced into the list. Keeping
+                // the child count fixed matters: the staggered reveal
+                // above identifies items by position, so inserting one
+                // mid-list would re-run the entrance of everything
+                // below it every time a sign-in failed.
+                AnimatedSize(
+                  duration: motion.move(Motion.base),
+                  curve: motion.standard,
+                  alignment: Alignment.topCenter,
+                  child: state.error == null
+                      ? const SizedBox(width: double.infinity)
+                      : Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.x4),
+                          child: _ErrorNote(message: state.error!),
+                        ),
+                ),
+
+                const SizedBox(height: AppSpacing.x8),
+                // Cross-fade rather than cut, so the button appears to
+                // become the spinner and the tap stays connected to its
+                // result.
+                AnimatedSwitcher(
+                  duration: motion.fade(Motion.fast),
+                  child: state.isSubmitting
+                      ? Container(
+                          height: 52,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(AppRadius.md),
                           ),
-                        ),
-                      ),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: scheme.onPrimary,
+                            ),
+                          ),
+                        )
+                      : PrimaryButton(label: 'Sign In', onPressed: _submit),
+                ),
 
-                      if (state.error != null) ...[
-                        const SizedBox(height: AppSpacing.x4),
-                        _ErrorNote(message: state.error!),
-                      ],
-
-                      const SizedBox(height: AppSpacing.x8),
-                      state.isSubmitting
-                          ? Container(
-                              height: 52,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: scheme.primary,
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.md,
-                                ),
-                              ),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: scheme.onPrimary,
-                                ),
-                              ),
-                            )
-                          : PrimaryButton(label: 'Sign In', onPressed: _submit),
-
-                      const SizedBox(height: AppSpacing.x12),
-                      const _DemoAccounts(),
-                    ]
-                    .animate(interval: 45.ms)
-                    .fadeIn(duration: Motion.moderate)
-                    .slideY(begin: 0.06, end: 0, curve: Motion.enter),
+                const SizedBox(height: AppSpacing.x12),
+                const _DemoAccounts(),
+              ].revealStaggered(),
+            ),
           );
         },
       ),
@@ -187,7 +207,11 @@ class _ErrorNote extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, size: 17, color: colours.overdue),
+          Icon(
+            Icons.error_outline,
+            size: AppIconSize.md,
+            color: colours.overdue,
+          ),
           const SizedBox(width: AppSpacing.x2),
           Expanded(
             child: Text(
@@ -221,7 +245,7 @@ class _DemoAccounts extends StatelessWidget {
             children: [
               Icon(
                 Icons.science_outlined,
-                size: 15,
+                size: AppIconSize.sm,
                 color: context.surfaces.inkSoft,
               ),
               const SizedBox(width: AppSpacing.x2),
@@ -285,7 +309,7 @@ class _RoleButton extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 17),
+          Icon(icon, size: AppIconSize.md),
           const SizedBox(width: AppSpacing.x2),
           Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
         ],

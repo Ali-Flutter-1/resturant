@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/animations/motion.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_spacing.dart';
+import 'app_chip.dart';
 
 /// The lifecycle of an order, as the kitchen and counter see it.
 enum OrderStatus {
@@ -40,7 +39,10 @@ extension OrderStatusPalette on OrderStatus {
   }
 }
 
-/// Status as a pill: a dot for peripheral vision, a word for certainty.
+/// Status as a chip: a dot for peripheral vision, a word for certainty.
+///
+/// A thin wrapper over [AppChip] so status can't drift away from every other
+/// chip in the app, which is exactly what had happened.
 class StatusPill extends StatelessWidget {
   const StatusPill({super.key, required this.status});
 
@@ -48,35 +50,10 @@ class StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = status.foreground(context);
-
-    return AnimatedContainer(
-      duration: Motion.quick,
-      curve: Motion.standard,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: status.container(context),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: AppSpacing.x1 + 2),
-          Text(
-            status.label.toUpperCase(),
-            style: context.texts.labelSmall?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.88,
-            ),
-          ),
-        ],
-      ),
+    return AppChip.status(
+      label: status.label,
+      foreground: status.foreground(context),
+      background: status.container(context),
     );
   }
 }

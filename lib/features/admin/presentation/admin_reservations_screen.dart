@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/app_surface.dart';
+import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/admin_nav.dart';
 
 enum ReservationState { confirmed, pending, seated, cancelled }
@@ -98,6 +100,17 @@ class _AdminReservationsScreenState extends State<AdminReservationsScreen> {
     ),
   ];
 
+  /// Seating changes made this session. The list is const preview content, so
+  /// overrides live beside it rather than mutating it.
+  final _seatedOverrides = <String, bool>{};
+
+  ReservationState _stateOf(String name, ReservationState original) {
+    final seated = _seatedOverrides[name];
+    if (seated == null) return original;
+    if (original == ReservationState.cancelled) return original;
+    return seated ? ReservationState.seated : ReservationState.confirmed;
+  }
+
   @override
   Widget build(BuildContext context) {
     final covers = _reservations
@@ -129,16 +142,17 @@ class _AdminReservationsScreenState extends State<AdminReservationsScreen> {
           const SizedBox(height: AppSpacing.x5),
           for (final (index, reservation) in _reservations.indexed) ...[
             _ReservationCard(
-                  time: reservation.time,
-                  name: reservation.name,
-                  party: reservation.party,
-                  seating: reservation.seating,
-                  note: reservation.note,
-                  state: reservation.state,
-                )
-                .animate()
-                .fadeIn(delay: Motion.staggerFor(index), duration: Motion.quick)
-                .slideY(begin: 0.06, end: 0, curve: Motion.enter),
+              time: reservation.time,
+              name: reservation.name,
+              party: reservation.party,
+              seating: reservation.seating,
+              note: reservation.note,
+              state: _stateOf(reservation.name, reservation.state),
+              onSeatedChanged: (value) {
+                AppHaptics.toggle();
+                setState(() => _seatedOverrides[reservation.name] = value);
+              },
+            ).revealItem(index, duration: Motion.fast),
             if (index != _reservations.length - 1)
               const SizedBox(height: AppSpacing.x3),
           ],
@@ -185,8 +199,8 @@ class _DayStrip extends StatelessWidget {
               onSelected(index);
             },
             child: AnimatedContainer(
-              duration: Motion.quick,
-              curve: Motion.standard,
+              duration: context.motion.fade(Motion.fast),
+              curve: context.motion.standard,
               width: 72,
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.x2),
               decoration: BoxDecoration(
@@ -225,6 +239,14 @@ class _DayStrip extends StatelessWidget {
   }
 }
 
+/// One booking, laid out as "Reservation Card 1" in the frame: a 4pt heritage
+/// accent line down the left edge, the guest's name and where they are sitting
+/// on the left, the time and party size on the right, state chips beneath, then
+/// a ruled footer carrying a labelled toggle.
+///
+/// The frame puts the name on the left and the time on the right. This card had
+/// them the other way round, which is the kind of thing only the design can
+/// settle.
 class _ReservationCard extends StatelessWidget {
   const _ReservationCard({
     required this.time,
@@ -233,6 +255,7 @@ class _ReservationCard extends StatelessWidget {
     required this.seating,
     required this.note,
     required this.state,
+    this.onSeatedChanged,
   });
 
   final String time;
@@ -242,131 +265,150 @@ class _ReservationCard extends StatelessWidget {
   final String note;
   final ReservationState state;
 
+  /// The frame's toggle. What it switches is not recoverable from metadata;
+  /// seating the party is the only per-booking state this screen owns.
+  final ValueChanged<bool>? onSeatedChanged;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final cancelled = state == ReservationState.cancelled;
+    final seated = state == ReservationState.seated;
 
     return Opacity(
       opacity: cancelled ? 0.6 : 1,
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          boxShadow: context.surfaces.restShadow,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          child: IntrinsicHeight(
-            child: Row(
-              children: [
-                Container(width: 3, color: state.foreground(context)),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.x4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Column(
+      child: AppSurface.row(
+        padding: EdgeInsets.zero,
+        // Clipped because the accent line paints to the card's edge.
+        clip: true,
+        child: Stack(
+          children: [
+            // Heritage accent line. Positioned rather than a stretched Row
+            // child so the card's height stays driven by its content.
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 4,
+              child: ColoredBox(color: state.foreground(context)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.x4 + 4,
+                AppSpacing.x4,
+                AppSpacing.x4,
+                0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              time,
-                              style: AppTypography.money(
-                                scheme.onSurface,
-                                size: 18,
+                              name,
+                              style: context.texts.titleMedium?.copyWith(
+                                decoration: cancelled
+                                    ? TextDecoration.lineThrough
+                                    : null,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: AppSpacing.x1),
                             Row(
                               children: [
                                 Icon(
-                                  Icons.person_outline,
-                                  size: 13,
+                                  Icons.chair_outlined,
+                                  size: AppIconSize.xs,
                                   color: context.surfaces.inkSoft,
                                 ),
-                                const SizedBox(width: 2),
-                                Text('$party', style: context.texts.bodySmall),
+                                const SizedBox(width: AppSpacing.x1),
+                                Expanded(
+                                  child: Text(
+                                    seating,
+                                    style: context.texts.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
                         ),
-                        const SizedBox(width: AppSpacing.x4),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                      const SizedBox(width: AppSpacing.x3),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            time,
+                            style: AppTypography.money(
+                              scheme.onSurface,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.x1),
+                          Row(
                             children: [
-                              Text(
-                                name,
-                                style: context.texts.titleMedium?.copyWith(
-                                  decoration: cancelled
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              Icon(
+                                Icons.person_outline,
+                                size: AppIconSize.xs,
+                                color: context.surfaces.inkSoft,
                               ),
-                              const SizedBox(height: 2),
-                              Text(seating, style: context.texts.bodySmall),
-                              if (note.isNotEmpty) ...[
-                                const SizedBox(height: AppSpacing.x2),
-                                _NoteChip(note: note),
-                              ],
+                              const SizedBox(width: AppSpacing.x1),
+                              Text('$party', style: context.texts.bodySmall),
                             ],
                           ),
-                        ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.x3),
+                  // Two chips in the frame: the booking's state, and any
+                  // note against it.
+                  Row(
+                    children: [
+                      AppChip.status(
+                        label: state.label,
+                        foreground: state.foreground(context),
+                        background: state.container(context),
+                      ),
+                      if (note.isNotEmpty) ...[
                         const SizedBox(width: AppSpacing.x2),
-                        _StateBadge(state: state),
+                        Flexible(child: AppChip.outlined(label: note)),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.x3),
+                  Divider(height: 1, color: context.surfaces.line),
+                  SizedBox(
+                    height: 41,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            seated ? 'Seated' : 'Not seated',
+                            style: context.texts.bodySmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Switch(
+                          value: seated,
+                          onChanged: cancelled ? null : onSeatedChanged,
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NoteChip extends StatelessWidget {
-  const _NoteChip({required this.note});
-
-  final String note;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: context.surfaces.ground,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: context.surfaces.line),
-      ),
-      child: Text(note, style: context.texts.labelSmall),
-    );
-  }
-}
-
-class _StateBadge extends StatelessWidget {
-  const _StateBadge({required this.state});
-
-  final ReservationState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: state.container(context),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        state.label.toUpperCase(),
-        style: context.texts.labelSmall?.copyWith(
-          color: state.foreground(context),
-          fontWeight: FontWeight.w600,
+          ],
         ),
       ),
     );

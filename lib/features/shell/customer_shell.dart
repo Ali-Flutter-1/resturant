@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_spacing.dart';
+
+import '../../core/animations/page_transitions.dart';
+
 import '../../shared/preview/sample_content.dart';
 import '../../shared/shell/tabbed_shell.dart';
 import '../about/presentation/about_contact_screen.dart';
@@ -19,7 +23,7 @@ class CustomerShell extends StatelessWidget {
 
   static void _openDish(BuildContext context, SampleDish dish) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (context) => DishDetailsScreen(
           dish: dish,
           onBack: () => Navigator.of(context).pop(),
@@ -34,7 +38,7 @@ class CustomerShell extends StatelessWidget {
 
   static void _openMenu(BuildContext context, {String? query}) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (context) => MenuScreen(
           initialQuery: query,
           onOpenDish: (dish) => _openDish(context, dish),
@@ -45,7 +49,7 @@ class CustomerShell extends StatelessWidget {
 
   static void _openCheckout(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (context) => CheckoutScreen(
           onBack: () => Navigator.of(context).pop(),
           onPlaceOrder: () => Navigator.of(context).popUntil((r) => r.isFirst),
@@ -116,7 +120,7 @@ class _NotDesignedYet extends StatelessWidget {
             children: [
               Icon(
                 Icons.drafts_outlined,
-                size: 40,
+                size: AppIconSize.hero,
                 color: Theme.of(context).colorScheme.outline,
               ),
               const SizedBox(height: 16),

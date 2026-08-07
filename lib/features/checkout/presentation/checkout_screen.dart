@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../features/cart/cart_cubit.dart';
 import '../../../shared/preview/sample_content.dart';
+import '../../../shared/widgets/app_surface.dart';
+import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/app_sheet.dart';
 
 enum _OrderMethod { delivery, collection }
@@ -61,11 +63,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: widget.onBack,
-          tooltip: 'Back',
-        ),
+        // Null `onBack` yields to `automaticallyImplyLeading`, which supplies
+        // a working BackButton whenever the route can pop. Passing a null
+        // callback straight to IconButton would instead render an arrow that
+        // is visible, disabled, and does nothing.
+        leading: widget.onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBack,
+                tooltip: 'Back',
+              ),
         title: const Text('Checkout'),
         centerTitle: false,
         titleTextStyle: context.texts.headlineLarge,
@@ -77,121 +85,111 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           AppSpacing.gutter,
           AppSpacing.x8,
         ),
-        children:
-            [
-                  _Panel(
-                    icon: Icons.shopping_bag_outlined,
-                    title: 'Order Method',
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _SelectableTile(
-                            icon: Icons.delivery_dining,
-                            label: 'Delivery',
-                            selected: _method == _OrderMethod.delivery,
-                            onTap: () =>
-                                setState(() => _method = _OrderMethod.delivery),
+        children: [
+          _Panel(
+            icon: Icons.shopping_bag_outlined,
+            title: 'Order Method',
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SelectableTile(
+                    icon: Icons.delivery_dining,
+                    label: 'Delivery',
+                    selected: _method == _OrderMethod.delivery,
+                    onTap: () =>
+                        setState(() => _method = _OrderMethod.delivery),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.x3),
+                Expanded(
+                  child: _SelectableTile(
+                    icon: Icons.storefront,
+                    label: 'Collection',
+                    selected: _method == _OrderMethod.collection,
+                    onTap: () =>
+                        setState(() => _method = _OrderMethod.collection),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Collection has no address to capture, so the whole panel goes.
+          AnimatedSize(
+            duration: context.motion.move(Motion.base),
+            curve: context.motion.standard,
+            child: _method == _OrderMethod.delivery
+                ? const _AddressPanel()
+                : const SizedBox(width: double.infinity),
+          ),
+
+          _Panel(
+            icon: Icons.schedule,
+            title: 'Delivery Time',
+            badge: '45 min minimum prep time',
+            child: Column(
+              children: [
+                _RadioRow(
+                  icon: Icons.bolt,
+                  title: 'ASAP',
+                  subtitle: 'Est. ~45-60 mins',
+                  selected: _timing == _DeliveryTime.asap,
+                  onTap: () => setState(() => _timing = _DeliveryTime.asap),
+                ),
+                const SizedBox(height: AppSpacing.x3),
+                _RadioRow(
+                  icon: Icons.calendar_month_outlined,
+                  title: 'Schedule',
+                  subtitle: 'Pick a later time',
+                  selected: _timing == _DeliveryTime.scheduled,
+                  onTap: () =>
+                      setState(() => _timing = _DeliveryTime.scheduled),
+                ),
+                AnimatedSize(
+                  duration: context.motion.move(Motion.base),
+                  curve: context.motion.standard,
+                  child: _timing == _DeliveryTime.scheduled
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.x3),
+                          child: _PlaceholderSelect(
+                            label: _scheduledFor == null
+                                ? 'Choose a time'
+                                : 'Today, '
+                                      '${_scheduledFor!.format(context)}',
+                            isPlaceholder: _scheduledFor == null,
+                            onTap: _pickTime,
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.x3),
-                        Expanded(
-                          child: _SelectableTile(
-                            icon: Icons.storefront,
-                            label: 'Collection',
-                            selected: _method == _OrderMethod.collection,
-                            onTap: () => setState(
-                              () => _method = _OrderMethod.collection,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                        )
+                      : const SizedBox(width: double.infinity),
+                ),
+              ],
+            ),
+          ),
 
-                  // Collection has no address to capture, so the whole panel goes.
-                  AnimatedSize(
-                    duration: Motion.moderate,
-                    curve: Motion.standard,
-                    child: _method == _OrderMethod.delivery
-                        ? const _AddressPanel()
-                        : const SizedBox(width: double.infinity),
-                  ),
+          _Panel(
+            icon: Icons.credit_card,
+            title: 'Payment Method',
+            child: Column(
+              children: [
+                _RadioRow(
+                  icon: Icons.credit_card,
+                  title: 'Credit / Debit Card (Online)',
+                  selected: _payment == _PaymentMethod.card,
+                  onTap: () => setState(() => _payment = _PaymentMethod.card),
+                ),
+                const SizedBox(height: AppSpacing.x3),
+                _RadioRow(
+                  icon: Icons.payments_outlined,
+                  title: 'Cash on Delivery',
+                  selected: _payment == _PaymentMethod.cash,
+                  onTap: () => setState(() => _payment = _PaymentMethod.cash),
+                ),
+              ],
+            ),
+          ),
 
-                  _Panel(
-                    icon: Icons.schedule,
-                    title: 'Delivery Time',
-                    badge: '45 min minimum prep time',
-                    child: Column(
-                      children: [
-                        _RadioRow(
-                          icon: Icons.bolt,
-                          title: 'ASAP',
-                          subtitle: 'Est. ~45-60 mins',
-                          selected: _timing == _DeliveryTime.asap,
-                          onTap: () =>
-                              setState(() => _timing = _DeliveryTime.asap),
-                        ),
-                        const SizedBox(height: AppSpacing.x3),
-                        _RadioRow(
-                          icon: Icons.calendar_month_outlined,
-                          title: 'Schedule',
-                          subtitle: 'Pick a later time',
-                          selected: _timing == _DeliveryTime.scheduled,
-                          onTap: () =>
-                              setState(() => _timing = _DeliveryTime.scheduled),
-                        ),
-                        AnimatedSize(
-                          duration: Motion.moderate,
-                          curve: Motion.standard,
-                          child: _timing == _DeliveryTime.scheduled
-                              ? Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: AppSpacing.x3,
-                                  ),
-                                  child: _PlaceholderSelect(
-                                    label: _scheduledFor == null
-                                        ? 'Choose a time'
-                                        : 'Today, '
-                                              '${_scheduledFor!.format(context)}',
-                                    isPlaceholder: _scheduledFor == null,
-                                    onTap: _pickTime,
-                                  ),
-                                )
-                              : const SizedBox(width: double.infinity),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  _Panel(
-                    icon: Icons.credit_card,
-                    title: 'Payment Method',
-                    child: Column(
-                      children: [
-                        _RadioRow(
-                          icon: Icons.credit_card,
-                          title: 'Credit / Debit Card (Online)',
-                          selected: _payment == _PaymentMethod.card,
-                          onTap: () =>
-                              setState(() => _payment = _PaymentMethod.card),
-                        ),
-                        const SizedBox(height: AppSpacing.x3),
-                        _RadioRow(
-                          icon: Icons.payments_outlined,
-                          title: 'Cash on Delivery',
-                          selected: _payment == _PaymentMethod.cash,
-                          onTap: () =>
-                              setState(() => _payment = _PaymentMethod.cash),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const _OrderSummary(),
-                ]
-                .animate(interval: 60.ms)
-                .fadeIn(duration: Motion.moderate)
-                .slideY(begin: 0.06, end: 0, curve: Motion.enter),
+          const _OrderSummary(),
+        ].revealStaggered(),
       ),
       bottomNavigationBar: _PlaceOrderBar(onPlaceOrder: _placeOrder),
     );
@@ -213,20 +211,18 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AppSurface.panel(
       margin: const EdgeInsets.only(bottom: AppSpacing.x4),
-      padding: const EdgeInsets.all(AppSpacing.x4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        boxShadow: context.surfaces.cardShadow,
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: context.surfaces.inkMuted),
+              Icon(
+                icon,
+                size: AppIconSize.md,
+                color: context.surfaces.inkMuted,
+              ),
               const SizedBox(width: AppSpacing.x2),
               Expanded(
                 child: Text(
@@ -234,41 +230,22 @@ class _Panel extends StatelessWidget {
                   style: AppTypography.caption(context.surfaces.inkMuted),
                 ),
               ),
-              if (badge != null) _Badge(label: badge!),
+              // The badge carries a whole sentence ("45 min minimum prep
+              // time"), so it has to be allowed to give way rather than run
+              // past the edge of the panel.
+              if (badge != null)
+                Flexible(
+                  child: AppChip(
+                    label: badge!,
+                    icon: Icons.info_outline,
+                    foreground: context.orderColors.overdue,
+                    background: context.orderColors.overdueContainer,
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.x4),
           child,
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colours = context.orderColors;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: colours.overdueContainer,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.info_outline, size: 11, color: colours.overdue),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: context.texts.labelSmall?.copyWith(color: colours.overdue),
-          ),
         ],
       ),
     );
@@ -374,8 +351,8 @@ class _SelectableTile extends StatelessWidget {
         onTap();
       },
       child: AnimatedContainer(
-        duration: Motion.quick,
-        curve: Motion.standard,
+        duration: context.motion.fade(Motion.fast),
+        curve: context.motion.standard,
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.x4),
         decoration: BoxDecoration(
           color: selected
@@ -391,7 +368,7 @@ class _SelectableTile extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 22,
+              size: AppIconSize.xl,
               color: selected ? scheme.primary : context.surfaces.inkMuted,
             ),
             const SizedBox(height: AppSpacing.x2),
@@ -433,7 +410,7 @@ class _RadioRow extends StatelessWidget {
         onTap();
       },
       child: AnimatedContainer(
-        duration: Motion.quick,
+        duration: context.motion.fade(Motion.fast),
         padding: const EdgeInsets.all(AppSpacing.x3),
         decoration: BoxDecoration(
           color: selected
@@ -448,7 +425,7 @@ class _RadioRow extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 18,
+              size: AppIconSize.lg,
               color: selected ? scheme.primary : context.surfaces.inkMuted,
             ),
             const SizedBox(width: AppSpacing.x3),
@@ -483,7 +460,7 @@ class _RadioDot extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return AnimatedContainer(
-      duration: Motion.quick,
+      duration: context.motion.fade(Motion.fast),
       width: 18,
       height: 18,
       decoration: BoxDecoration(
@@ -537,7 +514,7 @@ class _PlaceholderSelect extends StatelessWidget {
             ),
             Icon(
               Icons.keyboard_arrow_down,
-              size: 18,
+              size: AppIconSize.lg,
               color: context.surfaces.inkSoft,
             ),
           ],
@@ -554,13 +531,7 @@ class _OrderSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.x4),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        boxShadow: context.surfaces.cardShadow,
-      ),
+    return AppSurface.panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -576,7 +547,7 @@ class _OrderSummary extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: context.surfaces.ground,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(AppRadius.xs),
                   ),
                   child: Text(
                     '${item.quantity}',
@@ -691,7 +662,11 @@ class _PlaceOrderBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.lock_outline, size: 15, color: scheme.onPrimary),
+              Icon(
+                Icons.lock_outline,
+                size: AppIconSize.sm,
+                color: scheme.onPrimary,
+              ),
               const SizedBox(width: AppSpacing.x2),
               Flexible(
                 child: Text(

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -71,51 +71,52 @@ class _Greeting extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Good Morning,', style: context.texts.bodyMedium),
+              const SizedBox(height: 2),
+              Text("T's Lover", style: context.texts.displayLarge),
+              const SizedBox(height: AppSpacing.x1),
+              Row(
                 children: [
-                  Text('Good Morning,', style: context.texts.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text("T's Lover", style: context.texts.displayLarge),
-                  const SizedBox(height: AppSpacing.x1),
-                  Row(
-                    children: [
-                      Icon(Icons.place, size: 14, color: scheme.primary),
-                      const SizedBox(width: AppSpacing.x1),
-                      Text(
-                        'Colombo, LK',
-                        style: context.texts.bodySmall?.copyWith(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 16,
-                        color: scheme.primary,
-                      ),
-                    ],
+                  Icon(
+                    Icons.place,
+                    size: AppIconSize.sm,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(width: AppSpacing.x1),
+                  Text(
+                    'Colombo, LK',
+                    style: context.texts.bodySmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Icon(
+                    Icons.keyboard_arrow_down,
+                    size: AppIconSize.md,
+                    color: scheme.primary,
                   ),
                 ],
               ),
-            ),
-            IconButton(
-              onPressed: () => showNotificationsSheet(context),
-              tooltip: 'Notifications',
-              icon: Badge(
-                backgroundColor: scheme.primary,
-                smallSize: 8,
-                child: const Icon(Icons.notifications_outlined),
-              ),
-            ),
-          ],
-        )
-        .animate()
-        .fadeIn(duration: Motion.moderate)
-        .slideY(begin: 0.1, end: 0, curve: Motion.enter);
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: () => showNotificationsSheet(context),
+          tooltip: 'Notifications',
+          icon: Badge(
+            backgroundColor: scheme.primary,
+            smallSize: 8,
+            child: const Icon(Icons.notifications_outlined),
+          ),
+        ),
+      ],
+    ).reveal();
   }
 }
 
@@ -150,13 +151,17 @@ class _SearchField extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.sm),
               child: SizedBox(
                 width: 34,
-                child: Icon(Icons.tune, size: 17, color: scheme.onPrimary),
+                child: Icon(
+                  Icons.tune,
+                  size: AppIconSize.md,
+                  color: scheme.onPrimary,
+                ),
               ),
             ),
           ),
         ),
       ),
-    ).animate().fadeIn(delay: 80.ms, duration: Motion.moderate);
+    ).revealItem(1);
   }
 }
 
@@ -193,8 +198,8 @@ class _CategoryStripState extends State<_CategoryStrip> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 AnimatedContainer(
-                  duration: Motion.quick,
-                  curve: Motion.standard,
+                  duration: context.motion.fade(Motion.fast),
+                  curve: context.motion.standard,
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
@@ -205,7 +210,7 @@ class _CategoryStripState extends State<_CategoryStrip> {
                   ),
                   child: Icon(
                     category.icon,
-                    size: 22,
+                    size: AppIconSize.xl,
                     color: selected ? scheme.onPrimary : scheme.primary,
                   ),
                 ),
@@ -222,7 +227,7 @@ class _CategoryStripState extends State<_CategoryStrip> {
           );
         },
       ),
-    ).animate().fadeIn(delay: 140.ms, duration: Motion.moderate);
+    ).revealItem(2);
   }
 }
 
@@ -237,73 +242,70 @@ class _FeaturedCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: DishImage(
-                  name: dish.name,
-                  imageUrl: dish.imageUrl,
-                  heroTag: 'dish-${dish.name}',
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DishImage(
+              name: dish.name,
+              imageUrl: dish.imageUrl,
+              heroTag: 'dish-${dish.name}',
+            ),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [Color(0xE6241C1A), Color(0x40241C1A)],
                 ),
               ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [Color(0xE6241C1A), Color(0x40241C1A)],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.x5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 210,
+                  child: Text(
+                    dish.name,
+                    style: context.texts.displayLarge?.copyWith(
+                      color: Colors.white,
                     ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.x5),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 210,
-                      child: Text(
-                        dish.name,
-                        style: context.texts.displayLarge?.copyWith(
-                          color: Colors.white,
-                        ),
-                      ),
+                const SizedBox(height: AppSpacing.x2),
+                SizedBox(
+                  width: 230,
+                  child: Text(
+                    dish.description,
+                    style: context.texts.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.85),
                     ),
-                    const SizedBox(height: AppSpacing.x2),
-                    SizedBox(
-                      width: 230,
-                      child: Text(
-                        dish.description,
-                        style: context.texts.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.x4),
-                    FilledButton(
-                      onPressed: onOrder == null ? null : () => onOrder!(dish),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 44),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.x5,
-                        ),
-                        backgroundColor: scheme.primary,
-                      ),
-                      child: const Text('Order Now'),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: AppSpacing.x4),
+                FilledButton(
+                  onPressed: onOrder == null ? null : () => onOrder!(dish),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.x5,
+                    ),
+                    backgroundColor: scheme.primary,
+                  ),
+                  child: const Text('Order Now'),
+                ),
+              ],
+            ),
           ),
-        )
-        .animate()
-        .fadeIn(delay: 200.ms, duration: Motion.moderate)
-        .slideY(begin: 0.1, end: 0, curve: Motion.enter);
+        ],
+      ),
+    ).revealItem(3);
   }
 }
 
@@ -323,13 +325,10 @@ class _PopularGrid extends StatelessWidget {
           for (final (index, dish) in SampleContent.popular.indexed) ...[
             if (index > 0) const SizedBox(width: AppSpacing.x3),
             Expanded(
-              child: _PopularCard(dish: dish, onTap: onOpenDish)
-                  .animate()
-                  .fadeIn(
-                    delay: 300.ms + Motion.staggerFor(index),
-                    duration: Motion.moderate,
-                  )
-                  .slideY(begin: 0.12, end: 0, curve: Motion.enter),
+              child: _PopularCard(
+                dish: dish,
+                onTap: onOpenDish,
+              ).revealItem(index, after: Motion.staggerFor(4)),
             ),
           ],
         ],
@@ -411,7 +410,7 @@ class _PopularCard extends StatelessWidget {
                           ),
                           child: Icon(
                             Icons.add,
-                            size: 16,
+                            size: AppIconSize.md,
                             color: scheme.primary,
                           ),
                         ),

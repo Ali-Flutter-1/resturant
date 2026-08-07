@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/app_buttons.dart';
 
@@ -50,43 +50,35 @@ class _HeroBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Stack(
-          fit: StackFit.expand,
-          children: [
-            // The Figma frame sized this 512×279 image at top-left inside an
-            // 852pt-tall frame, so the photograph tiled visibly. Cover fixes the
-            // repeat; the source asset is still low-resolution — see the note in
-            // the handover.
-            Image.asset(
-              'assets/images/welcome_hero.jpg',
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
+      fit: StackFit.expand,
+      children: [
+        // The Figma frame sized this 512×279 image at top-left inside an
+        // 852pt-tall frame, so the photograph tiled visibly. Cover fixes the
+        // repeat; the source asset is still low-resolution — see the note in
+        // the handover.
+        Image.asset(
+          'assets/images/welcome_hero.jpg',
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+        ),
+        // Bottom-up scrim, so the actions always sit on enough contrast
+        // regardless of what the photograph is doing behind them.
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              stops: [0.0, 0.5, 1.0],
+              colors: [Color(0xE6000000), Color(0x80000000), Color(0x33000000)],
             ),
-            // Bottom-up scrim, so the actions always sit on enough contrast
-            // regardless of what the photograph is doing behind them.
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  stops: [0.0, 0.5, 1.0],
-                  colors: [
-                    Color(0xE6000000),
-                    Color(0x80000000),
-                    Color(0x33000000),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        )
-        .animate()
-        .fadeIn(duration: Motion.slow, curve: Motion.enter)
-        .scale(
-          begin: const Offset(1.06, 1.06),
-          end: const Offset(1, 1),
-          duration: const Duration(milliseconds: 900),
-          curve: Motion.enter,
-        );
+          ),
+        ),
+      ],
+    )
+    // The photograph settles inward as it fades up, so the screen reads
+    // as coming to rest rather than simply appearing. No travel — a
+    // full-bleed image sliding would show its own edges.
+    .reveal(duration: Motion.slow, distance: 0, scaleFrom: 1.06);
   }
 }
 
@@ -97,38 +89,27 @@ class _Branding extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              child: Image.asset(
-                'assets/images/logo.jpg',
-                width: 192,
-                fit: BoxFit.contain,
-              ),
-            )
-            .animate()
-            .fadeIn(delay: 200.ms, duration: Motion.moderate)
-            .slideY(begin: 0.15, end: 0, curve: Motion.enter),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: Image.asset(
+            'assets/images/logo.jpg',
+            width: 192,
+            fit: BoxFit.contain,
+          ),
+        ).reveal(delay: Motion.cinematicFor(1)),
         const SizedBox(height: AppSpacing.x8),
         Text(
-              'Heritage in Every Bite',
-              textAlign: TextAlign.center,
-              style: context.textTheme.displayLarge?.copyWith(
-                color: Colors.white,
-              ),
-            )
-            .animate()
-            .fadeIn(delay: 380.ms, duration: Motion.moderate)
-            .slideY(begin: 0.2, end: 0, curve: Motion.enter),
+          'Heritage in Every Bite',
+          textAlign: TextAlign.center,
+          style: context.textTheme.displayLarge?.copyWith(color: Colors.white),
+        ).reveal(delay: Motion.cinematicFor(2)),
         const SizedBox(height: AppSpacing.x2),
         Text(
-              'Experience a symphony of British and Sri Lankan flavors.',
-              textAlign: TextAlign.center,
-              style: context.textTheme.bodyLarge?.copyWith(
-                color: Colors.white.withValues(alpha: 0.8),
-              ),
-            )
-            .animate()
-            .fadeIn(delay: 500.ms, duration: Motion.moderate)
-            .slideY(begin: 0.2, end: 0, curve: Motion.enter),
+          'Experience a symphony of British and Sri Lankan flavors.',
+          textAlign: TextAlign.center,
+          style: context.textTheme.bodyLarge?.copyWith(
+            color: Colors.white.withValues(alpha: 0.8),
+          ),
+        ).reveal(delay: Motion.cinematicFor(3)),
       ],
     );
   }
@@ -143,24 +124,21 @@ class _Actions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            PrimaryButton(
-              label: 'Get Started',
-              onPressed: onGetStarted,
-              onDark: true,
-            ),
-            const SizedBox(height: AppSpacing.x3),
-            SecondaryButton(
-              label: 'Login to your account',
-              onPressed: onLogin,
-              onDark: true,
-            ),
-          ],
-        )
-        .animate()
-        .fadeIn(delay: 640.ms, duration: Motion.moderate)
-        .slideY(begin: 0.25, end: 0, curve: Motion.enter);
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PrimaryButton(
+          label: 'Get Started',
+          onPressed: onGetStarted,
+          onDark: true,
+        ),
+        const SizedBox(height: AppSpacing.x3),
+        SecondaryButton(
+          label: 'Login to your account',
+          onPressed: onLogin,
+          onDark: true,
+        ),
+      ],
+    ).reveal(delay: Motion.cinematicFor(4));
   }
 }
 

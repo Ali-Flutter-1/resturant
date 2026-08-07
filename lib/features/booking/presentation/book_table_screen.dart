@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/preview/sample_content.dart';
@@ -69,11 +69,14 @@ class _BookTableScreenState extends State<BookTableScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: widget.onBack,
-          tooltip: 'Back',
-        ),
+        // Tab root: see AboutContactScreen — no dead arrow.
+        leading: widget.onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBack,
+                tooltip: 'Back',
+              ),
         title: const Text('Book a Table'),
       ),
       body: ListView(
@@ -83,95 +86,99 @@ class _BookTableScreenState extends State<BookTableScreen> {
           AppSpacing.gutter,
           AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
         ),
-        children:
-            [
-                  _Field(
-                    label: 'Party Size',
-                    child: QuantityStepper(
-                      value: _partySize,
-                      onChanged: (v) => setState(() => _partySize = v),
-                      min: 1,
-                      max: 20,
-                      trailingLabel: 'Guests',
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.x6),
+        children: [
+          _Field(
+            label: 'Party Size',
+            child: QuantityStepper(
+              value: _partySize,
+              onChanged: (v) => setState(() => _partySize = v),
+              min: 1,
+              max: 20,
+              trailingLabel: 'Guests',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x6),
 
-                  _Field(
-                    label: 'Date',
-                    child: _PickerTile(
-                      icon: Icons.calendar_today_outlined,
-                      value: _formattedDate,
-                      onTap: _pickDate,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.x6),
+          _Field(
+            label: 'Date',
+            child: _PickerTile(
+              icon: Icons.calendar_today_outlined,
+              value: _formattedDate,
+              onTap: _pickDate,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x6),
 
-                  _Field(
-                    label: 'Time',
-                    child: _PickerTile(
-                      icon: Icons.schedule,
-                      value: _time?.format(context) ?? 'Select a time',
-                      isPlaceholder: _time == null,
-                      trailing: Icons.keyboard_arrow_down,
-                      onTap: _pickTime,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.x6),
+          _Field(
+            label: 'Time',
+            child: _PickerTile(
+              icon: Icons.schedule,
+              value: _time?.format(context) ?? 'Select a time',
+              isPlaceholder: _time == null,
+              trailing: Icons.keyboard_arrow_down,
+              onTap: _pickTime,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x6),
 
-                  _Field(
-                    label: 'Seating Preference (Optional)',
-                    child: Wrap(
-                      spacing: AppSpacing.x2,
-                      runSpacing: AppSpacing.x2,
-                      children: [
-                        for (final (i, option)
-                            in SampleContent.seatingPreferences.indexed)
-                          _SeatingChip(
-                            label: option,
-                            selected: i == _seating,
-                            onTap: () => setState(() => _seating = i),
-                          ),
-                      ],
-                    ),
+          _Field(
+            label: 'Seating Preference (Optional)',
+            child: Wrap(
+              spacing: AppSpacing.x2,
+              runSpacing: AppSpacing.x2,
+              children: [
+                for (final (i, option)
+                    in SampleContent.seatingPreferences.indexed)
+                  _SeatingChip(
+                    label: option,
+                    selected: i == _seating,
+                    onTap: () => setState(() => _seating = i),
                   ),
-                  const SizedBox(height: AppSpacing.x6),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x6),
 
-                  _Field(
-                    label: 'Special Requests',
-                    trailing: 'Optional',
-                    child: TextField(
-                      maxLines: 4,
-                      decoration: const InputDecoration(
-                        hintText:
-                            'Dietary requirements, celebrations, or specific needs...',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.x8),
+          _Field(
+            label: 'Special Requests',
+            trailing: 'Optional',
+            child: TextField(
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText:
+                    'Dietary requirements, celebrations, or specific needs...',
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x8),
 
-                  FilledButton(
-                    onPressed: _confirm,
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('Confirm Reservation'),
-                        SizedBox(width: AppSpacing.x2),
-                        Icon(Icons.arrow_forward, size: 16),
-                      ],
-                    ),
+          FilledButton(
+            onPressed: _confirm,
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Flexible so a long label or a large text scale
+                // shortens the text rather than pushing the arrow
+                // out of the button.
+                Flexible(
+                  child: Text(
+                    'Confirm Reservation',
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: AppSpacing.x3),
-                  Text(
-                    'Reservations are held for 15 minutes past the booked time. '
-                    'See our full cancellation policy.',
-                    textAlign: TextAlign.center,
-                    style: context.texts.bodySmall,
-                  ),
-                ]
-                .animate(interval: 50.ms)
-                .fadeIn(duration: Motion.moderate)
-                .slideY(begin: 0.06, end: 0, curve: Motion.enter),
+                ),
+                SizedBox(width: AppSpacing.x2),
+                Icon(Icons.arrow_forward, size: AppIconSize.md),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x3),
+          Text(
+            'Reservations are held for 15 minutes past the booked time. '
+            'See our full cancellation policy.',
+            textAlign: TextAlign.center,
+            style: context.texts.bodySmall,
+          ),
+        ].revealStaggered(),
       ),
     );
   }
@@ -192,9 +199,17 @@ class _Field extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: context.texts.titleMedium),
-            if (trailing != null)
+            Expanded(
+              child: Text(
+                label,
+                style: context.texts.titleMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: AppSpacing.x2),
               Text(trailing!, style: context.texts.bodySmall),
+            ],
           ],
         ),
         const SizedBox(height: AppSpacing.x2),
@@ -238,7 +253,7 @@ class _PickerTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: scheme.primary),
+            Icon(icon, size: AppIconSize.lg, color: scheme.primary),
             const SizedBox(width: AppSpacing.x3),
             Expanded(
               child: Text(
@@ -251,7 +266,11 @@ class _PickerTile extends StatelessWidget {
               ),
             ),
             if (trailing != null)
-              Icon(trailing, size: 20, color: context.surfaces.inkSoft),
+              Icon(
+                trailing,
+                size: AppIconSize.xl,
+                color: context.surfaces.inkSoft,
+              ),
           ],
         ),
       ),
@@ -281,8 +300,8 @@ class _SeatingChip extends StatelessWidget {
         onTap();
       },
       child: AnimatedContainer(
-        duration: Motion.quick,
-        curve: Motion.standard,
+        duration: context.motion.fade(Motion.fast),
+        curve: context.motion.standard,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.x4,
           vertical: AppSpacing.x2 + 2,

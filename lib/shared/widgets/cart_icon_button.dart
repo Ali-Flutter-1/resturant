@@ -25,7 +25,7 @@ class _CartIconButtonState extends State<CartIconButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pop = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 420),
+    duration: Motion.slow,
   );
 
   late final Animation<double> _scale = TweenSequence<double>([
@@ -41,7 +41,7 @@ class _CartIconButtonState extends State<CartIconButton>
       tween: Tween(
         begin: 0.86,
         end: 1.22,
-      ).chain(CurveTween(curve: Curves.easeOutBack)),
+      ).chain(CurveTween(curve: Motion.playful)),
       weight: 38,
     ),
     TweenSequenceItem(
@@ -60,7 +60,7 @@ class _CartIconButtonState extends State<CartIconButton>
   }
 
   void _bump() {
-    if (MediaQuery.disableAnimationsOf(context)) return;
+    if (context.motion.reduced) return;
     _pop.forward(from: 0);
   }
 
@@ -106,8 +106,8 @@ class _CartBadge extends StatelessWidget {
 
     return AnimatedScale(
       scale: count == 0 ? 0 : 1,
-      duration: Motion.quick,
-      curve: Motion.emphasised,
+      duration: context.motion.move(Motion.fast),
+      curve: context.motion.emphasized,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
         constraints: const BoxConstraints(minWidth: 17),
@@ -118,7 +118,7 @@ class _CartBadge extends StatelessWidget {
           border: Border.all(color: Theme.of(context).colorScheme.surface),
         ),
         child: AnimatedSwitcher(
-          duration: Motion.quick,
+          duration: context.motion.fade(Motion.fast),
           // The new number rises into place as the old one drops away.
           transitionBuilder: (child, animation) => FadeTransition(
             opacity: animation,

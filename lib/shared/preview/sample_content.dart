@@ -55,6 +55,19 @@ abstract final class SampleContent {
   /// "All" is added so the default state shows the whole menu.
   static const menuFilters = ['All', 'Curry Dishes', 'Vegan', 'Main Dishes'];
 
+  /// Tags a dish can carry, as offered in the admin editor.
+  ///
+  /// Collected from the tags the design's own dishes use. A dish carries one
+  /// tag, so this is a single choice — when the API defines the real
+  /// vocabulary this list is what it replaces.
+  static const dishTags = [
+    'Spicy',
+    'Vegan',
+    'Vegetarian',
+    'Authentic Sri Lankan',
+    'Chef’s Choice',
+  ];
+
   static const featured = SampleDish(
     name: 'Black Pork Curry',
     description:

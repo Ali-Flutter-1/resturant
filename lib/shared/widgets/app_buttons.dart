@@ -37,6 +37,7 @@ class _PrimaryButtonState extends State<PrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
+    final motion = context.motion;
 
     return Semantics(
       button: true,
@@ -53,12 +54,14 @@ class _PrimaryButtonState extends State<PrimaryButton> {
               }
             : null,
         child: AnimatedScale(
-          scale: _pressed ? 0.97 : 1,
-          duration: Motion.instant,
-          curve: Motion.standard,
+          // Unity under reduce-motion: the colour shift below still confirms
+          // the press, so nothing is lost by holding the button still.
+          scale: _pressed ? motion.pressScale : 1,
+          duration: motion.move(Motion.instant),
+          curve: motion.standard,
           child: AnimatedContainer(
-            duration: Motion.instant,
-            curve: Motion.standard,
+            duration: motion.fade(Motion.instant),
+            curve: motion.standard,
             width: widget.expand ? double.infinity : null,
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.x8,
@@ -82,7 +85,7 @@ class _PrimaryButtonState extends State<PrimaryButton> {
                 if (widget.icon != null) ...[
                   Icon(
                     widget.icon,
-                    size: 18,
+                    size: AppIconSize.lg,
                     color: Theme.of(context).colorScheme.onPrimary,
                   ),
                   const SizedBox(width: AppSpacing.x2),

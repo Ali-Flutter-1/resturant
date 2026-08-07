@@ -124,7 +124,7 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
                     children: [
                       Icon(
                         Icons.schedule,
-                        size: 15,
+                        size: AppIconSize.sm,
                         color: context.surfaces.inkSoft,
                       ),
                       const SizedBox(width: AppSpacing.x1 + 2),
@@ -234,22 +234,28 @@ class _DishHeader extends StatelessWidget {
       stretch: true,
       stretchTriggerOffset: 120,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      leading: Padding(
-        padding: const EdgeInsets.all(AppSpacing.x2),
-        child: Material(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-          shape: const CircleBorder(),
-          child: InkWell(
-            onTap: onBack,
-            customBorder: const CircleBorder(),
-            child: const SizedBox(
-              width: 40,
-              height: 40,
-              child: Icon(Icons.arrow_back, size: 20),
+      // The disc only earns its place if it does something; without a
+      // callback the framework's implied BackButton is the honest fallback.
+      leading: onBack == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.all(AppSpacing.x2),
+              child: Material(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: 0.9),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: onBack,
+                  customBorder: const CircleBorder(),
+                  child: const SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Icon(Icons.arrow_back, size: AppIconSize.xl),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
       actions: [
         CartIconButton(targetKey: cartKey, onTap: onOpenCart),
         const SizedBox(width: AppSpacing.x1),
@@ -305,7 +311,11 @@ class _RatingRow extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(Icons.star, size: 16, color: context.orderColors.preparing),
+        Icon(
+          Icons.star,
+          size: AppIconSize.md,
+          color: context.orderColors.preparing,
+        ),
         const SizedBox(width: AppSpacing.x1),
         Text(dish.rating!.toStringAsFixed(1), style: context.texts.titleMedium),
         const SizedBox(width: AppSpacing.x2),
@@ -397,8 +407,8 @@ class _SpiceOption extends StatelessWidget {
         onTap();
       },
       child: AnimatedContainer(
-        duration: Motion.quick,
-        curve: Motion.standard,
+        duration: context.motion.fade(Motion.fast),
+        curve: context.motion.standard,
         height: 48,
         alignment: Alignment.center,
         decoration: BoxDecoration(
@@ -448,7 +458,7 @@ class _AddOnTile extends StatelessWidget {
       },
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: AnimatedContainer(
-        duration: Motion.quick,
+        duration: context.motion.fade(Motion.fast),
         padding: const EdgeInsets.all(AppSpacing.x3),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.md),
@@ -470,7 +480,7 @@ class _AddOnTile extends StatelessWidget {
                 onChanged: (v) => onChanged(v ?? false),
                 activeColor: scheme.primary,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
                 ),
               ),
             ),
@@ -572,7 +582,7 @@ class _AddToCartBar extends StatelessWidget {
                         const SizedBox(width: AppSpacing.x2),
                         Flexible(
                           child: AnimatedSwitcher(
-                            duration: Motion.quick,
+                            duration: context.motion.fade(Motion.fast),
                             child: FittedBox(
                               key: ValueKey(total),
                               fit: BoxFit.scaleDown,
@@ -643,7 +653,7 @@ class _Reviews extends StatelessWidget {
                 for (var i = 0; i < review.rating; i++)
                   Icon(
                     Icons.star,
-                    size: 13,
+                    size: AppIconSize.xs,
                     color: context.orderColors.preparing,
                   ),
               ],

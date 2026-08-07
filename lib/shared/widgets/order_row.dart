@@ -48,7 +48,7 @@ class OrderRow extends StatelessWidget {
     final settled = status == OrderStatus.served;
 
     return AnimatedOpacity(
-      duration: Motion.quick,
+      duration: context.motion.fade(Motion.fast),
       opacity: settled ? 0.72 : 1,
       child: Material(
         color: scheme.surface,
@@ -73,7 +73,7 @@ class OrderRow extends StatelessWidget {
                   children: [
                     // Severity stripe.
                     AnimatedContainer(
-                      duration: Motion.quick,
+                      duration: context.motion.fade(Motion.fast),
                       width: 3,
                       color: status.foreground(context),
                     ),

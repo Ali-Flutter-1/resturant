@@ -93,6 +93,7 @@ void showAppSnack(
   String message, {
   IconData icon = Icons.check_circle_outline,
   bool isError = false,
+  SnackBarAction? action,
 }) {
   final colours = Theme.of(context).extension<OrderStateColors>()!;
   final messenger = ScaffoldMessenger.of(context);
@@ -100,12 +101,15 @@ void showAppSnack(
   messenger.hideCurrentSnackBar();
   messenger.showSnackBar(
     SnackBar(
-      duration: const Duration(seconds: 3),
+      // An undoable action needs longer than a bare confirmation: three
+      // seconds is not enough to read the message and decide.
+      duration: Duration(seconds: action == null ? 3 : 6),
+      action: action,
       content: Row(
         children: [
           Icon(
             isError ? Icons.error_outline : icon,
-            size: 18,
+            size: AppIconSize.lg,
             color: isError ? colours.overdue : colours.ready,
           ),
           const SizedBox(width: AppSpacing.x3),

@@ -118,7 +118,7 @@ class _TransitionButton extends StatelessWidget {
                   style: context.texts.titleMedium?.copyWith(color: colour),
                 ),
               ),
-              Icon(Icons.arrow_forward, size: 16, color: colour),
+              Icon(Icons.arrow_forward, size: AppIconSize.md, color: colour),
             ],
           ),
         ),

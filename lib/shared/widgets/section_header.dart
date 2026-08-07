@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_spacing.dart';
+
 import '../../core/theme/app_colors.dart';
 
 /// A titled block heading, optionally with a trailing action.
@@ -30,7 +32,7 @@ class SectionHeader extends StatelessWidget {
               children: [
                 Text(actionLabel!),
                 const SizedBox(width: 2),
-                const Icon(Icons.arrow_forward, size: 14),
+                const Icon(Icons.arrow_forward, size: AppIconSize.sm),
               ],
             ),
           ),

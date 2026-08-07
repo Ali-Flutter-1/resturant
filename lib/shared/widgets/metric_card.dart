@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/animations/animated_count.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
@@ -17,11 +18,21 @@ class MetricCard extends StatelessWidget {
     this.delta,
     this.deltaIsPositive = true,
     this.valueSize = 30,
+    this.countTo,
+    this.countFormat,
   });
 
   final String caption;
+
+  /// The figure as text. Used verbatim unless [countTo] is supplied.
   final String value;
   final IconData icon;
+
+  /// Counts up to this figure on first appearance instead of simply showing
+  /// [value]. Supply [countFormat] alongside it so the running number is
+  /// rendered the same way the final one is.
+  final double? countTo;
+  final String Function(double)? countFormat;
 
   /// Change against the comparable prior period, e.g. `+12%`.
   final String? delta;
@@ -61,7 +72,7 @@ class MetricCard extends StatelessWidget {
                 ),
                 child: Icon(
                   icon,
-                  size: 19,
+                  size: AppIconSize.lg,
                   color: Theme.of(context).colorScheme.onPrimary,
                 ),
               ),
@@ -93,13 +104,22 @@ class MetricCard extends StatelessWidget {
             style: AppTypography.caption(surfaces.inkSoft),
           ),
           const SizedBox(height: AppSpacing.x1),
-          Text(
-            value,
-            style: AppTypography.money(
-              Theme.of(context).colorScheme.onSurface,
-              size: valueSize,
-              tabular: false,
-            ),
+          Builder(
+            builder: (context) {
+              final style = AppTypography.money(
+                Theme.of(context).colorScheme.onSurface,
+                size: valueSize,
+                // Tabular while counting: proportional digits change width as
+                // they cycle, which makes the figure jitter on every frame.
+                tabular: countTo != null,
+              );
+              final to = countTo;
+              final format = countFormat;
+              if (to == null || format == null) {
+                return Text(value, style: style);
+              }
+              return AnimatedCount(value: to, format: format, style: style);
+            },
           ),
         ],
       ),

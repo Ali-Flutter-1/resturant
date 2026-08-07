@@ -44,7 +44,7 @@ class QuantityStepper extends StatelessWidget {
           ),
           Expanded(
             child: AnimatedSwitcher(
-              duration: Motion.quick,
+              duration: context.motion.fade(Motion.fast),
               transitionBuilder: (child, animation) => FadeTransition(
                 opacity: animation,
                 child: ScaleTransition(scale: animation, child: child),
@@ -98,7 +98,7 @@ class _StepButton extends StatelessWidget {
           height: 40,
           child: Icon(
             icon,
-            size: 18,
+            size: AppIconSize.lg,
             color: enabled
                 ? Theme.of(context).colorScheme.onSurface
                 : context.surfaces.inkSoft,

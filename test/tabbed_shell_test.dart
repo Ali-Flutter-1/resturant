@@ -30,6 +30,7 @@ class _TabOneRootState extends State<_TabOneRoot> {
           children: [
             const Text('tab-one-root'),
             Text('count: $_count'),
+            Text('root-inset: ${MediaQuery.paddingOf(context).bottom}'),
             ElevatedButton(
               onPressed: () => setState(() => _count++),
               child: const Text('bump'),
@@ -37,8 +38,19 @@ class _TabOneRootState extends State<_TabOneRoot> {
             ElevatedButton(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const Scaffold(
-                    body: Center(child: Text('tab-one-detail')),
+                  builder: (context) => Scaffold(
+                    body: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('tab-one-detail'),
+                          Text(
+                            'detail-inset: '
+                            '${MediaQuery.paddingOf(context).bottom}',
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -49,6 +61,14 @@ class _TabOneRootState extends State<_TabOneRoot> {
       ),
     );
   }
+}
+
+/// Reads the bottom inset a route reported through its debug label.
+double _insetFrom(WidgetTester tester, String prefix) {
+  final finder = find.textContaining(prefix);
+  expect(finder, findsOneWidget, reason: 'no widget carrying "$prefix"');
+  final text = tester.widget<Text>(finder).data!;
+  return double.parse(text.substring(prefix.length));
 }
 
 void main() {
@@ -190,5 +210,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('tab-one-root'), findsOneWidget);
+  });
+
+  testWidgets('a pushed screen does not reserve room for the hidden bar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    // The tab root sits under the bar, so it is padded to clear it.
+    final rootInset = _insetFrom(tester, 'root-inset: ');
+    expect(rootInset, greaterThan(0));
+
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+
+    // The detail screen slides the bar away, so it must not keep the bar's
+    // padding — that showed up as dead space beneath the add-to-cart bar.
+    final detailInset = _insetFrom(tester, 'detail-inset: ');
+    expect(detailInset, lessThan(rootInset));
+    expect(
+      detailInset,
+      tester.view.padding.bottom / tester.view.devicePixelRatio,
+    );
   });
 }

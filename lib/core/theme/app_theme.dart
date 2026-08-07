@@ -1,7 +1,7 @@
-import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 
 import '../animations/motion.dart';
+import '../animations/page_transitions.dart';
 import 'app_colors.dart';
 import 'app_spacing.dart';
 import 'app_typography.dart';
@@ -78,18 +78,11 @@ abstract final class AppTheme {
       scaffoldBackgroundColor: scaffold,
       extensions: [surfaces, orderColors],
 
-      // Shared-axis transitions by default; individual routes override where
-      // a different relationship between screens is intended.
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.android: SharedAxisPageTransitionsBuilder(
-            transitionType: SharedAxisTransitionType.horizontal,
-          ),
-          TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(
-            transitionType: SharedAxisTransitionType.horizontal,
-          ),
-        },
-      ),
+      // Every platform mapped explicitly. The previous map covered only
+      // Android and iOS, so desktop and web silently fell back to Flutter's
+      // default — and mapping iOS to a shared axis had removed the
+      // edge-swipe back gesture along with Cupertino's transition.
+      pageTransitionsTheme: appPageTransitionsTheme,
 
       appBarTheme: AppBarTheme(
         backgroundColor: scaffold,

@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/animations/motion.dart';
+
 /// Flies a copy of a widget along a curved path into the cart.
 ///
 /// The copy is painted in the root [Overlay], above every route, so it is
@@ -25,7 +27,7 @@ abstract final class FlyToCart {
     required GlobalKey sourceKey,
     required GlobalKey targetKey,
     required Widget child,
-    Duration duration = const Duration(milliseconds: 720),
+    Duration duration = Motion.slow,
     double endScale = 0.16,
     VoidCallback? onArrive,
   }) async {
@@ -157,6 +159,15 @@ class _FlightState extends State<_Flight> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
+  /// Re-normalises [value] within the sub-range [start]–[end] to 0–1.
+  ///
+  /// The clamp is not decoration. `(1.0 - 0.7) / 0.3` evaluates to
+  /// 1.0000000000000002 in IEEE-754, and [Curve.transform] asserts its input
+  /// is within 0–1 — so the final frame of a phase can crash on a rounding
+  /// error alone.
+  static double _phase(double value, double start, double end) =>
+      ((value - start) / (end - start)).clamp(0.0, 1.0);
+
   Offset _pointAt(double t) {
     final u = 1 - t;
     return widget.start * (u * u) +
@@ -172,22 +183,22 @@ class _FlightState extends State<_Flight> with SingleTickerProviderStateMixin {
         final raw = _controller.value;
 
         // Position eases in and out; the arc does the rest of the work.
-        final travel = Curves.easeInOutCubic.transform(raw);
+        final travel = Motion.standard.transform(raw);
         final position = _pointAt(travel);
 
         // A touch of anticipation — it swells before it leaves — then
         // shrinks away steadily.
         final scale = raw < 0.16
-            ? 1 + Curves.easeOut.transform(raw / 0.16) * 0.06
+            ? 1 + Curves.easeOut.transform(_phase(raw, 0, 0.16)) * 0.06
             : 1.06 -
                   (1.06 - widget.endScale) *
-                      Curves.easeInCubic.transform((raw - 0.16) / 0.84);
+                      Motion.exit.transform(_phase(raw, 0.16, 1));
 
         // Holds full strength most of the way, then fades as it lands, so
         // it disappears *into* the cart rather than vanishing early.
         final opacity = raw < 0.7
             ? 1.0
-            : 1.0 - Curves.easeIn.transform((raw - 0.7) / 0.3) * 0.65;
+            : 1.0 - Curves.easeIn.transform(_phase(raw, 0.7, 1)) * 0.65;
 
         // Barely perceptible tumble; enough to feel physical.
         final angle = Curves.easeInOut.transform(raw) * 0.28;
