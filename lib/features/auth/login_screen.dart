@@ -181,7 +181,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 icon: Icons.lock_outline,
                 obscure: _obscure,
                 autofillHints: const [AutofillHints.password],
-                onSubmitted: (_) => _submit(),
+                // The keyboard's tick dismisses the keyboard and nothing
+                // more. Signing in or creating an account happens only when the
+                // button is pressed — submitting from the last field starts the
+                // request before the user has looked back over what they typed.
+                onSubmitted: (_) => FocusScope.of(context).unfocus(),
                 fieldError: fieldErrors['password'],
                 suffix: IconButton(
                   icon: Icon(

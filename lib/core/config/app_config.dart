@@ -58,4 +58,13 @@ abstract final class AppConfig {
       dotenv.maybeGet('GOOGLE_CLIENT_ID')?.trim() ?? '';
 
   static bool get hasGoogleSignIn => googleClientId.isNotEmpty;
+
+  /// Serves the orders screen from memory instead of the API.
+  ///
+  /// For looking at the screen before the orders endpoints are wired to a live
+  /// backend. Defaults to false and must be set explicitly, so a missing or
+  /// stale `.env` can never turn demo data on by accident — the failure mode of
+  /// a wrong default here is invented orders shown to a real customer.
+  static bool get useDemoOrders =>
+      dotenv.maybeGet('USE_DEMO_ORDERS')?.trim().toLowerCase() == 'true';
 }

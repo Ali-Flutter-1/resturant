@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_spacing.dart';
-
 import '../../core/animations/page_transitions.dart';
 
 import '../../shared/preview/sample_content.dart';
@@ -13,6 +11,7 @@ import '../checkout/presentation/checkout_screen.dart';
 import '../discover/presentation/discover_screen.dart';
 import '../menu/presentation/dish_details_screen.dart';
 import '../menu/presentation/menu_screen.dart';
+import '../orders/presentation/my_orders_screen.dart';
 
 /// The customer-facing app.
 ///
@@ -88,7 +87,12 @@ class CustomerShell extends StatelessWidget {
           sfSymbol: 'list.bullet.rectangle',
           icon: Icons.receipt_long_outlined,
           selectedIcon: Icons.receipt_long,
-          builder: (context) => const _NotDesignedYet(title: 'Orders'),
+          builder: (context) => MyOrdersScreen(
+            // An empty history is a dead end otherwise. The menu is the
+            // Discover tab's root, so this asks the shell to switch tabs
+            // rather than pushing a second copy of it onto this one.
+            onBrowseMenu: () => TabbedShell.selectTab(context, 0),
+          ),
         ),
         ShellTab(
           label: 'Profile',
@@ -116,44 +120,3 @@ SampleDish _asPreview(Dish dish) => SampleDish(
   tag: dish.dietaryTag,
   imageUrl: dish.imageUrl,
 );
-
-/// Order history has no frame in the Figma file. An honest placeholder beats
-/// inventing a screen nobody has designed.
-class _NotDesignedYet extends StatelessWidget {
-  const _NotDesignedYet({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.drafts_outlined,
-                size: AppIconSize.hero,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Not designed yet',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'This screen has no frame in the design file.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

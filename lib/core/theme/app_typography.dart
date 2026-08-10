@@ -182,12 +182,16 @@ abstract final class AppTypography {
   /// Sat at 10px behind two separate `copyWith(fontSize: 10)` calls, which also
   /// left [caption]'s uppercase tracking on text that is not uppercase. 11px is
   /// the floor Apple sets for a tab label.
+  ///
+  /// Medium rather than semibold, and no added tracking: SF at this size is
+  /// already wide enough, and the extra weight plus 0.2 of letter-spacing was
+  /// what made the labels read as a Material bar even after the container came
+  /// off. A tab label should be quiet — the tint carries the selection.
   static TextStyle navLabel(Color ink) => _style(
     family: _body,
     size: 11,
     lineHeight: 14,
-    weight: FontWeight.w600,
-    letterSpacing: 0.2,
+    weight: FontWeight.w500,
     color: ink,
   );
 

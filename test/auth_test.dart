@@ -530,4 +530,71 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
     });
   });
+
+  group('nothing starts without the button', () {
+    testWidgets("the keyboard's tick does not sign in", (tester) async {
+      final repository = _FakeAuthRepository(user: _admin);
+      final cubit = AuthCubit(repository: repository);
+      await tester.pumpWidget(
+        BlocProvider.value(
+          value: cubit,
+          child: MaterialApp(theme: AppTheme.light, home: const LoginScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(_field('you@example.com'), 'boss@tscafe.co.uk');
+      await tester.enterText(_field('Your password'), 'Str0ngPass1');
+
+      // The tick on the iOS keyboard. It dismisses and nothing more — a
+      // request that starts here begins before the user has re-read the form.
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(repository.lastEmail, isNull, reason: 'no request should be sent');
+      expect(cubit.state.isSignedIn, isFalse);
+
+      // The button is still the only way in, and it works.
+      await tester.ensureVisible(find.text('Sign In'));
+      await tester.tap(find.text('Sign In'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.isSignedIn, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets("the keyboard's tick does not create an account", (
+      tester,
+    ) async {
+      final repository = _FakeAuthRepository(user: _customer);
+      final cubit = AuthCubit(repository: repository);
+      await tester.pumpWidget(
+        BlocProvider.value(
+          value: cubit,
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const RegisterScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(_field('Ali'), 'Ali');
+      await tester.enterText(_field('Hassan'), 'Hassan');
+      await tester.enterText(_field('you@example.com'), 'ali@example.com');
+      await tester.enterText(_field('At least 8 characters'), 'Str0ngPass1');
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(cubit.state.isSignedIn, isFalse);
+      // No validation errors either: the tick is not a rejected submission,
+      // it is not a submission at all.
+      expect(find.text('Choose a password.'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 2));
+    });
+  });
 }

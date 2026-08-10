@@ -59,6 +59,18 @@ class TabbedShell extends StatefulWidget {
   /// Selected-item colour. Defaults to the theme's primary.
   final Color? tint;
 
+  /// Switches the enclosing shell to [index].
+  ///
+  /// For the case where a screen's own content should send the user to a
+  /// *different tab* rather than push a route — an empty orders list offering
+  /// the menu, say. Pushing the menu into the Orders tab would leave the user
+  /// browsing dishes with "Orders" lit in the bar.
+  ///
+  /// Silently does nothing outside a [TabbedShell], so a screen can be used
+  /// standalone or in a test without needing one.
+  static void selectTab(BuildContext context, int index) =>
+      context.findAncestorStateOfType<_TabbedShellState>()?.selectTab(index);
+
   @override
   State<TabbedShell> createState() => _TabbedShellState();
 }
@@ -90,6 +102,19 @@ class _TabbedShellState extends State<TabbedShell> {
     });
   }
 
+  /// Programmatic tab change — see [TabbedShell.selectTab].
+  ///
+  /// Deliberately not [_onTabSelected]: that one plays a selection haptic and
+  /// pops the tab to root on a re-tap, both of which belong to a finger on the
+  /// bar rather than to a button inside a screen.
+  void selectTab(int index) {
+    if (index == _currentIndex || index < 0 || index >= widget.tabs.length) {
+      return;
+    }
+    setState(() => _currentIndex = index);
+    _scheduleBarVisibilityRefresh();
+  }
+
   void _onTabSelected(int index) {
     if (index == _currentIndex) {
       // Standard iOS behaviour: re-tapping the active tab returns it to root.
@@ -119,9 +144,17 @@ class _TabbedShellState extends State<TabbedShell> {
   }
 
   /// Height the bar occupies, so screens inside a tab can clear it.
+  ///
+  /// Both bars are now the same 50pt content height — UIKit's — so the only
+  /// difference left is what they do without a home indicator: the Flutter bar
+  /// adds its own small pad, the native one is already inset.
   double _barExtent(double bottomInset) =>
-      (_useNativeBar ? 50.0 : 68.0) +
-      (bottomInset > 0 ? bottomInset : (_useNativeBar ? 0.0 : 16.0));
+      FlutterGlassNavBar.barHeight +
+      (bottomInset > 0
+          ? bottomInset
+          : (_useNativeBar
+                ? 0.0
+                : FlutterGlassNavBar.bottomPaddingWithoutInset));
 
   Widget _tabNavigator(int index, double barExtent) {
     return Navigator(

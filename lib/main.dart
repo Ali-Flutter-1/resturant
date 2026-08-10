@@ -10,6 +10,9 @@ import 'core/network/token_store.dart';
 import 'features/auth/data/api_auth_repository.dart';
 import 'features/menu/data/api_menu_repository.dart';
 import 'features/menu/domain/menu_repository.dart';
+import 'features/orders/data/api_order_repository.dart';
+import 'features/orders/data/demo_order_repository.dart';
+import 'features/orders/domain/order_repository.dart';
 import 'core/animations/page_transitions.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
@@ -49,12 +52,23 @@ Future<void> main() async {
     TsCafeApp(
       auth: auth,
       menu: ApiMenuRepository(client: client),
+      // Demo orders are opt-in through `.env` and off by default — see
+      // [AppConfig.useDemoOrders]. Chosen here rather than inside the
+      // repository so nothing downstream can serve invented orders.
+      orders: AppConfig.useDemoOrders
+          ? DemoOrderRepository()
+          : ApiOrderRepository(client: client),
     ),
   );
 }
 
 class TsCafeApp extends StatelessWidget {
-  const TsCafeApp({super.key, required this.auth, required this.menu});
+  const TsCafeApp({
+    super.key,
+    required this.auth,
+    required this.menu,
+    required this.orders,
+  });
 
   /// Built in `main` so it can be handed the repository and wired to the
   /// client's session-expiry callback before the first frame.
@@ -64,10 +78,17 @@ class TsCafeApp extends StatelessWidget {
   /// the menu shares one client and one set of interceptors.
   final MenuRepository menu;
 
+  /// The signed-in customer's orders. Scoped to the bearer token, so it needs
+  /// nothing from the session beyond the client it already shares.
+  final OrderRepository orders;
+
   @override
   Widget build(BuildContext context) {
-    return RepositoryProvider<MenuRepository>.value(
-      value: menu,
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<MenuRepository>.value(value: menu),
+        RepositoryProvider<OrderRepository>.value(value: orders),
+      ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider.value(value: auth),
