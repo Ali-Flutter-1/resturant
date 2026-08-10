@@ -17,7 +17,7 @@ class MetricCard extends StatelessWidget {
     required this.icon,
     this.delta,
     this.deltaIsPositive = true,
-    this.valueSize = 30,
+    this.valueSize = MoneySize.hero,
     this.countTo,
     this.countFormat,
   });
@@ -37,7 +37,7 @@ class MetricCard extends StatelessWidget {
   /// Change against the comparable prior period, e.g. `+12%`.
   final String? delta;
   final bool deltaIsPositive;
-  final double valueSize;
+  final MoneySize valueSize;
 
   @override
   Widget build(BuildContext context) {
@@ -89,11 +89,12 @@ class MetricCard extends StatelessWidget {
                   ),
                   child: Text(
                     delta!,
-                    style: context.texts.labelSmall?.copyWith(
-                      color: deltaColor,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                    style: context.texts.labelSmall
+                        ?.copyWith(
+                          color: deltaColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        )
+                        .withWeight(FontWeight.w600),
                   ),
                 ),
             ],

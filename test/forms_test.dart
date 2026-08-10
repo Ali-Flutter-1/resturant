@@ -4,10 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/about/presentation/about_contact_screen.dart';
-import 'package:practice/features/auth/auth_cubit.dart';
 import 'package:practice/features/booking/presentation/book_table_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/checkout/presentation/checkout_screen.dart';
+
+import 'support/auth_fixtures.dart';
 
 /// Forms refuse bad input and say why. Each of these was a no-op button
 /// before, so the tests exist to keep them honest.
@@ -18,7 +19,7 @@ void main() {
     cart = CartCubit()..add(2);
     return MultiBlocProvider(
       providers: [
-        BlocProvider(create: (_) => AuthCubit()..signInAs(UserRole.customer)),
+        BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
         BlocProvider.value(value: cart),
       ],
       child: MaterialApp(theme: AppTheme.light, home: home),

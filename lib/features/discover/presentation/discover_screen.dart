@@ -91,10 +91,9 @@ class _Greeting extends StatelessWidget {
                   const SizedBox(width: AppSpacing.x1),
                   Text(
                     'Colombo, LK',
-                    style: context.texts.bodySmall?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: context.texts.bodySmall
+                        ?.copyWith(color: scheme.primary)
+                        .withWeight(FontWeight.w600),
                   ),
                   Icon(
                     Icons.keyboard_arrow_down,
@@ -217,10 +216,13 @@ class _CategoryStripState extends State<_CategoryStrip> {
                 const SizedBox(height: AppSpacing.x2),
                 Text(
                   category.label,
-                  style: context.texts.bodySmall?.copyWith(
-                    color: selected ? scheme.primary : context.surfaces.inkSoft,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  ),
+                  style: context.texts.bodySmall
+                      ?.copyWith(
+                        color: selected
+                            ? scheme.primary
+                            : context.surfaces.inkSoft,
+                      )
+                      .withWeight(selected ? FontWeight.w600 : FontWeight.w400),
                 ),
               ],
             ),
@@ -399,7 +401,10 @@ class _PopularCard extends StatelessWidget {
                       children: [
                         Text(
                           dish.formattedPrice,
-                          style: AppTypography.money(scheme.primary, size: 16),
+                          style: AppTypography.money(
+                            scheme.primary,
+                            size: MoneySize.small,
+                          ),
                         ),
                         Container(
                           width: 28,

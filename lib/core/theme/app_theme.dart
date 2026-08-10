@@ -179,9 +179,9 @@ abstract final class AppTheme {
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return AppTypography.caption(
+          return AppTypography.navLabel(
             selected ? scheme.primary : surfaces.inkSoft,
-          ).copyWith(fontSize: 10);
+          );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);

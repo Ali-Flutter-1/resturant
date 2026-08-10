@@ -116,7 +116,7 @@ class OrderRow extends StatelessWidget {
                                   amount,
                                   style: AppTypography.money(
                                     scheme.onSurface,
-                                    size: 16,
+                                    size: MoneySize.small,
                                   ),
                                 ),
                                 const SizedBox(height: AppSpacing.x1 + 2),
@@ -157,7 +157,7 @@ class _ReferenceBadge extends StatelessWidget {
         reference,
         style: AppTypography.money(
           Theme.of(context).colorScheme.onPrimaryContainer,
-          size: 13,
+          size: MoneySize.compact,
         ),
       ),
     );

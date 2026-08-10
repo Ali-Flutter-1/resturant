@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/theme/app_theme.dart';
-import 'package:practice/features/auth/auth_cubit.dart';
+import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/about/presentation/about_contact_screen.dart';
 import 'package:practice/features/admin/presentation/admin_dashboard_screen.dart';
@@ -16,6 +16,9 @@ import 'package:practice/features/discover/presentation/discover_screen.dart';
 import 'package:practice/features/menu/presentation/dish_details_screen.dart';
 import 'package:practice/features/menu/presentation/menu_screen.dart';
 import 'package:practice/features/welcome/presentation/welcome_screen.dart';
+
+import 'support/auth_fixtures.dart';
+import 'support/fake_menu_repository.dart';
 
 /// Every screen, laid out in both themes at two viewport sizes.
 ///
@@ -67,11 +70,16 @@ void main() {
               MultiBlocProvider(
                 providers: [
                   BlocProvider(
-                    create: (_) => AuthCubit()..signInAs(UserRole.customer),
+                    create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
                   ),
                   BlocProvider(create: (_) => CartCubit()),
                 ],
-                child: MaterialApp(theme: theme.value, home: entry.value()),
+                child: RepositoryProvider<MenuRepository>(
+                  // Screens that read the menu resolve their repository from
+                  // the tree, so the layout tests supply one from memory.
+                  create: (_) => FakeMenuRepository(),
+                  child: MaterialApp(theme: theme.value, home: entry.value()),
+                ),
               ),
             );
 

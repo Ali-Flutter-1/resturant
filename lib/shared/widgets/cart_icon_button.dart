@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/animations/motion.dart';
 import '../../core/haptics/app_haptics.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
 import '../../features/cart/cart_cubit.dart';
 
 /// The cart, and the target the flying product lands on.
@@ -134,12 +135,7 @@ class _CartBadge extends StatelessWidget {
             '$count',
             key: ValueKey(count),
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: scheme.onPrimary,
-              fontSize: 10,
-              height: 1.3,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTypography.badge(scheme.onPrimary),
           ),
         ),
       ),

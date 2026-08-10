@@ -145,9 +145,7 @@ class _NavButton extends StatelessWidget {
                 item.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTypography.caption(
-                  selected ? accent : inactive,
-                ).copyWith(fontSize: 10),
+                style: AppTypography.navLabel(selected ? accent : inactive),
               ),
             ],
           ),

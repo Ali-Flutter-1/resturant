@@ -5,6 +5,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/animations/page_transitions.dart';
 
 import '../../shared/preview/sample_content.dart';
+import '../menu/domain/dish.dart';
 import '../../shared/shell/tabbed_shell.dart';
 import '../about/presentation/about_contact_screen.dart';
 import '../booking/presentation/book_table_screen.dart';
@@ -41,7 +42,7 @@ class CustomerShell extends StatelessWidget {
       AppPageRoute<void>(
         builder: (context) => MenuScreen(
           initialQuery: query,
-          onOpenDish: (dish) => _openDish(context, dish),
+          onOpenDish: (dish) => _openDish(context, _asPreview(dish)),
         ),
       ),
     );
@@ -100,6 +101,21 @@ class CustomerShell extends StatelessWidget {
     );
   }
 }
+
+/// Adapts an API [Dish] to the preview shape the dish detail screen still
+/// expects.
+///
+/// Temporary scaffolding, and deliberately visible as such. The menu now comes
+/// from the API but the detail screen has not been migrated yet, so this
+/// converts between the two rather than blocking the menu on that work. It goes
+/// away when `DishDetailsScreen` takes a [Dish].
+SampleDish _asPreview(Dish dish) => SampleDish(
+  name: dish.name,
+  description: dish.description,
+  price: dish.price,
+  tag: dish.dietaryTag,
+  imageUrl: dish.imageUrl,
+);
 
 /// Order history has no frame in the Figma file. An honest placeholder beats
 /// inventing a screen nobody has designed.

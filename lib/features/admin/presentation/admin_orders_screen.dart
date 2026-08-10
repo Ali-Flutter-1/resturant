@@ -397,7 +397,10 @@ class _OrderCard extends StatelessWidget {
                         const SizedBox(width: AppSpacing.x2),
                         Text(
                           amount,
-                          style: AppTypography.money(scheme.onSurface),
+                          style: AppTypography.money(
+                            scheme.onSurface,
+                            size: MoneySize.small,
+                          ),
                         ),
                       ],
                     ),

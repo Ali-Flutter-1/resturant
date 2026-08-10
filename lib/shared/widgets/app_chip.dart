@@ -4,6 +4,7 @@ import '../../core/animations/motion.dart';
 import '../../core/haptics/app_haptics.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
 
 /// The app's chip: a short label on a rounded ground.
 ///
@@ -80,6 +81,7 @@ class AppChip extends StatelessWidget {
     final bg = outlined
         ? Colors.transparent
         : (background ?? context.surfaces.ground);
+    final labelStyle = context.texts.labelSmall?.copyWith(color: fg);
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -112,11 +114,9 @@ class AppChip extends StatelessWidget {
               emphasise ? label.toUpperCase() : label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: context.texts.labelSmall?.copyWith(
-                color: fg,
-                fontWeight: emphasise ? FontWeight.w600 : null,
-                letterSpacing: emphasise ? 0.88 : null,
-              ),
+              style: emphasise
+                  ? labelStyle?.withWeight(FontWeight.w700)
+                  : labelStyle,
             ),
           ),
         ],

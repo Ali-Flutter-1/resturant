@@ -94,10 +94,8 @@ class _Placeholder extends StatelessWidget {
       child: Center(
         child: Text(
           name.characters.first.toUpperCase(),
-          style: AppTypography.money(
+          style: AppTypography.monogram(
             AppColors.neutral600.withValues(alpha: 0.5),
-            size: 34,
-            tabular: false,
           ),
         ),
       ),

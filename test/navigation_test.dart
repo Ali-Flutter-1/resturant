@@ -5,15 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:practice/core/animations/page_transitions.dart';
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/about/presentation/about_contact_screen.dart';
-import 'package:practice/features/auth/auth_cubit.dart';
 import 'package:practice/features/booking/presentation/book_table_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/checkout/presentation/checkout_screen.dart';
 import 'package:practice/features/discover/presentation/discover_screen.dart';
 import 'package:practice/features/menu/presentation/dish_details_screen.dart';
+import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/menu/presentation/menu_screen.dart';
 import 'package:practice/features/shell/admin_shell.dart';
 import 'package:practice/shared/widgets/flutter_glass_nav_bar.dart';
+
+import 'support/auth_fixtures.dart';
+import 'support/fake_menu_repository.dart';
 
 /// Every screen needs a way out, and no screen may advertise one it doesn't
 /// have. These tests pin both halves of that, because both have been wrong:
@@ -25,10 +28,15 @@ Widget _host(Widget home, {TargetPlatform? platform}) {
       : AppTheme.light.copyWith(platform: platform);
   return MultiBlocProvider(
     providers: [
-      BlocProvider(create: (_) => AuthCubit()..signInAs(UserRole.customer)),
+      BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
       BlocProvider(create: (_) => CartCubit()),
     ],
-    child: MaterialApp(theme: theme, home: home),
+    child: RepositoryProvider<MenuRepository>(
+      // MenuScreen resolves its repository from the tree; these tests care
+      // about navigation, not about what the menu contains.
+      create: (_) => FakeMenuRepository(),
+      child: MaterialApp(theme: theme, home: home),
+    ),
   );
 }
 
@@ -210,7 +218,7 @@ void main() {
       await tester.pumpWidget(
         MultiBlocProvider(
           providers: [
-            BlocProvider(create: (_) => AuthCubit()..signInAs(UserRole.admin)),
+            BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.admin)),
             BlocProvider(create: (_) => CartCubit()),
           ],
           child: MaterialApp(theme: AppTheme.light, home: const AdminShell()),

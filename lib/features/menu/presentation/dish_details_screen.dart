@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -113,6 +114,10 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                // The hero carries the photograph across from the card, but the
+                // body used to arrive all at once beneath it — the flight
+                // landed and the page was simply there. Staggering the sections
+                // lets the eye follow the same order it reads in.
                 children: [
                   if (_dish.tag != null) _AuthenticityTag(label: _dish.tag!),
                   const SizedBox(height: AppSpacing.x3),
@@ -194,7 +199,7 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
                       ],
                     ),
                   ),
-                ],
+                ].revealStaggered(),
               ),
             ),
           ),
@@ -290,10 +295,9 @@ class _AuthenticityTag extends StatelessWidget {
       ),
       child: Text(
         label.toUpperCase(),
-        style: context.texts.labelSmall?.copyWith(
-          color: colours.preparing,
-          fontWeight: FontWeight.w600,
-        ),
+        style: context.texts.labelSmall
+            ?.copyWith(color: colours.preparing)
+            .withWeight(FontWeight.w600),
       ),
     );
   }
@@ -592,7 +596,7 @@ class _AddToCartBar extends StatelessWidget {
                                 maxLines: 1,
                                 style: AppTypography.money(
                                   scheme.onPrimary,
-                                  size: 18,
+                                  size: MoneySize.medium,
                                 ),
                               ),
                             ),

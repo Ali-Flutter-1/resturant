@@ -3,6 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'core/animations/motion.dart';
+import 'core/config/app_config.dart';
+import 'core/network/api_client.dart';
+import 'core/network/connectivity_service.dart';
+import 'core/network/token_store.dart';
+import 'features/auth/data/api_auth_repository.dart';
+import 'features/menu/data/api_menu_repository.dart';
+import 'features/menu/domain/menu_repository.dart';
 import 'core/animations/page_transitions.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
@@ -13,33 +20,73 @@ import 'features/shell/admin_shell.dart';
 import 'features/shell/customer_shell.dart';
 import 'features/welcome/presentation/welcome_screen.dart';
 
-void main() {
-  runApp(const TsCafeApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Reads `.env` before anything can ask for a URL. Deliberately awaited: a
+  // half-configured client is harder to diagnose than a clear startup failure.
+  await AppConfig.load();
+
+  // Composed here rather than behind a service locator: the graph is four
+  // objects deep, and one readable wiring site beats indirection that hides
+  // which implementation is in play.
+  final tokens = TokenStore();
+  await tokens.restore();
+
+  final client = ApiClient(tokens: tokens, connectivity: ConnectivityService());
+  final auth = AuthCubit(
+    repository: ApiAuthRepository(client: client, tokens: tokens),
+  );
+
+  // Closes the loop: when a refresh finally fails, the app returns to sign-in
+  // instead of leaving the user on a screen that will never load again.
+  client.onSessionExpired = auth.signOut;
+
+  // Not awaited — the app opens on the splash and swaps to the right shell when
+  // the answer arrives, rather than holding a blank screen on a slow network.
+  auth.restore();
+
+  runApp(
+    TsCafeApp(
+      auth: auth,
+      menu: ApiMenuRepository(client: client),
+    ),
+  );
 }
 
 class TsCafeApp extends StatelessWidget {
-  const TsCafeApp({super.key});
+  const TsCafeApp({super.key, required this.auth, required this.menu});
+
+  /// Built in `main` so it can be handed the repository and wired to the
+  /// client's session-expiry callback before the first frame.
+  final AuthCubit auth;
+
+  /// Provided rather than constructed per screen, so every screen that reads
+  /// the menu shares one client and one set of interceptors.
+  final MenuRepository menu;
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => AuthCubit()),
-        BlocProvider(create: (_) => CartCubit()),
-      ],
-      child: ScreenUtilInit(
-        designSize: const Size(AppLayout.designWidth, AppLayout.designHeight),
-        minTextAdapt: true,
-        builder: (context, _) {
-          return MaterialApp(
-            title: "T's Café",
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: ThemeMode.system,
-            home: const AppRoot(),
-          );
-        },
+    return RepositoryProvider<MenuRepository>.value(
+      value: menu,
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: auth),
+          BlocProvider(create: (_) => CartCubit()),
+        ],
+        child: ScreenUtilInit(
+          designSize: const Size(AppLayout.designWidth, AppLayout.designHeight),
+          minTextAdapt: true,
+          builder: (context, _) {
+            return MaterialApp(
+              title: "T's Café",
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.light,
+              darkTheme: AppTheme.dark,
+              themeMode: ThemeMode.system,
+              home: const AppRoot(),
+            );
+          },
+        ),
       ),
     );
   }
@@ -59,9 +106,12 @@ class AppRoot extends StatelessWidget {
     return BlocBuilder<AuthCubit, AuthState>(
       buildWhen: (a, b) => a.role != b.role,
       builder: (context, state) {
+        // Staff share the admin shell. What they may do inside it is narrower —
+        // see `UserRole.canManageVenue` — but the shape of their app is the
+        // staff-facing one, not the customer's.
         final child = switch (state.role) {
           UserRole.customer => const CustomerShell(),
-          UserRole.admin => const AdminShell(),
+          UserRole.staff || UserRole.admin => const AdminShell(),
           null => const _SignedOutFlow(),
         };
 

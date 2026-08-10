@@ -440,7 +440,10 @@ class _DishCard extends StatelessWidget {
                       Flexible(
                         child: Text(
                           dish.formattedPrice,
-                          style: AppTypography.money(scheme.primary, size: 14),
+                          style: AppTypography.money(
+                            scheme.primary,
+                            size: MoneySize.compact,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

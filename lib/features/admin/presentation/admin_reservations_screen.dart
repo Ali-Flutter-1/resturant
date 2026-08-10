@@ -349,7 +349,7 @@ class _ReservationCard extends StatelessWidget {
                             time,
                             style: AppTypography.money(
                               scheme.onSurface,
-                              size: 18,
+                              size: MoneySize.medium,
                             ),
                           ),
                           const SizedBox(height: AppSpacing.x1),

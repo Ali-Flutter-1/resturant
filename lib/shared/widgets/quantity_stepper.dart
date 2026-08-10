@@ -53,7 +53,10 @@ class QuantityStepper extends StatelessWidget {
                 '$value',
                 key: ValueKey(value),
                 textAlign: TextAlign.center,
-                style: AppTypography.money(scheme.onSurface, size: 20),
+                style: AppTypography.money(
+                  scheme.onSurface,
+                  size: MoneySize.medium,
+                ),
               ),
             ),
           ),

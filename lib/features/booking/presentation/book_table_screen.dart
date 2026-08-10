@@ -5,6 +5,7 @@ import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/preview/sample_content.dart';
 import '../../../shared/widgets/app_sheet.dart';
 import '../../../shared/widgets/quantity_stepper.dart';
@@ -320,10 +321,9 @@ class _SeatingChip extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: context.texts.bodyMedium?.copyWith(
-            color: selected ? colours.preparing : scheme.onSurface,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-          ),
+          style: context.texts.bodyMedium
+              ?.copyWith(color: selected ? colours.preparing : scheme.onSurface)
+              .withWeight(selected ? FontWeight.w600 : FontWeight.w400),
         ),
       ),
     );

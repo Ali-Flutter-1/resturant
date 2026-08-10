@@ -4,6 +4,7 @@ import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/admin_nav.dart';
 import '../../../shared/widgets/metric_card.dart';
 import '../../../shared/widgets/order_row.dart';
@@ -137,7 +138,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   countTo: 1248,
                   countFormat: _grouped,
                   icon: Icons.shopping_bag_outlined,
-                  valueSize: 26,
+                  valueSize: MoneySize.large,
                 ),
               ),
               const SizedBox(width: AppSpacing.x3),
@@ -146,7 +147,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   caption: 'Active Tables',
                   value: '14/20',
                   icon: Icons.chair_outlined,
-                  valueSize: 26,
+                  valueSize: MoneySize.large,
                 ),
               ),
             ],

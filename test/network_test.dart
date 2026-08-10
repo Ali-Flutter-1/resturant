@@ -1,0 +1,385 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:practice/core/network/api_client.dart';
+import 'package:practice/core/network/api_failure.dart';
+import 'package:practice/core/network/connectivity_service.dart';
+import 'package:practice/core/network/token_store.dart';
+
+/// Always reports a fixed state, so a test can be offline without an aeroplane.
+class _FakeConnectivity extends ConnectivityService {
+  _FakeConnectivity({required this.online});
+
+  final bool online;
+
+  @override
+  Future<bool> get isOnline async => online;
+}
+
+/// Keeps tokens in memory. The real store talks to the platform keychain, which
+/// does not exist in a widget test.
+class _FakeTokens extends TokenStore {
+  _FakeTokens({String? access, String? refresh})
+    : _access = access,
+      _refresh = refresh;
+
+  String? _access;
+  String? _refresh;
+
+  @override
+  Future<void> restore() async {}
+
+  @override
+  String? get accessToken => _access;
+
+  @override
+  String? get refreshToken => _refresh;
+
+  @override
+  Future<void> save({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    _access = accessToken;
+    _refresh = refreshToken;
+  }
+
+  @override
+  Future<void> clear() async {
+    _access = null;
+    _refresh = null;
+  }
+}
+
+/// Answers requests from a script, and records what it was asked.
+class _StubAdapter implements HttpClientAdapter {
+  _StubAdapter(this.handler);
+
+  final Future<ResponseBody> Function(RequestOptions options) handler;
+  final calls = <RequestOptions>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    calls.add(options);
+    return handler(options);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+ResponseBody _json(int status, String body) => ResponseBody.fromString(
+  body,
+  status,
+  headers: {
+    Headers.contentTypeHeader: [Headers.jsonContentType],
+  },
+);
+
+ApiClient _client({
+  required Future<ResponseBody> Function(RequestOptions) handler,
+  bool online = true,
+  TokenStore? tokens,
+  Future<void> Function()? onSessionExpired,
+  _StubAdapter? adapter,
+}) {
+  final dio = Dio();
+  dio.httpClientAdapter = adapter ?? _StubAdapter(handler);
+  return ApiClient(
+    tokens: tokens ?? _FakeTokens(),
+    connectivity: _FakeConnectivity(online: online),
+    dio: dio,
+    onSessionExpired: onSessionExpired,
+  );
+}
+
+void main() {
+  setUpAll(() {
+    // AppConfig reads `.env`, which is an asset and so is not present in a
+    // plain Dart test. Feeding dotenv directly keeps the production code
+    // honest — it still requires the variable rather than defaulting.
+    dotenv.loadFromString(
+      envString: 'API_BASE_URL=http://localhost:8000\nAPI_TIMEOUT_SECONDS=5',
+    );
+  });
+
+  group('offline', () {
+    test('fails before sending, with an honest message', () async {
+      final adapter = _StubAdapter((_) async => _json(200, '{}'));
+      final client = _client(
+        handler: (_) async => _json(200, '{}'),
+        online: false,
+        adapter: adapter,
+      );
+
+      final failure = await client
+          .object('/dishes')
+          .then<ApiFailure?>(
+            (_) => null,
+            onError: (Object e) => e is ApiFailure ? e : null,
+          );
+
+      expect(failure, isNotNull);
+      expect(failure!.kind, ApiFailureKind.offline);
+      // The message must say nothing was sent — that is what stops a user
+      // wondering whether their order went through.
+      expect(failure.message, contains('offline'));
+      expect(failure.message, contains('nothing has been sent'));
+      expect(failure.isRetryable, isTrue);
+      // Nothing left the device.
+      expect(adapter.calls, isEmpty);
+    });
+
+    test(
+      'a dropped connection is reported, not thrown as a raw error',
+      () async {
+        final client = _client(
+          handler: (options) => throw DioException.connectionError(
+            requestOptions: options,
+            reason: 'closed',
+            error: const SocketException('Network is unreachable'),
+          ),
+        );
+
+        await expectLater(
+          client.object('/dishes'),
+          throwsA(
+            isA<ApiFailure>()
+                .having((f) => f.kind, 'kind', ApiFailureKind.unreachable)
+                .having(
+                  (f) => f.message,
+                  'message',
+                  contains("couldn't reach"),
+                ),
+          ),
+        );
+      },
+    );
+  });
+
+  group('messages the user sees', () {
+    test("the API's own message is preferred over any fallback", () async {
+      final client = _client(
+        handler: (_) async => _json(
+          409,
+          '{"success": false, "message": "That email is already registered.", '
+          '"data": null}',
+        ),
+      );
+
+      await expectLater(
+        client.object('/auth/register', method: 'POST'),
+        throwsA(
+          isA<ApiFailure>()
+              .having((f) => f.kind, 'kind', ApiFailureKind.conflict)
+              .having(
+                (f) => f.message,
+                'message',
+                'That email is already registered.',
+              ),
+        ),
+      );
+    });
+
+    test('a bare 500 still reads as a sentence, never a status code', () async {
+      final client = _client(
+        handler: (_) async => _json(500, '{"success": false, "data": null}'),
+      );
+
+      final failure = await client
+          .object('/dishes')
+          .then<ApiFailure?>(
+            (_) => null,
+            onError: (Object e) => e is ApiFailure ? e : null,
+          );
+
+      expect(failure!.kind, ApiFailureKind.server);
+      expect(failure.message, isNot(contains('500')));
+      expect(failure.message, endsWith('.'));
+    });
+
+    test('FastAPI field errors are flattened for the form to use', () async {
+      final client = _client(
+        handler: (_) async => _json(
+          422,
+          '{"detail": [{"loc": ["body", "email"], '
+          '"msg": "Enter a valid email address"}]}',
+        ),
+      );
+
+      final failure = await client
+          .object('/auth/register', method: 'POST')
+          .then<ApiFailure?>(
+            (_) => null,
+            onError: (Object e) => e is ApiFailure ? e : null,
+          );
+
+      expect(failure!.kind, ApiFailureKind.invalid);
+      expect(failure.fieldErrors['email'], 'Enter a valid email address');
+      // The top-level message falls back to the field complaint rather than
+      // showing the user an empty error.
+      expect(failure.message, 'Enter a valid email address');
+    });
+
+    test('every failure kind has a readable fallback', () {
+      for (final kind in ApiFailureKind.values) {
+        final failure = ApiFailure.fromDio(
+          DioException.badResponse(
+            statusCode: switch (kind) {
+              ApiFailureKind.unauthorised => 401,
+              ApiFailureKind.notFound => 404,
+              ApiFailureKind.conflict => 409,
+              ApiFailureKind.invalid => 422,
+              ApiFailureKind.tooManyRequests => 429,
+              ApiFailureKind.server => 503,
+              _ => 599,
+            },
+            requestOptions: RequestOptions(path: '/x'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/x'),
+            ),
+          ),
+        );
+        expect(failure.message, isNotEmpty);
+        expect(
+          failure.message,
+          isNot(matches(RegExp(r'\b\d{3}\b'))),
+          reason: 'a status code leaked into "${failure.message}"',
+        );
+      }
+    });
+  });
+
+  group('session recovery', () {
+    test('a 401 refreshes once and retries the original request', () async {
+      final tokens = _FakeTokens(access: 'stale', refresh: 'good-refresh');
+      var dishCalls = 0;
+
+      late _StubAdapter adapter;
+      adapter = _StubAdapter((options) async {
+        if (options.path == '/auth/refresh') {
+          return _json(
+            200,
+            '{"success": true, "message": "ok", "data": '
+            '{"access_token": "fresh", "refresh_token": "next"}}',
+          );
+        }
+        dishCalls++;
+        // Unauthorised first, then accepted once the token is fresh.
+        if (options.headers['Authorization'] == 'Bearer fresh') {
+          return _json(200, '{"success": true, "message": "ok", "data": {}}');
+        }
+        return _json(401, '{"success": false, "message": "Expired."}');
+      });
+
+      final client = _client(
+        handler: (_) async => _json(200, '{}'),
+        tokens: tokens,
+        adapter: adapter,
+      );
+
+      await client.object('/profile');
+
+      expect(dishCalls, 2, reason: 'the original request should be retried');
+      expect(tokens.accessToken, 'fresh');
+      // The rotated refresh token must be stored: replaying the old one
+      // revokes every session on this API.
+      expect(tokens.refreshToken, 'next');
+    });
+
+    test('concurrent 401s refresh only once', () async {
+      final tokens = _FakeTokens(access: 'stale', refresh: 'good-refresh');
+      var refreshCalls = 0;
+
+      final adapter = _StubAdapter((options) async {
+        if (options.path == '/auth/refresh') {
+          refreshCalls++;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return _json(
+            200,
+            '{"success": true, "message": "ok", "data": '
+            '{"access_token": "fresh", "refresh_token": "next"}}',
+          );
+        }
+        if (options.headers['Authorization'] == 'Bearer fresh') {
+          return _json(200, '{"success": true, "message": "ok", "data": {}}');
+        }
+        return _json(401, '{"success": false, "message": "Expired."}');
+      });
+
+      final client = _client(
+        handler: (_) async => _json(200, '{}'),
+        tokens: tokens,
+        adapter: adapter,
+      );
+
+      await Future.wait([
+        client.object('/profile'),
+        client.object('/orders'),
+        client.object('/reservations'),
+      ]);
+
+      // Three simultaneous 401s, one refresh. Replaying a single-use refresh
+      // token would sign the user out of everything.
+      expect(refreshCalls, 1);
+    });
+
+    test('an unrecoverable session is reported once and cleared', () async {
+      final tokens = _FakeTokens(access: 'stale', refresh: 'dead-refresh');
+      var expiredCalls = 0;
+
+      final adapter = _StubAdapter(
+        (_) async => _json(401, '{"success": false, "message": "Expired."}'),
+      );
+
+      final client = _client(
+        handler: (_) async => _json(200, '{}'),
+        tokens: tokens,
+        adapter: adapter,
+        onSessionExpired: () async => expiredCalls++,
+      );
+
+      await expectLater(
+        client.object('/profile'),
+        throwsA(
+          isA<ApiFailure>().having((f) => f.requiresSignIn, 'signIn', isTrue),
+        ),
+      );
+
+      expect(expiredCalls, 1);
+      expect(
+        tokens.refreshToken,
+        isNull,
+        reason: 'a dead token must not linger',
+      );
+    });
+  });
+
+  group('envelope', () {
+    test('unwraps data, and items for paginated endpoints', () async {
+      final client = _client(
+        handler: (options) async => options.path == '/dishes'
+            ? _json(
+                200,
+                '{"success": true, "message": "ok", "data": '
+                '[{"id": "1"}, {"id": "2"}]}',
+              )
+            : _json(
+                200,
+                '{"success": true, "message": "ok", "data": '
+                '{"items": [{"id": "9"}], "page": 1}}',
+              ),
+      );
+
+      expect(await client.list('/dishes'), hasLength(2));
+      expect((await client.list('/orders')).single['id'], '9');
+    });
+  });
+}

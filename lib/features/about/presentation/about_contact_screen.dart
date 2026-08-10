@@ -194,6 +194,8 @@ class _BentoGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Staggered individually. As one block the three cards landed together,
+    // which reads as a single slab rather than three ideas.
     return Column(
       children: [
         const _BentoCard(
@@ -215,7 +217,7 @@ class _BentoGrid extends StatelessWidget {
               'gathering space—a hub for connection, conversation, and '
               'cultural exchange in the heart of the city.',
         ),
-      ],
+      ].revealStaggered(),
     );
   }
 }

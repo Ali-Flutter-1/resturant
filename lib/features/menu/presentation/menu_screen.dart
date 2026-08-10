@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
@@ -6,29 +7,53 @@ import '../../../core/haptics/app_haptics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../shared/preview/sample_content.dart';
+import '../../../shared/widgets/api_error_view.dart';
 import '../../../shared/widgets/app_chip.dart';
+import '../../../shared/widgets/dish_list_skeleton.dart';
 import '../../../shared/widgets/dish_image.dart';
 import '../../../shared/widgets/notifications_sheet.dart';
 import '../../../shared/widgets/pressable.dart';
+import '../domain/dish.dart';
+import '../domain/menu_repository.dart';
+import 'menu_cubit.dart';
 
 /// The full menu — a filterable list of large photographic cards.
-class MenuScreen extends StatefulWidget {
+///
+/// Owns its own [MenuCubit] rather than taking one, because nothing outside
+/// this screen needs the menu's load state. The repository comes from the
+/// widget tree, so a test can supply a fake without a server.
+class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key, this.onOpenDish, this.initialQuery});
 
-  final ValueChanged<SampleDish>? onOpenDish;
+  final ValueChanged<Dish>? onOpenDish;
 
   /// Pre-fills the search box when arriving from Discover.
   final String? initialQuery;
 
   @override
-  State<MenuScreen> createState() => _MenuScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => MenuCubit(
+        repository: context.read<MenuRepository>(),
+        initialQuery: initialQuery,
+      )..load(),
+      child: _MenuView(onOpenDish: onOpenDish, initialQuery: initialQuery),
+    );
+  }
 }
 
-class _MenuScreenState extends State<MenuScreen> {
-  int _filter = 0;
+class _MenuView extends StatefulWidget {
+  const _MenuView({this.onOpenDish, this.initialQuery});
+
+  final ValueChanged<Dish>? onOpenDish;
+  final String? initialQuery;
+
+  @override
+  State<_MenuView> createState() => _MenuViewState();
+}
+
+class _MenuViewState extends State<_MenuView> {
   late final _search = TextEditingController(text: widget.initialQuery ?? '');
-  late String _query = widget.initialQuery ?? '';
 
   @override
   void dispose() {
@@ -36,31 +61,10 @@ class _MenuScreenState extends State<MenuScreen> {
     super.dispose();
   }
 
-  /// Filtering runs here rather than in the list builder so the empty state
-  /// can tell the difference between "no dishes" and "nothing matched".
-  List<SampleDish> get _visible {
-    final label = SampleContent.menuFilters[_filter].toLowerCase();
-    final query = _query.trim().toLowerCase();
-
-    return SampleContent.menu.where((dish) {
-      final matchesQuery =
-          query.isEmpty ||
-          dish.name.toLowerCase().contains(query) ||
-          dish.description.toLowerCase().contains(query);
-
-      final matchesFilter = switch (label) {
-        'vegan' => dish.tag?.toLowerCase() == 'vegan',
-        'curry dishes' => dish.name.toLowerCase().contains('curry'),
-        'main dishes' => dish.tag?.toLowerCase() != 'vegan',
-        _ => true,
-      };
-
-      return matchesQuery && matchesFilter;
-    }).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<MenuCubit>();
+
     return Scaffold(
       appBar: AppBar(
         // This screen is always pushed (from Discover), so it needs a way
@@ -78,81 +82,166 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.gutter,
-              0,
-              AppSpacing.gutter,
-              AppSpacing.x4,
-            ),
-            child: TextField(
-              controller: _search,
-              textInputAction: TextInputAction.search,
-              onChanged: (value) => setState(() => _query = value),
-              decoration: InputDecoration(
-                hintText: 'Search the menu...',
-                prefixIcon: const Icon(Icons.search, size: AppIconSize.xl),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close, size: AppIconSize.lg),
-                        tooltip: 'Clear search',
-                        onPressed: () {
-                          _search.clear();
-                          setState(() => _query = '');
-                        },
-                      ),
-              ),
-            ),
-          ),
-          _FilterStrip(
-            selected: _filter,
-            onSelected: (i) => setState(() => _filter = i),
-          ),
-          const SizedBox(height: AppSpacing.x4),
-          Expanded(
-            child: _visible.isEmpty
-                ? _NoMatches(
-                    query: _query,
-                    onClear: () {
-                      _search.clear();
-                      setState(() {
-                        _query = '';
-                        _filter = 0;
-                      });
-                    },
-                  )
-                : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      AppSpacing.gutter,
-                      0,
-                      AppSpacing.gutter,
-                      AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
-                    ),
-                    itemCount: _visible.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(height: AppSpacing.x4),
-                    itemBuilder: (context, index) {
-                      return _MenuCard(
-                        dish: _visible[index],
-                        onTap: widget.onOpenDish,
-                      ).revealItem(index);
-                    },
+      body: BlocBuilder<MenuCubit, MenuState>(
+        builder: (context, state) {
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.gutter,
+                  0,
+                  AppSpacing.gutter,
+                  AppSpacing.x4,
+                ),
+                child: TextField(
+                  controller: _search,
+                  textInputAction: TextInputAction.search,
+                  onChanged: cubit.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search the menu...',
+                    prefixIcon: const Icon(Icons.search, size: AppIconSize.xl),
+                    suffixIcon: state.query.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close, size: AppIconSize.lg),
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _search.clear();
+                              cubit.search('');
+                            },
+                          ),
                   ),
-          ),
-        ],
+                ),
+              ),
+              // Only once the sections have arrived: a strip of chips that
+              // pops into existence mid-load is worse than one that waits.
+              if (state.categories.isNotEmpty)
+                _FilterStrip(
+                  categories: state.categories,
+                  selectedSlug: state.categorySlug,
+                  onSelected: cubit.selectCategory,
+                ),
+              const SizedBox(height: AppSpacing.x4),
+              Expanded(
+                child: _Body(
+                  state: state,
+                  onOpenDish: widget.onOpenDish,
+                  onClear: () {
+                    _search.clear();
+                    cubit.clearFilters();
+                  },
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _FilterStrip extends StatelessWidget {
-  const _FilterStrip({required this.selected, required this.onSelected});
+/// Chooses between the four things this screen can be: loading, broken, empty,
+/// or a menu.
+class _Body extends StatelessWidget {
+  const _Body({
+    required this.state,
+    required this.onOpenDish,
+    required this.onClear,
+  });
 
-  final int selected;
-  final ValueChanged<int> onSelected;
+  final MenuState state;
+  final ValueChanged<Dish>? onOpenDish;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (state.status) {
+      case MenuStatus.loading:
+        return const DishListSkeleton();
+
+      case MenuStatus.failure:
+        return ApiErrorView(
+          failure: state.failure!,
+          onRetry: context.read<MenuCubit>().load,
+        );
+
+      case MenuStatus.ready:
+        if (state.dishes.isEmpty) return const _MenuEmpty();
+
+        final visible = state.visible;
+        if (visible.isEmpty) {
+          return _NoMatches(query: state.query, onClear: onClear);
+        }
+
+        return RefreshIndicator(
+          // Silent, so pulling to refresh doesn't blank a menu being read.
+          onRefresh: () => context.read<MenuCubit>().load(silent: true),
+          child: ListView.separated(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.gutter,
+              0,
+              AppSpacing.gutter,
+              AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
+            ),
+            itemCount: visible.length,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x4),
+            itemBuilder: (context, index) => _MenuCard(
+              dish: visible[index],
+              onTap: onOpenDish,
+            ).revealItem(index),
+          ),
+        );
+    }
+  }
+}
+
+/// The menu itself is empty — no dishes published at all. Distinct from a
+/// filter excluding everything, which [_NoMatches] covers.
+class _MenuEmpty extends StatelessWidget {
+  const _MenuEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.x8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.restaurant_menu,
+              size: AppIconSize.hero,
+              color: context.surfaces.inkSoft,
+            ),
+            const SizedBox(height: AppSpacing.x4),
+            Text(
+              'The menu is being updated',
+              style: context.texts.headlineMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.x2),
+            Text(
+              'Nothing is published just now. Please check back shortly.',
+              style: context.texts.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ).reveal(),
+    );
+  }
+}
+
+class _FilterStrip extends StatelessWidget {
+  const _FilterStrip({
+    required this.categories,
+    required this.selectedSlug,
+    required this.onSelected,
+  });
+
+  final List<MenuCategory> categories;
+  final String? selectedSlug;
+  final ValueChanged<String?> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -161,15 +250,23 @@ class _FilterStrip extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
-        itemCount: SampleContent.menuFilters.length,
+        // "All" is the app's own affordance, not a category: the API has no
+        // such section, and without it the menu would open already filtered.
+        itemCount: categories.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.x2),
         itemBuilder: (context, index) {
-          final isSelected = index == selected;
-
+          if (index == 0) {
+            return SelectableChip(
+              label: 'All',
+              selected: selectedSlug == null,
+              onSelected: () => onSelected(null),
+            );
+          }
+          final category = categories[index - 1];
           return SelectableChip(
-            label: SampleContent.menuFilters[index],
-            selected: isSelected,
-            onSelected: () => onSelected(index),
+            label: category.name,
+            selected: category.slug == selectedSlug,
+            onSelected: () => onSelected(category.slug),
           );
         },
       ),
@@ -180,8 +277,8 @@ class _FilterStrip extends StatelessWidget {
 class _MenuCard extends StatelessWidget {
   const _MenuCard({required this.dish, this.onTap});
 
-  final SampleDish dish;
-  final ValueChanged<SampleDish>? onTap;
+  final Dish dish;
+  final ValueChanged<Dish>? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -191,7 +288,9 @@ class _MenuCard extends StatelessWidget {
       // A full-width row: the same 4% as a button would be a much larger
       // absolute movement here.
       scale: Motion.pressScaleLarge,
-      onTap: onTap == null ? null : () => onTap!(dish),
+      // A sold-out dish stays on the menu but does not open: the API keeps
+      // listing it so the menu doesn't appear to shrink through the evening.
+      onTap: onTap == null || !dish.isAvailable ? null : () => onTap!(dish),
       child: Material(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -215,28 +314,40 @@ class _MenuCard extends StatelessWidget {
                       child: DishImage(
                         name: dish.name,
                         imageUrl: dish.imageUrl,
-                        heroTag: 'dish-${dish.name}',
+                        heroTag: 'dish-${dish.slug}',
                       ),
                     ),
                   ),
-                  if (dish.tag != null)
+                  if (dish.dietaryTag != null)
                     Positioned(
                       left: AppSpacing.x3,
                       bottom: AppSpacing.x3,
                       child: AppChip(
-                        label: dish.tag!,
-                        foreground: dish.tag!.toLowerCase() == 'vegan'
+                        label: dish.dietaryTag!,
+                        foreground: dish.isVegan
                             ? context.orderColors.ready
                             : context.orderColors.preparing,
-                        background: dish.tag!.toLowerCase() == 'vegan'
+                        background: dish.isVegan
                             ? context.orderColors.readyContainer
                             : context.orderColors.preparingContainer,
+                      ),
+                    ),
+                  if (!dish.isAvailable)
+                    Positioned(
+                      left: AppSpacing.x3,
+                      top: AppSpacing.x3,
+                      child: AppChip.status(
+                        label: 'Sold out',
+                        foreground: context.orderColors.overdue,
+                        background: context.orderColors.overdueContainer,
                       ),
                     ),
                   Positioned(
                     right: AppSpacing.x3,
                     top: AppSpacing.x3,
-                    child: _FavouriteButton(active: dish.isFavourite),
+                    // Local only. The API has no favourites endpoint, so this
+                    // does not survive a restart — see the note on the widget.
+                    child: const _FavouriteButton(active: false),
                   ),
                 ],
               ),
@@ -258,7 +369,10 @@ class _MenuCard extends StatelessWidget {
                         const SizedBox(width: AppSpacing.x2),
                         Text(
                           dish.formattedPrice,
-                          style: AppTypography.money(scheme.primary, size: 18),
+                          style: AppTypography.money(
+                            scheme.primary,
+                            size: MoneySize.medium,
+                          ),
                         ),
                       ],
                     ),
@@ -266,7 +380,9 @@ class _MenuCard extends StatelessWidget {
                     Text(dish.description, style: context.texts.bodyMedium),
                     const SizedBox(height: AppSpacing.x4),
                     OutlinedButton(
-                      onPressed: onTap == null ? null : () => onTap!(dish),
+                      onPressed: onTap == null || !dish.isAvailable
+                          ? null
+                          : () => onTap!(dish),
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size.fromHeight(44),
                         side: BorderSide(
@@ -274,7 +390,9 @@ class _MenuCard extends StatelessWidget {
                         ),
                         foregroundColor: scheme.primary,
                       ),
-                      child: const Text('Add to Order'),
+                      child: Text(
+                        dish.isAvailable ? 'Add to Order' : 'Sold out today',
+                      ),
                     ),
                   ],
                 ),

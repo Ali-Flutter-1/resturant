@@ -40,6 +40,10 @@ dependencies:
   flutter_bloc: ^9.1.1
   equatable: ^2.1.0
   cupertino_native: ^0.1.1
+  dio: ^5.11.0
+  flutter_dotenv: ^6.0.1
+  connectivity_plus: ^7.3.1
+  flutter_secure_storage: ^11.0.0
 
 dev_dependencies:
   flutter_test:
@@ -57,7 +61,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
@@ -65,6 +68,9 @@ flutter:
 
   assets:
     - assets/images/
+    # Read by flutter_dotenv at startup, so it ships as an asset rather than
+    # being compiled in.
+    - .env
 
   # Bundled rather than fetched at runtime: google_fonts downloads from
   # fonts.gstatic.com on first launch, so an offline first run would show a

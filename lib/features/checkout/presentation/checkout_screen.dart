@@ -595,7 +595,10 @@ class _OrderSummary extends StatelessWidget {
               Text('Total', style: context.texts.headlineLarge),
               Text(
                 '£${SampleContent.basketTotal.toStringAsFixed(2)}',
-                style: AppTypography.money(scheme.primary, size: 28),
+                style: AppTypography.money(
+                  scheme.primary,
+                  size: MoneySize.hero,
+                ),
               ),
             ],
           ),

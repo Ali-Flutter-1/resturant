@@ -3,13 +3,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/animations/collapse.dart';
+import 'package:practice/core/network/api_failure.dart';
+import 'package:practice/shared/widgets/dish_list_skeleton.dart';
 
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/admin/presentation/admin_menu_management_screen.dart';
 import 'package:practice/features/admin/presentation/admin_orders_screen.dart';
-import 'package:practice/features/auth/auth_cubit.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
+import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/menu/presentation/menu_screen.dart';
+
+import 'support/auth_fixtures.dart';
+import 'support/fake_menu_repository.dart';
 
 /// Controls that used to be dead. Each test asserts the thing the button
 /// actually does, so a future refactor cannot quietly return it to a no-op.
@@ -32,42 +37,138 @@ Switch _switchFor(WidgetTester tester, String name) {
 void main() {
   Widget wrap(Widget home) => MultiBlocProvider(
     providers: [
-      BlocProvider(create: (_) => AuthCubit()..signInAs(UserRole.customer)),
+      BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
       BlocProvider(create: (_) => CartCubit()),
     ],
-    child: MaterialApp(theme: AppTheme.light, home: home),
+    child: RepositoryProvider<MenuRepository>(
+      create: (_) => FakeMenuRepository(),
+      child: MaterialApp(theme: AppTheme.light, home: home),
+    ),
   );
 
-  group('menu search and filters', () {
-    testWidgets('typing narrows the list', (tester) async {
-      await tester.pumpWidget(wrap(const MenuScreen()));
+  group('menu', () {
+    /// The menu screen with a repository of its own, so a test can choose what
+    /// the server says.
+    Widget menu({FakeMenuRepository? repository, String? initialQuery}) =>
+        MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+            ),
+            BlocProvider(create: (_) => CartCubit()),
+          ],
+          child: RepositoryProvider<MenuRepository>(
+            create: (_) => repository ?? FakeMenuRepository(),
+            child: MaterialApp(
+              theme: AppTheme.light,
+              home: MenuScreen(initialQuery: initialQuery),
+            ),
+          ),
+        );
+
+    testWidgets('shows a skeleton while loading, then the dishes', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        menu(
+          repository: FakeMenuRepository(
+            delay: const Duration(milliseconds: 200),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Shaped like the real cards, so nothing reflows when the data lands.
+      expect(find.byType(DishListSkeleton), findsOneWidget);
+      expect(find.text('Jaffna Crab Curry'), findsNothing);
+
       await tester.pumpAndSettle();
 
-      // Only the first card or two are built at this viewport — a lazy
-      // ListView never constructs the rest — so the assertion works on what
-      // filtering brings *to the top*.
+      expect(find.byType(DishListSkeleton), findsNothing);
+      expect(find.text('Jaffna Crab Curry'), findsOneWidget);
+    });
+
+    testWidgets('a failure shows the API\'s message and can be retried', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        menu(
+          repository: FakeMenuRepository(
+            failure: const ApiFailure(
+              kind: ApiFailureKind.unreachable,
+              message: "We couldn't reach the restaurant's server.",
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text("We couldn't reach the restaurant's server."),
+        findsOneWidget,
+      );
+      // Unreachable is worth another go, so the button is offered.
+      expect(find.text('Try again'), findsOneWidget);
+    });
+
+    testWidgets('a refusal that retrying cannot fix offers no retry', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        menu(
+          repository: FakeMenuRepository(
+            failure: const ApiFailure(
+              kind: ApiFailureKind.notFound,
+              message: "We couldn't find that.",
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text("We couldn't find that."), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+    });
+
+    testWidgets('an empty menu says so, rather than looking broken', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        menu(repository: FakeMenuRepository(dishes: const [])),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('The menu is being updated'), findsOneWidget);
+    });
+
+    testWidgets('typing narrows the list', (tester) async {
+      await tester.pumpWidget(menu());
+      await tester.pumpAndSettle();
+
       expect(find.text('Jaffna Crab Curry'), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField).first, 'dhal');
+      await tester.enterText(find.byType(TextField).first, 'hoppers');
       await tester.pumpAndSettle();
 
-      expect(find.text('Tempered Dhal'), findsOneWidget);
+      expect(find.text('Heritage Hoppers'), findsOneWidget);
       expect(find.text('Jaffna Crab Curry'), findsNothing);
     });
 
     testWidgets('a search with no matches explains itself', (tester) async {
-      await tester.pumpWidget(wrap(const MenuScreen()));
+      await tester.pumpWidget(menu());
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField).first, 'sushi');
       await tester.pumpAndSettle();
 
+      // Different words from an empty menu: a filter excluding everything is
+      // the user's doing and is undoable.
       expect(find.text('No dishes match'), findsOneWidget);
       expect(find.text('Clear filters'), findsOneWidget);
     });
 
     testWidgets('clearing filters restores the full menu', (tester) async {
-      await tester.pumpWidget(wrap(const MenuScreen()));
+      await tester.pumpWidget(menu());
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField).first, 'sushi');
@@ -79,22 +180,61 @@ void main() {
       expect(find.text('No dishes match'), findsNothing);
     });
 
-    testWidgets('the Vegan filter keeps only vegan dishes', (tester) async {
-      await tester.pumpWidget(wrap(const MenuScreen()));
+    testWidgets('the category chips come from the API', (tester) async {
+      await tester.pumpWidget(menu());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Vegan'));
+      // "All" is the app's own affordance; the rest are real sections.
+      expect(find.text('All'), findsOneWidget);
+      expect(find.text('Curry Dishes'), findsOneWidget);
+      expect(find.text('Small Plates'), findsOneWidget);
+
+      await tester.tap(find.text('Small Plates'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Young Jackfruit Curry'), findsOneWidget);
+      expect(find.text('Heritage Hoppers'), findsOneWidget);
       expect(find.text('Jaffna Crab Curry'), findsNothing);
     });
 
-    testWidgets('an initial query arrives pre-applied', (tester) async {
-      await tester.pumpWidget(wrap(const MenuScreen(initialQuery: 'dhal')));
+    testWidgets('a sold-out dish is listed but cannot be opened', (
+      tester,
+    ) async {
+      var opened = 0;
+      await tester.pumpWidget(
+        MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+            ),
+            BlocProvider(create: (_) => CartCubit()),
+          ],
+          child: RepositoryProvider<MenuRepository>(
+            create: (_) =>
+                FakeMenuRepository(dishes: const [FakeMenuRepository.soldOut]),
+            child: MaterialApp(
+              theme: AppTheme.light,
+              home: MenuScreen(onOpenDish: (_) => opened++),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      expect(find.text('Tempered Dhal'), findsOneWidget);
+      // Still on the menu — the API keeps listing it so the menu doesn't
+      // appear to shrink through the evening.
+      expect(find.text('Black Pork Curry'), findsOneWidget);
+      expect(find.text('Sold out today'), findsOneWidget);
+
+      await tester.tap(find.text('Black Pork Curry'));
+      await tester.pumpAndSettle();
+      expect(opened, 0, reason: 'a sold-out dish must not open');
+    });
+
+    testWidgets('an initial query arrives pre-applied', (tester) async {
+      await tester.pumpWidget(menu(initialQuery: 'hoppers'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Heritage Hoppers'), findsOneWidget);
       expect(find.text('Jaffna Crab Curry'), findsNothing);
     });
   });
