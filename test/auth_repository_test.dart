@@ -210,4 +210,78 @@ void main() {
       ),
     );
   });
+
+  group('routes that answer with no data', () {
+    // `{"success": true, "message": "…", "data": null}` is a *success*. These
+    // used to go through `object()`, which demands a Map and threw "The server
+    // sent something unexpected" on the null — so forgot-password reported a
+    // failure on every request that actually worked, and the email had already
+    // been sent.
+    const nullData =
+        '{"success": true, "message": "If that address has an account, '
+        'a reset link is on its way.", "data": null}';
+
+    test('forgot-password succeeds on a null-data envelope', () async {
+      final built = build((_) async => _json(200, nullData));
+
+      await expectLater(
+        built.repo.requestPasswordReset('  Boss@TsCafe.co.uk '),
+        completes,
+      );
+
+      final sent = built.adapter.bodies['/auth/forgot-password'] as Map;
+      // Normalised like sign-in, so a pasted space or a stray capital does not
+      // quietly fail to match the account.
+      expect(sent['email'], 'boss@tscafe.co.uk');
+    });
+
+    test('reset-password succeeds and sends the documented body', () async {
+      final built = build((_) async => _json(200, nullData));
+
+      await expectLater(
+        built.repo.resetPassword(token: '  tok-123 ', newPassword: 'newpass1'),
+        completes,
+      );
+
+      final sent = built.adapter.bodies['/auth/reset-password'] as Map;
+      expect(sent['token'], 'tok-123');
+      expect(sent['new_password'], 'newpass1');
+    });
+
+    test('logout succeeds and still clears the session', () async {
+      final tokens = _MemoryTokens()
+        ..access = 'a1'
+        ..refresh = 'r1';
+      final built = build((_) async => _json(200, nullData), tokens: tokens);
+
+      await built.repo.logout();
+
+      final sent = built.adapter.bodies['/auth/logout'] as Map;
+      expect(sent['refresh_token'], 'r1');
+      expect(built.tokens.clearCalls, 1);
+      expect(built.tokens.refresh, isNull);
+    });
+
+    test('a real forgot-password failure still surfaces', () async {
+      final built = build(
+        (_) async => _json(
+          429,
+          '{"success": false, "message": "Too many requests. Try again in a '
+          'minute.", "data": null}',
+        ),
+      );
+
+      // The fix must not turn every response into a success.
+      await expectLater(
+        built.repo.requestPasswordReset('boss@tscafe.co.uk'),
+        throwsA(
+          isA<ApiFailure>().having(
+            (f) => f.message,
+            'message',
+            'Too many requests. Try again in a minute.',
+          ),
+        ),
+      );
+    });
+  });
 }

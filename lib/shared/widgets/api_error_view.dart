@@ -26,7 +26,8 @@ class ApiErrorView extends StatelessWidget {
     ApiFailureKind.timeout ||
     ApiFailureKind.unreachable => Icons.cloud_off_outlined,
     ApiFailureKind.notFound => Icons.search_off,
-    ApiFailureKind.unauthorised => Icons.lock_outline,
+    ApiFailureKind.unauthorised ||
+    ApiFailureKind.forbidden => Icons.lock_outline,
     _ => Icons.error_outline,
   };
 

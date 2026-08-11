@@ -101,6 +101,32 @@ class OrdersCubit extends Cubit<OrdersState> {
     }
   }
 
+  /// Fetches one order in full, for the receipt.
+  ///
+  /// The list endpoint documents that it leaves lines out — `item_count` is all
+  /// a row gets — so a receipt has to ask for the order itself. The fetched copy
+  /// replaces the summary in state, which also picks up the server's `can_cancel`
+  /// verdict for the tracker.
+  ///
+  /// Returns null if the fetch failed; the caller then shows what it already has
+  /// rather than an error over a receipt the user can mostly read.
+  Future<CustomerOrder?> loadDetail(String id) async {
+    try {
+      final order = await _repository.orderById(id);
+      emit(
+        state.copyWith(
+          orders: [
+            for (final existing in state.orders)
+              if (existing.id == id) order else existing,
+          ],
+        ),
+      );
+      return order;
+    } on ApiFailure {
+      return null;
+    }
+  }
+
   /// Cancels an order and adopts whatever the server says its status now is.
   ///
   /// Returns an error message to show, or null on success. The state is never

@@ -12,6 +12,7 @@ class AuthState extends Equatable {
     this.user,
     this.isSubmitting = false,
     this.isRestoring = false,
+    this.hasRestored = false,
     this.error,
     this.errorIsRetryable = false,
     this.fieldErrors = const {},
@@ -26,6 +27,14 @@ class AuthState extends Equatable {
   /// hold the splash rather than flashing the login screen at someone who is
   /// already signed in.
   final bool isRestoring;
+
+  /// Whether startup has finished deciding whether anyone is signed in.
+  ///
+  /// Distinct from [isRestoring], which is only true while a request is in
+  /// flight. A device with no stored session never makes that request, so
+  /// `isRestoring` is false both before the question is asked and after — and
+  /// the splash needs to tell those apart to know when it may hand over.
+  final bool hasRestored;
 
   /// Safe to show verbatim; it comes from [ApiFailure.message].
   final String? error;
@@ -44,6 +53,7 @@ class AuthState extends Equatable {
     AuthUser? user,
     bool? isSubmitting,
     bool? isRestoring,
+    bool? hasRestored,
     String? error,
     bool? errorIsRetryable,
     Map<String, String>? fieldErrors,
@@ -54,6 +64,7 @@ class AuthState extends Equatable {
       user: signOut ? null : (user ?? this.user),
       isSubmitting: isSubmitting ?? this.isSubmitting,
       isRestoring: isRestoring ?? this.isRestoring,
+      hasRestored: hasRestored ?? this.hasRestored,
       error: clearError || signOut ? null : (error ?? this.error),
       errorIsRetryable: clearError || signOut
           ? false
@@ -69,6 +80,7 @@ class AuthState extends Equatable {
     user,
     isSubmitting,
     isRestoring,
+    hasRestored,
     error,
     errorIsRetryable,
     fieldErrors,
@@ -97,14 +109,20 @@ class AuthCubit extends Cubit<AuthState> {
   /// alarming and useless.
   Future<void> restore() async {
     final repository = _repository;
-    if (repository == null || !repository.hasStoredSession) return;
+    // Nothing stored means the answer is already known: signed out. The flag
+    // still has to be set, or the splash would wait for a request that is
+    // never going to be made.
+    if (repository == null || !repository.hasStoredSession) {
+      emit(state.copyWith(hasRestored: true));
+      return;
+    }
 
     emit(state.copyWith(isRestoring: true));
     try {
       final user = await repository.currentUser();
-      emit(AuthState(user: user));
+      emit(AuthState(user: user, hasRestored: true));
     } on ApiFailure {
-      emit(const AuthState());
+      emit(const AuthState(hasRestored: true));
     }
   }
 
@@ -152,7 +170,7 @@ class AuthCubit extends Cubit<AuthState> {
 
     emit(state.copyWith(isSubmitting: true, clearError: true));
     try {
-      emit(AuthState(user: await action()));
+      emit(AuthState(user: await action(), hasRestored: true));
     } on ApiFailure catch (failure) {
       emit(
         state.copyWith(
@@ -171,8 +189,88 @@ class AuthCubit extends Cubit<AuthState> {
   /// user asked to leave, and making them watch a spinner to do it — or leaving
   /// them signed in because the request failed — would both be wrong.
   Future<void> signOut() async {
-    emit(const AuthState());
+    emit(const AuthState(hasRestored: true));
     await _repository?.logout();
+  }
+
+  /// Closes the account.
+  ///
+  /// Returns an error message to show, or null on success. Unlike [signOut] the
+  /// local state is cleared only once the server confirms: signing someone out
+  /// of an account the server refused to delete would tell them it was gone
+  /// when it is not.
+  Future<String?> deleteAccount(String password) async {
+    if (_repository == null) return 'Not available in this build.';
+
+    emit(state.copyWith(isSubmitting: true, clearError: true));
+    try {
+      await _repository.deleteAccount(password);
+      emit(const AuthState(hasRestored: true));
+      return null;
+    } on ApiFailure catch (failure) {
+      emit(state.copyWith(isSubmitting: false, error: failure.message));
+      return failure.message;
+    }
+  }
+
+  /// Changes the password on the signed-in account.
+  ///
+  /// Returns an error message to show, or null on success. The repository adopts
+  /// the fresh token pair the API returns — the server revokes the old sessions,
+  /// so a device that ignored the new tokens would sign itself out moments
+  /// later.
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (_repository == null) return 'Not available in this build.';
+
+    emit(state.copyWith(isSubmitting: true, clearError: true));
+    try {
+      await _repository.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      emit(state.copyWith(isSubmitting: false));
+      return null;
+    } on ApiFailure catch (failure) {
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: failure.message,
+          fieldErrors: failure.fieldErrors,
+        ),
+      );
+      return failure.message;
+    }
+  }
+
+  /// Completes a reset with the token from the email.
+  ///
+  /// Returns an error message to show, or null on success. Deliberately does
+  /// not sign the user in: the API returns no tokens here, and the reset may
+  /// well have been requested because someone else had the old password.
+  Future<String?> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    if (_repository == null) return 'Not available in this build.';
+
+    emit(state.copyWith(isSubmitting: true, clearError: true));
+    try {
+      await _repository.resetPassword(token: token, newPassword: newPassword);
+      emit(state.copyWith(isSubmitting: false));
+      return null;
+    } on ApiFailure catch (failure) {
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: failure.message,
+          fieldErrors: failure.fieldErrors,
+        ),
+      );
+      return failure.message;
+    }
   }
 
   /// Requests a reset email. Reports the API's own wording, which is

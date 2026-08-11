@@ -3,17 +3,19 @@ import 'package:flutter/material.dart';
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../shared/widgets/app_buttons.dart';
 
-/// The first screen: photograph, logo, promise, two ways forward.
+/// The splash: photograph, logo, promise. No controls.
+///
+/// It used to offer "Get Started" and "Login to your account", which asked the
+/// user to choose between two paths that led to the same screen. The app now
+/// decides for them — see `SplashGate` in `main.dart`: a returning user goes
+/// straight to their dashboard and everyone else lands on sign-in. Nothing here
+/// is tappable, so there is nothing to mis-tap during the entrance.
 ///
 /// Built as an orchestrated entrance rather than scattered effects — the
-/// photograph settles, then the logo, headline and actions arrive in sequence.
+/// photograph settles, then the logo and headline arrive in sequence.
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key, this.onGetStarted, this.onLogin});
-
-  final VoidCallback? onGetStarted;
-  final VoidCallback? onLogin;
+  const WelcomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +32,7 @@ class WelcomeScreen extends StatelessWidget {
                 AppSpacing.gutter,
                 AppSpacing.x12,
               ),
-              child: Column(
-                children: [
-                  Expanded(child: _Branding()),
-                  _Actions(onGetStarted: onGetStarted, onLogin: onLogin),
-                ],
-              ),
+              child: const Column(children: [Expanded(child: _Branding())]),
             ),
           ),
         ],
@@ -83,6 +80,8 @@ class _HeroBackdrop extends StatelessWidget {
 }
 
 class _Branding extends StatelessWidget {
+  const _Branding();
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -112,33 +111,6 @@ class _Branding extends StatelessWidget {
         ).reveal(delay: Motion.cinematicFor(3)),
       ],
     );
-  }
-}
-
-class _Actions extends StatelessWidget {
-  const _Actions({this.onGetStarted, this.onLogin});
-
-  final VoidCallback? onGetStarted;
-  final VoidCallback? onLogin;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        PrimaryButton(
-          label: 'Get Started',
-          onPressed: onGetStarted,
-          onDark: true,
-        ),
-        const SizedBox(height: AppSpacing.x3),
-        SecondaryButton(
-          label: 'Login to your account',
-          onPressed: onLogin,
-          onDark: true,
-        ),
-      ],
-    ).reveal(delay: Motion.cinematicFor(4));
   }
 }
 

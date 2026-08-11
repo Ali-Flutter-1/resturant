@@ -79,11 +79,17 @@ abstract final class ApiConstants {
   /// Optional `?category=<slug>`. Sold-out dishes are included with
   /// `is_available: false` rather than omitted.
   static const String dishes = '/dishes';
-  static String dishBySlug(String slug) => '/dishes/$slug';
+
+  /// By id. The API used to address dishes by slug and no longer does.
+  static String dish(String id) => '/dishes/$id';
 
   // ---------------------------------------------------------- dishes (admin)
 
   static const String adminDishes = '/admin/dishes';
+
+  /// Multipart, up to six files. Returns a `public_id` and `url` per file, which
+  /// go straight back as a dish's `images`.
+  static const String adminImageUploads = '/admin/uploads/images';
   static String adminDish(String id) => '/admin/dishes/$id';
   static String adminDishRestore(String id) => '/admin/dishes/$id/restore';
 

@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photograph of a dish to show on the menu.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a dish photograph from your photos to show on the menu.</string>
 </dict>
 </plist>

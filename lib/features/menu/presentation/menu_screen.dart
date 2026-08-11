@@ -23,12 +23,21 @@ import 'menu_cubit.dart';
 /// this screen needs the menu's load state. The repository comes from the
 /// widget tree, so a test can supply a fake without a server.
 class MenuScreen extends StatelessWidget {
-  const MenuScreen({super.key, this.onOpenDish, this.initialQuery});
+  const MenuScreen({
+    super.key,
+    this.onOpenDish,
+    this.initialQuery,
+    this.initialCategorySlug,
+  });
 
   final ValueChanged<Dish>? onOpenDish;
 
   /// Pre-fills the search box when arriving from Discover.
   final String? initialQuery;
+
+  /// Opens already filtered to one section, for arriving from a category circle
+  /// on the home screen.
+  final String? initialCategorySlug;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +45,7 @@ class MenuScreen extends StatelessWidget {
       create: (context) => MenuCubit(
         repository: context.read<MenuRepository>(),
         initialQuery: initialQuery,
+        initialCategorySlug: initialCategorySlug,
       )..load(),
       child: _MenuView(onOpenDish: onOpenDish, initialQuery: initialQuery),
     );
@@ -314,7 +324,7 @@ class _MenuCard extends StatelessWidget {
                       child: DishImage(
                         name: dish.name,
                         imageUrl: dish.imageUrl,
-                        heroTag: 'dish-${dish.slug}',
+                        heroTag: 'dish-${dish.id}',
                       ),
                     ),
                   ),

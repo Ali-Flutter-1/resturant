@@ -141,18 +141,25 @@ class SelectableChip extends StatelessWidget {
 
   final String label;
   final bool selected;
-  final VoidCallback onSelected;
+
+  /// Null disables the chip — for a form mid-submit, where changing the
+  /// selection would race the request already carrying the old one.
+  final VoidCallback? onSelected;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final motion = context.motion;
 
+    final onSelected = this.onSelected;
+
     return GestureDetector(
-      onTap: () {
-        AppHaptics.selection();
-        onSelected();
-      },
+      onTap: onSelected == null
+          ? null
+          : () {
+              AppHaptics.selection();
+              onSelected();
+            },
       child: AnimatedContainer(
         // A colour change only, so it stays a fade under reduce-motion.
         duration: motion.fade(Motion.fast),

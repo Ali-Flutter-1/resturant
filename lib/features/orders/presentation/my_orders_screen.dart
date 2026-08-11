@@ -356,9 +356,15 @@ class _PastOrderRow extends StatelessWidget {
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: InkWell(
-        onTap: () {
+        onTap: () async {
           AppHaptics.toggle();
-          _showReceipt(context, order);
+          // The list endpoint sends no lines, so the receipt is fetched. If the
+          // fetch fails the summary is shown anyway — a total and a date is
+          // still most of a receipt, and an error sheet would be less.
+          final cubit = context.read<OrdersCubit>();
+          final detailed = await cubit.loadDetail(order.id);
+          if (!context.mounted) return;
+          _showReceipt(context, detailed ?? order);
         },
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: AppSurface.row(
@@ -426,10 +432,6 @@ class _PastOrderRow extends StatelessWidget {
 }
 
 /// The receipt for a past order.
-///
-/// Built from the lines the list endpoint already returned rather than fetching
-/// the order again: a receipt for an order that finished last week cannot have
-/// changed, so a round trip would only add a spinner.
 void _showReceipt(BuildContext context, CustomerOrder order) {
   showAppSheet<void>(
     context: context,
@@ -458,10 +460,12 @@ void _showReceipt(BuildContext context, CustomerOrder order) {
           const SizedBox(height: AppSpacing.x4),
 
           if (order.items.isEmpty)
-            // The list endpoint doesn't always include lines. Saying so beats
-            // an empty gap that reads as a rendering fault.
+            // Only reached when the detail fetch failed, since the API always
+            // sends lines on a single order. Saying so beats an empty gap that
+            // reads as a rendering fault.
             Text(
-              'No item breakdown was sent for this order.',
+              'Could not load the item breakdown. Pull to refresh and try '
+              'again.',
               style: context.texts.bodyMedium?.copyWith(
                 color: context.surfaces.inkSoft,
               ),

@@ -10,7 +10,14 @@ class ApiOrderRepository implements OrderRepository {
 
   @override
   Future<List<CustomerOrder>> myOrders() async {
-    final rows = await _client.list(ApiConstants.orders);
+    // One page, deliberately generous. The endpoint defaults to 20 and caps at
+    // 100; a customer with more than fifty past orders would need real
+    // pagination, which this screen does not have yet — better to say so than
+    // to silently show the newest twenty as if that were all of them.
+    final rows = await _client.list(
+      ApiConstants.orders,
+      query: {'page': 1, 'page_size': 50},
+    );
     final orders = rows.map(CustomerOrder.fromJson).toList();
     // Sorted here rather than trusted from the API. The list endpoint is
     // paginated and its default ordering isn't documented, and this screen's

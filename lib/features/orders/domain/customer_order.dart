@@ -91,15 +91,14 @@ class CustomerOrderItem extends Equatable {
     // for endpoints that send the unit price alone — never recomputed when the
     // server has already done the arithmetic, because the server is the one
     // that has to match the payment.
-    final line = (json['line_total_pence'] ?? json['total_pence']) as num?;
-    final unit = (json['unit_price_pence'] ?? json['price_pence']) as num?;
+    final line = json['line_total_pence'] as num?;
+    final unit = json['unit_price_pence'] as num?;
 
     return CustomerOrderItem(
-      dishName:
-          json['dish_name']?.toString() ??
-          (json['dish'] is Map
-              ? (json['dish'] as Map)['name']?.toString() ?? 'Item'
-              : 'Item'),
+      // `name`, not a nested dish: the API stores the name on the line so an
+      // old receipt keeps saying what was actually bought even after the dish
+      // has been renamed or withdrawn.
+      dishName: json['name']?.toString() ?? 'Item',
       quantity: quantity,
       linePence: line?.toInt() ?? ((unit?.toInt() ?? 0) * quantity),
       notes: (json['notes']?.toString().trim().isEmpty ?? true)
@@ -129,23 +128,24 @@ class CustomerOrder extends Equatable {
     this.isDelivery = true,
     this.estimatedReadyAt,
     this.canCancel = false,
+    this.itemCountFallback,
   });
 
   factory CustomerOrder.fromJson(Map<String, dynamic> json) {
     final items = json['items'];
     final id = json['id']?.toString() ?? '';
     final status = CustomerOrderStatus.fromApi(json['status']?.toString());
-    final method = json['fulfilment_method'] ?? json['fulfillment_method'];
+    final fulfilment = json['fulfilment_type']?.toString().toLowerCase();
 
     return CustomerOrder(
       id: id,
-      // The API's own reference where it sends one. The id tail is a fallback
-      // rather than a decoration: a customer ringing up needs to be able to
-      // read *something* back, and a bare UUID is unreadable aloud.
-      reference: json['reference']?.toString() ?? _shortRef(id),
+      // `order_number` is the API's own human-facing reference. The id tail is
+      // a fallback rather than a decoration: a customer ringing up needs to be
+      // able to read *something* back, and a bare UUID is unreadable aloud.
+      reference: json['order_number']?.toString() ?? _shortRef(id),
       status: status,
       totalPence: (json['total_pence'] as num?)?.toInt() ?? 0,
-      placedAt: _date(json['created_at'] ?? json['placed_at']),
+      placedAt: _date(json['placed_at']),
       items: items is List
           ? items
                 .whereType<Map>()
@@ -155,8 +155,18 @@ class CustomerOrder extends Equatable {
                 )
                 .toList()
           : const [],
-      isDelivery: method?.toString().toLowerCase() != 'collection',
-      estimatedReadyAt: _date(json['estimated_ready_at'] ?? json['ready_at']),
+      // Anything that isn't collection is treated as delivery. The field is a
+      // free string in the spec, so matching the one value that changes the
+      // wording is safer than enumerating values the backend may add.
+      isDelivery: fulfilment != 'collection' && fulfilment != 'pickup',
+      // `requested_for` is when the customer asked for it, and is null for an
+      // ASAP order — which is exactly when there is no time worth printing.
+      estimatedReadyAt: json['is_asap'] == true
+          ? null
+          : _date(json['requested_for']),
+      // The list endpoint omits lines entirely — `item_count` is how many there
+      // were, which is all a row needs.
+      itemCountFallback: (json['item_count'] as num?)?.toInt(),
       // Trust the server's own word on this where it gives one — it knows
       // things the app can't, like whether the kitchen has already started.
       // Otherwise fall back to the documented rule: cancellable while placed.
@@ -195,9 +205,22 @@ class CustomerOrder extends Equatable {
 
   final bool canCancel;
 
+  /// `item_count` from the list endpoint, which sends no lines at all. Null on a
+  /// fetched order, where [items] is authoritative.
+  final int? itemCountFallback;
+
+  /// Whether the lines are known, or only how many there were.
+  ///
+  /// The list endpoint deliberately omits them, so a row shows the count and the
+  /// receipt fetches the order in full rather than displaying an empty
+  /// breakdown and calling it a receipt.
+  bool get hasItemDetail => items.isNotEmpty;
+
   String get formattedTotal => '£${(totalPence / 100).toStringAsFixed(2)}';
 
-  int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
+  int get itemCount => items.isEmpty
+      ? (itemCountFallback ?? 0)
+      : items.fold(0, (sum, item) => sum + item.quantity);
 
   /// The status line, adjusted for collection orders.
   ///
@@ -224,5 +247,6 @@ class CustomerOrder extends Equatable {
     isDelivery,
     estimatedReadyAt,
     canCancel,
+    itemCountFallback,
   ];
 }

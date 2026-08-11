@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../auth/presentation/account_panel.dart';
 
 import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/haptics/app_haptics.dart';
 import '../../../shared/widgets/app_surface.dart';
 import '../../../shared/widgets/app_sheet.dart';
-import '../../auth/auth_cubit.dart';
 
 /// Who the restaurant is, when it opens, and how to reach it.
 ///
@@ -124,7 +123,7 @@ class AboutContactScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.x4),
                 const _ContactForm(),
                 const SizedBox(height: AppSpacing.x8),
-                const _SignOutPanel(),
+                const AccountPanel(),
               ],
             ),
           ),
@@ -549,55 +548,6 @@ class _ContactFormState extends State<_ContactForm> {
         const SizedBox(height: AppSpacing.x4),
         FilledButton(onPressed: _send, child: const Text('Send Message')),
       ],
-    );
-  }
-}
-
-/// Temporary, alongside the mock auth. Profile has no designed frame; this
-/// sits at the bottom of About so a role can be swapped without restarting.
-class _SignOutPanel extends StatelessWidget {
-  const _SignOutPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final email = context.select((AuthCubit c) => c.state.email);
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.x4),
-      decoration: BoxDecoration(
-        color: context.surfaces.ground,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: context.surfaces.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'SIGNED IN AS',
-            style: AppTypography.caption(context.surfaces.inkSoft),
-          ),
-          const SizedBox(height: AppSpacing.x1),
-          Text(email ?? 'Unknown', style: context.texts.bodyLarge),
-          const SizedBox(height: AppSpacing.x4),
-          OutlinedButton(
-            onPressed: () {
-              AppHaptics.commit();
-              context.read<AuthCubit>().signOut();
-            },
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(46),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.logout, size: AppIconSize.md),
-                SizedBox(width: AppSpacing.x2),
-                Text('Sign out'),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

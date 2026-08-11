@@ -25,6 +25,16 @@ abstract interface class AuthRepository {
 
   Future<void> logout();
 
+  /// Closes the account for good and signs this device out.
+  ///
+  /// Separate from [logout] because it is not a session operation: the server
+  /// deletes the user, so there is nothing left to sign back in to.
+  ///
+  /// The current password is required — a valid access token alone is not
+  /// enough to destroy an account, so an unlocked phone left on a table cannot
+  /// be used to close someone's account.
+  Future<void> deleteAccount(String password);
+
   Future<void> requestPasswordReset(String email);
 
   Future<void> resetPassword({

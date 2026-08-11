@@ -25,6 +25,6 @@ class ApiMenuRepository implements MenuRepository {
   }
 
   @override
-  Future<Dish> dishBySlug(String slug) async =>
-      Dish.fromJson(await _client.object(ApiConstants.dishBySlug(slug)));
+  Future<Dish> dishById(String id) async =>
+      Dish.fromJson(await _client.object(ApiConstants.dish(id)));
 }

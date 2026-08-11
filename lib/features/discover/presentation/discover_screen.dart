@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
+import '../../../core/animations/skeleton.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -11,6 +13,9 @@ import '../../../shared/widgets/dish_image.dart';
 import '../../../shared/widgets/notifications_sheet.dart';
 import '../../../shared/widgets/pressable.dart';
 import '../../../shared/widgets/section_header.dart';
+import '../../menu/domain/dish.dart';
+import '../../menu/domain/menu_repository.dart';
+import '../../menu/presentation/categories_cubit.dart';
 
 /// The customer home: greeting, search, categories, a featured dish, and
 /// what's selling today.
@@ -20,6 +25,7 @@ class DiscoverScreen extends StatelessWidget {
     this.onOpenDish,
     this.onOpenMenu,
     this.onSearch,
+    this.onOpenCategory,
   });
 
   final ValueChanged<SampleDish>? onOpenDish;
@@ -28,35 +34,45 @@ class DiscoverScreen extends StatelessWidget {
   /// Opens the full menu, optionally pre-filtered by a query.
   final ValueChanged<String>? onSearch;
 
+  /// Opens the menu filtered to one section, by slug.
+  ///
+  /// The strip used to be five hardcoded circles that only changed which one
+  /// looked selected — a control that appeared to work and did nothing.
+  final ValueChanged<String>? onOpenCategory;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.gutter,
-            AppSpacing.x6,
-            AppSpacing.gutter,
-            AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
-          ),
-          children: [
-            const _Greeting(),
-            const SizedBox(height: AppSpacing.x6),
-            _SearchField(onSearch: onSearch),
-            const SizedBox(height: AppSpacing.x6),
-            const _CategoryStrip(),
-            const SizedBox(height: AppSpacing.x6),
-            _FeaturedCard(onOrder: onOpenDish),
-            const SizedBox(height: AppSpacing.x8),
-            SectionHeader(
-              title: 'Popular Now',
-              actionLabel: 'See All',
-              onAction: onOpenMenu,
+    return BlocProvider(
+      create: (context) =>
+          CategoriesCubit(repository: context.read<MenuRepository>())..load(),
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.gutter,
+              AppSpacing.x6,
+              AppSpacing.gutter,
+              AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
             ),
-            const SizedBox(height: AppSpacing.x3),
-            _PopularGrid(onOpenDish: onOpenDish),
-          ],
+            children: [
+              const _Greeting(),
+              const SizedBox(height: AppSpacing.x6),
+              _SearchField(onSearch: onSearch),
+              const SizedBox(height: AppSpacing.x6),
+              _CategoryStrip(onSelected: onOpenCategory),
+              const SizedBox(height: AppSpacing.x6),
+              _FeaturedCard(onOrder: onOpenDish),
+              const SizedBox(height: AppSpacing.x8),
+              SectionHeader(
+                title: 'Popular Now',
+                actionLabel: 'See All',
+                onAction: onOpenMenu,
+              ),
+              const SizedBox(height: AppSpacing.x3),
+              _PopularGrid(onOpenDish: onOpenDish),
+            ],
+          ),
         ),
       ),
     );
@@ -164,72 +180,182 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _CategoryStrip extends StatefulWidget {
-  const _CategoryStrip();
+/// The menu's sections, from `/categories`.
+///
+/// Replaces five hardcoded circles — Breakfast, Curry, Kottu, Sides, Drinks —
+/// which were invented for the design and had no relationship to what the
+/// kitchen actually serves. Whatever an admin creates now appears here.
+///
+/// Tapping one opens the menu filtered to it. Before, tapping only moved a
+/// highlight: a control that looked like it worked and did nothing.
+class _CategoryStrip extends StatelessWidget {
+  const _CategoryStrip({this.onSelected});
+
+  /// Called with the category's slug, which is what the menu filters on.
+  final ValueChanged<String>? onSelected;
 
   @override
-  State<_CategoryStrip> createState() => _CategoryStripState();
+  Widget build(BuildContext context) {
+    return BlocBuilder<CategoriesCubit, CategoriesState>(
+      builder: (context, state) {
+        // Hidden rather than replaced by an error. It is one way into the menu
+        // among several, and an error panel across the top of the home screen
+        // would be louder than the problem.
+        if (state.status == CategoriesStatus.failure ||
+            (state.status == CategoriesStatus.ready &&
+                state.categories.isEmpty)) {
+          return const SizedBox.shrink();
+        }
+
+        return SizedBox(
+          height: 84,
+          child: state.status == CategoriesStatus.loading
+              // Placeholders at the real size, so the screen does not jump when
+              // the sections land.
+              ? const _CategoryStripSkeleton()
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: state.categories.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: AppSpacing.x4),
+                  itemBuilder: (context, index) {
+                    final category = state.categories[index];
+                    return _CategoryCircle(
+                      category: category,
+                      onTap: onSelected == null
+                          ? null
+                          : () {
+                              AppHaptics.selection();
+                              onSelected!(category.slug);
+                            },
+                    );
+                  },
+                ),
+        );
+      },
+    ).revealItem(2);
+  }
 }
 
-class _CategoryStripState extends State<_CategoryStrip> {
-  int _selected = 0;
+class _CategoryCircle extends StatelessWidget {
+  const _CategoryCircle({required this.category, this.onTap});
+
+  final MenuCategory category;
+  final VoidCallback? onTap;
+
+  /// A glyph chosen from the section's name.
+  ///
+  /// The API carries an `image_url` but no icon, and a section with no picture
+  /// still needs *something* in the circle. Matching on the name is a guess, so
+  /// it falls back to a plate rather than to nothing — and a wrong-but-plausible
+  /// glyph beside a correct label reads better than an empty ring.
+  IconData get _icon {
+    final name = category.name.toLowerCase();
+    if (name.contains('breakfast')) return Icons.egg_alt_outlined;
+    if (name.contains('drink') || name.contains('beverage')) {
+      return Icons.local_cafe_outlined;
+    }
+    if (name.contains('side')) return Icons.lunch_dining_outlined;
+    if (name.contains('curry')) return Icons.ramen_dining_outlined;
+    if (name.contains('kottu') || name.contains('rice')) {
+      return Icons.rice_bowl_outlined;
+    }
+    if (name.contains('dessert') || name.contains('sweet')) {
+      return Icons.icecream_outlined;
+    }
+    if (name.contains('starter') || name.contains('small')) {
+      return Icons.tapas_outlined;
+    }
+    return Icons.restaurant_menu;
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final imageUrl = category.imageUrl;
 
-    return SizedBox(
-      height: 84,
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: context.surfaces.accentContainer,
+              ),
+              child: imageUrl == null || imageUrl.isEmpty
+                  ? Icon(_icon, size: AppIconSize.xl, color: scheme.primary)
+                  : Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      // A broken image falls back to the glyph rather than to
+                      // Flutter's grey error box.
+                      errorBuilder: (context, _, _) => Icon(
+                        _icon,
+                        size: AppIconSize.xl,
+                        color: scheme.primary,
+                      ),
+                    ),
+            ),
+            const SizedBox(height: AppSpacing.x2),
+            Text(
+              category.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: context.texts.bodySmall?.copyWith(
+                color: context.surfaces.inkSoft,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Circles at the real size while the sections load.
+class _CategoryStripSkeleton extends StatelessWidget {
+  const _CategoryStripSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: SampleContent.categories.length,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 5,
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.x4),
-        itemBuilder: (context, index) {
-          final category = SampleContent.categories[index];
-          final selected = index == _selected;
-
-          return GestureDetector(
-            onTap: () {
-              AppHaptics.selection();
-              setState(() => _selected = index);
-            },
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: context.motion.fade(Motion.fast),
-                  curve: context.motion.standard,
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: selected
-                        ? scheme.primary
-                        : context.surfaces.accentContainer,
-                  ),
-                  child: Icon(
-                    category.icon,
-                    size: AppIconSize.xl,
-                    color: selected ? scheme.onPrimary : scheme.primary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.x2),
-                Text(
-                  category.label,
-                  style: context.texts.bodySmall
-                      ?.copyWith(
-                        color: selected
-                            ? scheme.primary
-                            : context.surfaces.inkSoft,
-                      )
-                      .withWeight(selected ? FontWeight.w600 : FontWeight.w400),
-                ),
-              ],
+        itemBuilder: (context, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: context.surfaces.accentContainer,
+              ),
             ),
-          );
-        },
+            const SizedBox(height: AppSpacing.x2),
+            Container(
+              width: 44,
+              height: 10,
+              decoration: BoxDecoration(
+                color: context.surfaces.accentContainer,
+                borderRadius: BorderRadius.circular(AppRadius.xs),
+              ),
+            ),
+          ],
+        ),
       ),
-    ).revealItem(2);
+    );
   }
 }
 

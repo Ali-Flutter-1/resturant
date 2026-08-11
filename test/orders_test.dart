@@ -77,13 +77,13 @@ void main() {
     test('reads the API shape', () {
       final order = CustomerOrder.fromJson({
         'id': 'abc',
-        'reference': '#0042',
+        'order_number': '#0042',
         'status': 'preparing',
         'total_pence': 2850,
-        'created_at': '2026-08-01T18:30:00Z',
-        'fulfilment_method': 'delivery',
+        'placed_at': '2026-08-01T18:30:00Z',
+        'fulfilment_type': 'delivery',
         'items': [
-          {'dish_name': 'Hoppers', 'quantity': 2, 'line_total_pence': 1000},
+          {'name': 'Hoppers', 'quantity': 2, 'line_total_pence': 1000},
         ],
       });
 
@@ -95,7 +95,7 @@ void main() {
       expect(order.isDelivery, isTrue);
     });
 
-    test('falls back to the id tail when the API sends no reference', () {
+    test('falls back to the id tail when the API sends no order number', () {
       final order = CustomerOrder.fromJson({
         'id': '5f1c9e2a-0000-4bcd-9999-abcd0000ef12',
         'status': 'placed',
@@ -111,7 +111,7 @@ void main() {
 
     test('prefers the server line total over unit × quantity', () {
       final item = CustomerOrderItem.fromJson({
-        'dish_name': 'Curry',
+        'name': 'Curry',
         'quantity': 3,
         'unit_price_pence': 500,
         'line_total_pence': 1400,
@@ -122,7 +122,7 @@ void main() {
 
     test('computes the line only when the server sent a unit price alone', () {
       final item = CustomerOrderItem.fromJson({
-        'dish_name': 'Curry',
+        'name': 'Curry',
         'quantity': 3,
         'unit_price_pence': 500,
       });
@@ -153,7 +153,7 @@ void main() {
       final order = CustomerOrder.fromJson({
         'id': 'a',
         'status': 'out_for_delivery',
-        'fulfilment_method': 'collection',
+        'fulfilment_type': 'collection',
       });
       expect(order.isDelivery, isFalse);
       expect(order.statusLabel, 'Ready to collect');

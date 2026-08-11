@@ -237,7 +237,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               AnimatedSwitcher(
                 duration: motion.fade(Motion.fast),
                 child: showServer && state.isSubmitting
-                    ? const _SubmittingButton()
+                    ? const SubmittingButton()
                     : PrimaryButton(
                         label: 'Create Account',
                         onPressed: _submit,
@@ -267,32 +267,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ].revealStaggered(),
           );
         },
-      ),
-    );
-  }
-}
-
-class _SubmittingButton extends StatelessWidget {
-  const _SubmittingButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      height: 52,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: scheme.primary,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: scheme.onPrimary,
-        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -380,6 +381,110 @@ void main() {
 
       expect(await client.list('/dishes'), hasLength(2));
       expect((await client.list('/orders')).single['id'], '9');
+    });
+  });
+
+  group('the API error envelope', () {
+    // Captured from the live API rather than imagined. The shape is
+    // `{success, message, error: {code, details: [{field, message}]}}`.
+    ApiFailure failureFor(int status, String body) {
+      final response = Response<dynamic>(
+        requestOptions: RequestOptions(path: '/x'),
+        statusCode: status,
+        data: jsonDecode(body),
+      );
+      return ApiFailure.fromDio(
+        DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+          type: DioExceptionType.badResponse,
+        ),
+      );
+    }
+
+    test('reads per-field messages from error.details', () {
+      final failure = failureFor(
+        422,
+        '{"success": false, '
+        '"message": "Please check the highlighted fields and try again.", '
+        '"error": {"code": "VALIDATION_FAILED", "details": ['
+        '{"field": "email", "message": "Enter a valid email address."},'
+        '{"field": "password", "message": "Password is required."}]}}',
+      );
+
+      // The app used to read only FastAPI's raw `detail: [{loc, msg}]`, which
+      // this backend never sends — so every field error was dropped and a
+      // rejected form showed one sentence at the top with no indication of
+      // which box was wrong.
+      expect(failure.fieldErrors, {
+        'email': 'Enter a valid email address.',
+        'password': 'Password is required.',
+      });
+      expect(
+        failure.message,
+        'Please check the highlighted fields and try again.',
+      );
+      expect(failure.code, 'VALIDATION_FAILED');
+    });
+
+    test("still understands FastAPI's own shape", () {
+      final failure = failureFor(
+        422,
+        '{"detail": [{"loc": ["body", "email"], "msg": "field required"}]}',
+      );
+
+      // Anything not wrapped by the app envelope — a framework-level refusal —
+      // must still mark the field.
+      expect(failure.fieldErrors, {'email': 'field required'});
+    });
+
+    test('401 is a session problem', () {
+      final failure = failureFor(
+        401,
+        '{"success": false, "message": "You need to sign in to continue.", '
+        '"error": {"code": "MISSING_ACCESS_TOKEN", "details": []}}',
+      );
+
+      expect(failure.kind, ApiFailureKind.unauthorised);
+      expect(failure.requiresSignIn, isTrue);
+      expect(failure.code, 'MISSING_ACCESS_TOKEN');
+    });
+
+    test('403 is a role problem, and must not send anyone to sign in', () {
+      final failure = failureFor(
+        403,
+        '{"success": false, "message": "You do not have access to this.", '
+        '"error": {"code": "PERMISSION_DENIED", "details": []}}',
+      );
+
+      // Both used to be `unauthorised`, so a customer touching an admin route
+      // was told their session had expired — and signing in again produces the
+      // same role and the same refusal.
+      expect(failure.kind, ApiFailureKind.forbidden);
+      expect(failure.requiresSignIn, isFalse);
+      expect(failure.isRetryable, isFalse);
+    });
+
+    test('a 409 carries the code the app can branch on', () {
+      final failure = failureFor(
+        409,
+        '{"success": false, "message": "The kitchen has already started this '
+        'order. Please call us.", '
+        '"error": {"code": "ORDER_TOO_LATE_TO_CANCEL", "details": []}}',
+      );
+
+      expect(failure.kind, ApiFailureKind.conflict);
+      expect(failure.code, 'ORDER_TOO_LATE_TO_CANCEL');
+      // The API's wording reaches the user unchanged; nothing is invented.
+      expect(failure.message, contains('Please call us'));
+    });
+
+    test('an envelope with no message falls back to plain English', () {
+      final failure = failureFor(500, '{"success": false}');
+
+      expect(failure.code, isNull);
+      expect(failure.message, isNot(contains('500')));
+      expect(failure.isRetryable, isTrue);
     });
   });
 }

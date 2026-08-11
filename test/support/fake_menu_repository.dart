@@ -43,31 +43,28 @@ class FakeMenuRepository implements MenuRepository {
 
   static const jaffnaCrab = Dish(
     id: 'd1',
-    slug: 'jaffna-crab-curry',
     name: 'Jaffna Crab Curry',
     description: 'Fresh mud crab in roasted spices and coconut milk.',
     pricePence: 2800,
-    categoryId: 'cat-1',
+    categories: [curries],
   );
 
   static const jackfruit = Dish(
     id: 'd2',
-    slug: 'young-jackfruit-curry',
     name: 'Young Jackfruit Curry',
     description: 'Slow-cooked green jackfruit, entirely plant based.',
     pricePence: 1800,
-    categoryId: 'cat-1',
+    categories: [curries],
     isVegan: true,
     isVegetarian: true,
   );
 
   static const hoppers = Dish(
     id: 'd3',
-    slug: 'heritage-hoppers',
     name: 'Heritage Hoppers',
     description: 'Fermented rice flour and coconut milk pancakes.',
     pricePence: 950,
-    categoryId: 'cat-2',
+    categories: [smallPlates],
     isVegetarian: true,
   );
 
@@ -75,11 +72,10 @@ class FakeMenuRepository implements MenuRepository {
   /// greys them out rather than making the menu appear to shrink.
   static const soldOut = Dish(
     id: 'd4',
-    slug: 'black-pork-curry',
     name: 'Black Pork Curry',
     description: 'Dark roasted heritage classic.',
     pricePence: 2200,
-    categoryId: 'cat-1',
+    categories: [curries],
     isAvailable: false,
   );
 
@@ -101,19 +97,19 @@ class FakeMenuRepository implements MenuRepository {
         ? _dishes
         : _dishes
               .where(
-                (d) =>
-                    d.categoryId ==
-                    _categories
-                        .firstWhere(
-                          (c) => c.slug == categorySlug,
-                          orElse: () => _categories.first,
-                        )
-                        .id,
+                (d) => d.categoryIds.contains(
+                  _categories
+                      .firstWhere(
+                        (c) => c.slug == categorySlug,
+                        orElse: () => _categories.first,
+                      )
+                      .id,
+                ),
               )
               .toList(),
   );
 
   @override
-  Future<Dish> dishBySlug(String slug) =>
-      _answer(_dishes.firstWhere((d) => d.slug == slug));
+  Future<Dish> dishById(String id) =>
+      _answer(_dishes.firstWhere((d) => d.id == id));
 }

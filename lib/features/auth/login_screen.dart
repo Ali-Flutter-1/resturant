@@ -12,6 +12,7 @@ import '../../shared/widgets/app_sheet.dart';
 import 'auth_cubit.dart';
 import 'presentation/auth_form_parts.dart';
 import 'register_screen.dart';
+import 'reset_password_screen.dart';
 
 /// Sign-in.
 ///
@@ -99,13 +100,29 @@ class _LoginScreenState extends State<LoginScreen> {
     final error = await context.read<AuthCubit>().requestPasswordReset(email);
     if (!mounted) return;
 
+    if (error != null) {
+      showAppSnack(context, error, isError: true);
+      return;
+    }
+
     showAppSnack(
       context,
-      error ??
-          // Worded to match the API's deliberate silence about which addresses
-          // exist. Saying "we've sent you an email" would confirm the account.
-          'If that address has an account, a reset link is on its way.',
-      isError: error != null,
+      // Worded to match the API's deliberate silence about which addresses
+      // exist. Saying "we've sent you an email" would confirm the account.
+      'If that address has an account, a reset code is on its way.',
+    );
+
+    // Straight on to the screen that finishes the job. The API emails a token
+    // and expects it back at `/auth/reset-password`; leaving the user on
+    // sign-in with a code in their inbox and nowhere to type it is where this
+    // flow used to dead-end.
+    await Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) => ResetPasswordScreen(
+          email: email,
+          onDone: () => Navigator.of(context).maybePop(),
+        ),
+      ),
     );
   }
 
@@ -199,12 +216,29 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: state.isSubmitting ? null : _forgotPassword,
-                  child: const Text('Forgot password?'),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // For a code requested earlier, on another device. Without
+                  // this, the only way back to the reset screen is to ask for a
+                  // second email and invalidate the first.
+                  TextButton(
+                    onPressed: state.isSubmitting
+                        ? null
+                        : () => Navigator.of(context).push(
+                            AppPageRoute<void>(
+                              builder: (_) => ResetPasswordScreen(
+                                onDone: () => Navigator.of(context).maybePop(),
+                              ),
+                            ),
+                          ),
+                    child: const Text('I have a code'),
+                  ),
+                  TextButton(
+                    onPressed: state.isSubmitting ? null : _forgotPassword,
+                    child: const Text('Forgot password?'),
+                  ),
+                ],
               ),
 
               // A permanent slot that grows to fit. Keeping the child count
@@ -228,7 +262,7 @@ class _LoginScreenState extends State<LoginScreen> {
               AnimatedSwitcher(
                 duration: motion.fade(Motion.fast),
                 child: showServer && state.isSubmitting
-                    ? const _SubmittingButton()
+                    ? const SubmittingButton()
                     : PrimaryButton(label: 'Sign In', onPressed: _submit),
               ),
 
@@ -259,34 +293,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ].revealStaggered(),
           );
         },
-      ),
-    );
-  }
-}
-
-/// The submit button mid-request: the same size and colour, so the row does not
-/// change height when it swaps in.
-class _SubmittingButton extends StatelessWidget {
-  const _SubmittingButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      height: 52,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: scheme.primary,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: scheme.onPrimary,
-        ),
       ),
     );
   }

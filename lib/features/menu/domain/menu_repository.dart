@@ -12,5 +12,6 @@ abstract interface class MenuRepository {
   /// menu appear to change through the evening.
   Future<List<Dish>> dishes({String? categorySlug});
 
-  Future<Dish> dishBySlug(String slug);
+  /// One dish in full. Addressed by id — the API dropped its slug route.
+  Future<Dish> dishById(String id);
 }

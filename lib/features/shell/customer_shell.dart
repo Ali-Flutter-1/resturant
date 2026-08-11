@@ -36,11 +36,16 @@ class CustomerShell extends StatelessWidget {
     );
   }
 
-  static void _openMenu(BuildContext context, {String? query}) {
+  static void _openMenu(
+    BuildContext context, {
+    String? query,
+    String? categorySlug,
+  }) {
     Navigator.of(context).push(
       AppPageRoute<void>(
         builder: (context) => MenuScreen(
           initialQuery: query,
+          initialCategorySlug: categorySlug,
           onOpenDish: (dish) => _openDish(context, _asPreview(dish)),
         ),
       ),
@@ -73,6 +78,9 @@ class CustomerShell extends StatelessWidget {
             // Search and the filter button both open the full menu, which is
             // where filtering actually lives.
             onSearch: (query) => _openMenu(context, query: query),
+            // A category circle opens the menu already filtered to it, rather
+            // than only highlighting itself as it used to.
+            onOpenCategory: (slug) => _openMenu(context, categorySlug: slug),
           ),
         ),
         ShellTab(

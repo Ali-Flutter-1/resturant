@@ -1,3 +1,6 @@
+import 'dart:io' show File;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/animations/motion.dart';
@@ -11,6 +14,11 @@ import '../../core/theme/app_typography.dart';
 /// inventing images would be worse than admitting their absence. This renders
 /// a warm tinted field carrying the dish's initial, and swaps to the real
 /// photograph the moment [imageUrl] is supplied by the API.
+///
+/// [imageUrl] also accepts a local file path, so a photograph just taken with
+/// the camera previews here before it has been uploaded anywhere. Detected by
+/// scheme rather than by a second parameter: every caller already passes one
+/// string, and which kind it is is knowable from the string itself.
 class DishImage extends StatelessWidget {
   const DishImage({
     super.key,
@@ -27,12 +35,30 @@ class DishImage extends StatelessWidget {
   /// Set on both the card and the detail screen to fly the image between them.
   final Object? heroTag;
 
+  /// Whether this is something [Image.network] can fetch. `blob:` counts —
+  /// that is what a web file picker hands back.
+  static bool _isRemote(String value) =>
+      value.startsWith('http://') ||
+      value.startsWith('https://') ||
+      value.startsWith('blob:') ||
+      value.startsWith('data:');
+
   @override
   Widget build(BuildContext context) {
     final url = imageUrl;
 
     Widget image;
-    if (url != null && url.isNotEmpty) {
+    if (url != null && url.isNotEmpty && !_isRemote(url)) {
+      // A path from the camera or the gallery. Not available on web, where
+      // picked files arrive as blob URLs and are handled by the branch below.
+      image = kIsWeb
+          ? _Placeholder(name: name)
+          : Image.file(
+              File(url),
+              fit: fit,
+              errorBuilder: (context, _, _) => _Placeholder(name: name),
+            );
+    } else if (url != null && url.isNotEmpty) {
       image = Image.network(
         url,
         fit: fit,

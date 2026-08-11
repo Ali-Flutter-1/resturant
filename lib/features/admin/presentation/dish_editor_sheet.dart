@@ -1,36 +1,60 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../../core/animations/motion.dart';
 import '../../../core/animations/shake.dart';
+import '../../../core/network/api_failure.dart';
+import '../../../core/haptics/app_haptics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../shared/preview/sample_content.dart';
 import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/app_sheet.dart';
 import '../../../shared/widgets/dish_image.dart';
+import '../../menu/domain/dish.dart';
+import '../domain/admin_menu_repository.dart';
 
-/// Create or edit a dish. Returns the result, or null if dismissed.
+/// Create or edit a dish, against the API. Returns the saved dish, or null if
+/// dismissed.
 ///
-/// Local only — there is nowhere to persist to yet. The shape mirrors what
-/// the menu endpoint will need, so wiring it up later is a swap of the
-/// submit handler rather than a rewrite.
-Future<SampleDish?> showDishEditor({
+/// Saving is three calls in sequence, in this order for a reason:
+///
+///  1. any brand-new category, because a dish needs its **id**, not its name;
+///  2. `POST /admin/uploads/images` for the photograph, which returns the
+///     `public_id`/`url` pair the dish wants;
+///  3. `POST /admin/dishes` (or `PATCH`) with both.
+///
+/// The upload happens on save rather than the moment a photograph is picked, so
+/// abandoning the sheet doesn't leave an orphaned file on the server.
+Future<Dish?> showDishEditor({
   required BuildContext context,
-  SampleDish? dish,
+  required AdminMenuRepository repository,
+  required List<MenuCategory> categories,
+  Dish? dish,
 }) {
-  return showAppSheet<SampleDish>(
+  return showAppSheet<Dish>(
     context: context,
     title: dish == null ? 'Add a dish' : 'Edit ${dish.name}',
     subtitle: dish == null
         ? 'It appears on the menu straight away.'
         : 'Changes apply to tonight’s menu.',
-    child: _DishEditor(dish: dish),
+    child: _DishEditor(
+      dish: dish,
+      repository: repository,
+      categories: categories,
+    ),
   );
 }
 
 class _DishEditor extends StatefulWidget {
-  const _DishEditor({this.dish});
+  const _DishEditor({
+    this.dish,
+    required this.repository,
+    required this.categories,
+  });
 
-  final SampleDish? dish;
+  final Dish? dish;
+  final AdminMenuRepository repository;
+  final List<MenuCategory> categories;
 
   @override
   State<_DishEditor> createState() => _DishEditorState();
@@ -42,20 +66,47 @@ class _DishEditorState extends State<_DishEditor> {
     text: widget.dish?.description ?? '',
   );
   late final _price = TextEditingController(
-    text: widget.dish?.price.toStringAsFixed(2) ?? '',
+    text: widget.dish == null
+        ? ''
+        : (widget.dish!.pricePence / 100).toStringAsFixed(2),
   );
-  late final _imageUrl = TextEditingController(
-    text: widget.dish?.imageUrl ?? '',
+  late final _prepMin = TextEditingController(
+    text: widget.dish?.prepMinMinutes?.toString() ?? '15',
   );
+  late final _prepMax = TextEditingController(
+    text: widget.dish?.prepMaxMinutes?.toString() ?? '20',
+  );
+  final _newCategory = TextEditingController();
 
-  /// A dish carries at most one tag, so this is a single choice and null is a
-  /// legitimate answer — plenty of dishes need no label.
-  late String? _tag = widget.dish?.tag;
+  /// Categories offered as chips. Grows when one is created, so the new chip is
+  /// selectable immediately rather than after a reopen.
+  late List<MenuCategory> _categories = [...widget.categories];
+
+  /// Selected category ids. A set because the API takes several — a dish can
+  /// appear in more than one section of the menu.
+  late final Set<String> _selected = {
+    for (final c in widget.dish?.categories ?? const <MenuCategory>[]) c.id,
+  };
+
+  /// Names typed in but not yet created server-side. Created on save, because
+  /// creating one per keystroke would litter the menu with categories from
+  /// abandoned edits.
+  final List<String> _pendingCategories = [];
+
+  /// Photographs already on the dish, kept so an edit that doesn't touch the
+  /// picture doesn't drop it.
+  late List<DishPhoto> _existingImages = [...?widget.dish?.images];
+
+  /// A local file path from the camera or gallery, previewed before upload.
+  String? _pickedPath;
+
+  bool _picking = false;
+  bool _saving = false;
 
   String? _error;
 
-  /// Bumped on every refusal so the same complaint twice still shakes — the
-  /// user pressing submit again wants to know it was rejected again.
+  /// Bumped on every refusal so the same complaint twice still shakes — the user
+  /// pressing submit again wants to know it was rejected again.
   int _rejections = 0;
 
   @override
@@ -63,41 +114,185 @@ class _DishEditorState extends State<_DishEditor> {
     _name.dispose();
     _description.dispose();
     _price.dispose();
-    _imageUrl.dispose();
+    _prepMin.dispose();
+    _prepMax.dispose();
+    _newCategory.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    final price = double.tryParse(_price.text.trim());
+  String get _previewSource =>
+      _pickedPath ?? (_existingImages.isEmpty ? '' : _existingImages.first.url);
 
-    if (_name.text.trim().isEmpty) {
+  void _fail(String message) {
+    setState(() {
+      _error = message;
+      _rejections++;
+      _saving = false;
+    });
+    AppHaptics.failure();
+  }
+
+  Future<void> _pick(ImageSource source) async {
+    if (_picking || _saving) return;
+    setState(() => _picking = true);
+
+    try {
+      final file = await ImagePicker().pickImage(
+        source: source,
+        // Downscaled before it leaves the phone. A camera produces 4–8MB files,
+        // the API caps uploads at 10MB, and a menu photograph needs neither —
+        // this is the difference between adding a dish on café wifi and giving
+        // up on it.
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+      if (!mounted) return;
+      if (file == null) {
+        setState(() => _picking = false);
+        return;
+      }
+
+      AppHaptics.success();
       setState(() {
-        _error = 'Give the dish a name.';
-        _rejections++;
+        _pickedPath = file.path;
+        _picking = false;
       });
-      return;
+    } on Object catch (_) {
+      // Most often a declined permission. Reported in the sheet rather than
+      // thrown: the dish can still be saved and photographed later.
+      if (!mounted) return;
+      setState(() => _picking = false);
+      _fail(
+        source == ImageSource.camera
+            ? 'Could not open the camera. Check the app’s permissions.'
+            : 'Could not open your photos. Check the app’s permissions.',
+      );
     }
-    if (price == null || price <= 0) {
-      setState(() {
-        _error = 'Enter a price, like 12.50.';
-        _rejections++;
-      });
-      return;
-    }
+  }
 
-    final imageUrl = _imageUrl.text.trim();
+  void _addCategory() {
+    final value = _newCategory.text.trim();
+    if (value.isEmpty) return;
 
-    Navigator.of(context).pop(
-      SampleDish(
-        name: _name.text.trim(),
-        description: _description.text.trim().isEmpty
-            ? 'No description yet.'
-            : _description.text.trim(),
-        price: price,
-        tag: _tag,
-        imageUrl: imageUrl.isEmpty ? null : imageUrl,
-      ),
+    // Case-insensitive, against both the real categories and the ones queued for
+    // creation, so "vegan" doesn't become a second Vegan.
+    final existing = _categories.where(
+      (c) => c.name.toLowerCase() == value.toLowerCase(),
     );
+    if (existing.isNotEmpty) {
+      AppHaptics.selection();
+      setState(() {
+        _selected.add(existing.first.id);
+        _newCategory.clear();
+      });
+      return;
+    }
+    if (_pendingCategories.any((p) => p.toLowerCase() == value.toLowerCase())) {
+      setState(() => _newCategory.clear());
+      return;
+    }
+
+    AppHaptics.selection();
+    setState(() {
+      _pendingCategories.add(value);
+      _newCategory.clear();
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_saving) return;
+
+    final title = _name.text.trim();
+    if (title.isEmpty) return _fail('Give the dish a name.');
+
+    final price = double.tryParse(_price.text.trim());
+    if (price == null || price <= 0) {
+      return _fail('Enter a price, like 12.50.');
+    }
+    // Rounded, not truncated: 12.50 in binary floating point is 1249.9999… and
+    // `toInt()` would sell it for £12.49.
+    final pricePence = (price * 100).round();
+
+    final prepMin = int.tryParse(_prepMin.text.trim());
+    final prepMax = int.tryParse(_prepMax.text.trim());
+    if (prepMin != null && prepMax != null && prepMin > prepMax) {
+      return _fail('The shortest time cannot be longer than the longest.');
+    }
+
+    if (_selected.isEmpty && _pendingCategories.isEmpty) {
+      // The API requires at least one, and an uncategorised dish would not
+      // appear on the public menu even if it accepted one.
+      return _fail('Choose at least one category.');
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      // 1. Categories the user typed. Done first because the dish needs ids.
+      final categoryIds = {..._selected};
+      for (final name in _pendingCategories) {
+        final created = await widget.repository.createCategory(name);
+        categoryIds.add(created.id);
+        if (mounted) {
+          setState(() => _categories = [..._categories, created]);
+        }
+      }
+
+      // 2. The photograph, if a new one was picked.
+      var images = _existingImages;
+      final picked = _pickedPath;
+      if (picked != null) {
+        final uploaded = await widget.repository.uploadImages([picked]);
+        // Replaces rather than appends: this editor offers one picture, and
+        // appending would silently leave the old one as the thumbnail.
+        images = uploaded;
+      }
+
+      // 3. The dish itself.
+      final dish = widget.dish;
+      final saved = dish == null
+          ? await widget.repository.createDish(
+              title: title,
+              description: _description.text,
+              categoryIds: categoryIds.toList(),
+              pricePence: pricePence,
+              images: images,
+              prepMinMinutes: prepMin,
+              prepMaxMinutes: prepMax,
+            )
+          : await widget.repository.updateDish(
+              dish.id,
+              title: title,
+              description: _description.text,
+              categoryIds: categoryIds.toList(),
+              pricePence: pricePence,
+              images: images,
+              prepMinMinutes: prepMin,
+              prepMaxMinutes: prepMax,
+            );
+
+      if (!mounted) return;
+      AppHaptics.success();
+      Navigator.of(context).pop(saved);
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      // Already fit to show — it is either the API's own words or a plain-English
+      // fallback, so it is reported verbatim rather than rewritten here.
+      _fail(failure.message);
+      // Any category created before the failure now exists and is selected, so a
+      // second attempt must not try to create it again.
+      setState(
+        () => _pendingCategories.removeWhere(
+          (name) => _categories.any(
+            (c) => c.name.toLowerCase() == name.toLowerCase(),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -114,11 +309,33 @@ class _DishEditorState extends State<_DishEditor> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // The photograph comes first. It was at the bottom, which meant the
+            // most visible thing about a dish was the last thing you were asked
+            // for — and on a phone it sat below the fold behind the keyboard.
+            _PhotographPicker(
+              name: _name.text.trim().isEmpty ? 'New dish' : _name.text.trim(),
+              source: _previewSource,
+              busy: _picking,
+              enabled: !_saving,
+              onCamera: () => _pick(ImageSource.camera),
+              onGallery: () => _pick(ImageSource.gallery),
+              onClear: _previewSource.isEmpty
+                  ? null
+                  : () => setState(() {
+                      _pickedPath = null;
+                      _existingImages = const [];
+                    }),
+            ),
+            const SizedBox(height: AppSpacing.x5),
+
             Text('Name', style: context.texts.titleMedium),
             const SizedBox(height: AppSpacing.x2),
             TextField(
               controller: _name,
+              enabled: !_saving,
               textCapitalization: TextCapitalization.words,
+              // Rebuild so the preview's placeholder initial follows the name.
+              onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(hintText: 'Jaffna Crab Curry'),
             ),
             const SizedBox(height: AppSpacing.x4),
@@ -127,6 +344,7 @@ class _DishEditorState extends State<_DishEditor> {
             const SizedBox(height: AppSpacing.x2),
             TextField(
               controller: _description,
+              enabled: !_saving,
               maxLines: 3,
               decoration: const InputDecoration(
                 hintText: 'What is in it, and how is it cooked?',
@@ -134,88 +352,140 @@ class _DishEditorState extends State<_DishEditor> {
             ),
             const SizedBox(height: AppSpacing.x4),
 
-            Text('Price', style: context.texts.titleMedium),
-            const SizedBox(height: AppSpacing.x2),
-            TextField(
-              controller: _price,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                hintText: '12.50',
-                prefixText: '£ ',
-              ),
-            ),
-            const SizedBox(height: AppSpacing.x4),
-
-            Row(
-              children: [
-                Text('Tag', style: context.texts.titleMedium),
-                const SizedBox(width: AppSpacing.x2),
-                Text('Optional', style: context.texts.bodySmall),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.x2),
-            // Tapping the selected tag clears it, so a dish can go back to
-            // having none without a separate "no tag" control.
-            Wrap(
-              spacing: AppSpacing.x2,
-              runSpacing: AppSpacing.x2,
-              children: [
-                for (final tag in SampleContent.dishTags)
-                  SelectableChip(
-                    label: tag,
-                    selected: _tag == tag,
-                    onSelected: () =>
-                        setState(() => _tag = _tag == tag ? null : tag),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.x4),
-
-            Text('Photograph', style: context.texts.titleMedium),
-            const SizedBox(height: AppSpacing.x2),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Live preview. DishImage already shimmers while a network image
-                // loads and falls back to the tinted initial if the URL is empty
-                // or broken, so this doubles as validation.
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  child: SizedBox(
-                    width: 64,
-                    height: 64,
-                    child: DishImage(
-                      name: _name.text.trim().isEmpty
-                          ? 'New dish'
-                          : _name.text.trim(),
-                      imageUrl: _imageUrl.text.trim(),
+                Expanded(
+                  child: _Labelled(
+                    label: 'Price',
+                    child: TextField(
+                      controller: _price,
+                      enabled: !_saving,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: '12.50',
+                        prefixText: '£ ',
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.x3),
                 Expanded(
-                  child: TextField(
-                    controller: _imageUrl,
-                    keyboardType: TextInputType.url,
-                    // Rebuild so the preview follows what is typed.
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      hintText: 'https://…/dish.jpg',
+                  child: _Labelled(
+                    label: 'Prep time',
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _prepMin,
+                            enabled: !_saving,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(hintText: '15'),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: AppSpacing.x1,
+                          ),
+                          child: Text('–'),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _prepMax,
+                            enabled: !_saving,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              hintText: '20',
+                              suffixText: 'min',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: AppSpacing.x4),
+
+            Row(
+              children: [
+                Text('Categories', style: context.texts.titleMedium),
+                const SizedBox(width: AppSpacing.x2),
+                // Stated, because the API requires one and the reason is not
+                // guessable: an uncategorised dish is invisible on the menu.
+                Text(
+                  'At least one',
+                  style: context.texts.bodySmall?.copyWith(
+                    color: context.surfaces.inkSoft,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: AppSpacing.x2),
-            Text(
-              // Said plainly rather than shipping a picker that cannot work:
-              // choosing from the device needs a plugin and per-platform
-              // permissions, and uploads need the API.
-              'Paste an image URL for now. Picking from the device needs the '
-              'upload endpoint.',
-              style: context.texts.bodySmall,
+            AnimatedSize(
+              duration: context.motion.move(Motion.fast),
+              curve: context.motion.standard,
+              alignment: Alignment.topLeft,
+              child: Wrap(
+                spacing: AppSpacing.x2,
+                runSpacing: AppSpacing.x2,
+                children: [
+                  for (final category in _categories)
+                    SelectableChip(
+                      label: category.name,
+                      selected: _selected.contains(category.id),
+                      onSelected: _saving
+                          ? null
+                          : () => setState(() {
+                              if (!_selected.remove(category.id)) {
+                                _selected.add(category.id);
+                              }
+                            }),
+                    ),
+                  // Queued for creation. Shown as selected because that is what
+                  // they are — typing one is a statement that this dish is in
+                  // it.
+                  for (final pending in _pendingCategories)
+                    SelectableChip(
+                      label: '$pending (new)',
+                      selected: true,
+                      onSelected: _saving
+                          ? null
+                          : () => setState(
+                              () => _pendingCategories.remove(pending),
+                            ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.x3),
+            // The list used to be five hardcoded strings, so anything the
+            // kitchen actually served that wasn't one of them had nowhere to go.
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _newCategory,
+                    enabled: !_saving,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _addCategory(),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      hintText: 'Add another category',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.x2),
+                IconButton.filledTonal(
+                  onPressed: _saving ? null : _addCategory,
+                  icon: const Icon(Icons.add, size: AppIconSize.xl),
+                  tooltip: 'Add category',
+                ),
+              ],
             ),
 
             if (_error != null) ...[
@@ -242,12 +512,131 @@ class _DishEditorState extends State<_DishEditor> {
 
             const SizedBox(height: AppSpacing.x6),
             FilledButton(
-              onPressed: _submit,
-              child: Text(widget.dish == null ? 'Add dish' : 'Save changes'),
+              onPressed: _saving ? null : _submit,
+              child: Text(
+                _saving
+                    // Named because it is three requests: on a slow connection
+                    // the upload is most of the wait, and "Saving…" for six
+                    // seconds reads as stuck.
+                    ? (_pickedPath == null ? 'Saving…' : 'Uploading…')
+                    : (widget.dish == null ? 'Add dish' : 'Save changes'),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A label above a field, matching the rest of the form.
+class _Labelled extends StatelessWidget {
+  const _Labelled({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: context.texts.titleMedium),
+        const SizedBox(height: AppSpacing.x2),
+        child,
+      ],
+    );
+  }
+}
+
+/// The photograph, and the two ways to get one.
+///
+/// A wide preview rather than a 64pt thumbnail: this is the image customers see
+/// first on the card, and judging a crop from a square the size of a stamp is
+/// not possible.
+class _PhotographPicker extends StatelessWidget {
+  const _PhotographPicker({
+    required this.name,
+    required this.source,
+    required this.busy,
+    required this.enabled,
+    required this.onCamera,
+    required this.onGallery,
+    this.onClear,
+  });
+
+  final String name;
+  final String source;
+  final bool busy;
+  final bool enabled;
+  final VoidCallback onCamera;
+  final VoidCallback onGallery;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Photograph', style: context.texts.titleMedium),
+            const Spacer(),
+            if (onClear != null && enabled)
+              TextButton(onPressed: onClear, child: const Text('Remove')),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.x2),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: SizedBox(
+            height: 168,
+            width: double.infinity,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // A local path previews straight from the file; a URL loads over
+                // the network. `DishImage` tells them apart, so a photograph is
+                // visible before it has been uploaded anywhere.
+                DishImage(name: name, imageUrl: source),
+                if (busy)
+                  const ColoredBox(
+                    color: Color(0x66000000),
+                    child: Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.x3),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: busy || !enabled ? null : onCamera,
+                icon: const Icon(
+                  Icons.photo_camera_outlined,
+                  size: AppIconSize.lg,
+                ),
+                label: const Text('Camera'),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.x3),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: busy || !enabled ? null : onGallery,
+                icon: const Icon(
+                  Icons.photo_library_outlined,
+                  size: AppIconSize.lg,
+                ),
+                label: const Text('Gallery'),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

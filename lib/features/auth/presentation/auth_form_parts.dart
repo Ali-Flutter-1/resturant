@@ -149,6 +149,37 @@ class AuthErrorNote extends StatelessWidget {
   }
 }
 
+/// The submit button mid-request: the same size and colour as the real one, so
+/// the row does not change height when it swaps in.
+///
+/// Was duplicated privately in sign-in and sign-up; reset-password made it a
+/// third copy, which is where identical spinners start drifting in size.
+class SubmittingButton extends StatelessWidget {
+  const SubmittingButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      height: 52,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: scheme.onPrimary,
+        ),
+      ),
+    );
+  }
+}
+
 /// Client-side checks, matching the API's documented rules.
 ///
 /// These exist to answer instantly rather than to be authoritative — the server

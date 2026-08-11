@@ -10,12 +10,14 @@ import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/checkout/presentation/checkout_screen.dart';
 import 'package:practice/features/discover/presentation/discover_screen.dart';
 import 'package:practice/features/menu/presentation/dish_details_screen.dart';
+import 'package:practice/features/admin/domain/admin_menu_repository.dart';
 import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/menu/presentation/menu_screen.dart';
 import 'package:practice/features/shell/admin_shell.dart';
 import 'package:practice/shared/widgets/flutter_glass_nav_bar.dart';
 
 import 'support/auth_fixtures.dart';
+import 'support/fake_admin_menu_repository.dart';
 import 'support/fake_menu_repository.dart';
 
 /// Every screen needs a way out, and no screen may advertise one it doesn't
@@ -31,10 +33,15 @@ Widget _host(Widget home, {TargetPlatform? platform}) {
       BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
       BlocProvider(create: (_) => CartCubit()),
     ],
-    child: RepositoryProvider<MenuRepository>(
-      // MenuScreen resolves its repository from the tree; these tests care
-      // about navigation, not about what the menu contains.
-      create: (_) => FakeMenuRepository(),
+    // Screens resolve their repositories from the tree; these tests care about
+    // navigation, not about what the menu contains.
+    child: MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<MenuRepository>(create: (_) => FakeMenuRepository()),
+        RepositoryProvider<AdminMenuRepository>(
+          create: (_) => FakeAdminMenuRepository(),
+        ),
+      ],
       child: MaterialApp(theme: theme, home: home),
     ),
   );
@@ -221,7 +228,18 @@ void main() {
             BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.admin)),
             BlocProvider(create: (_) => CartCubit()),
           ],
-          child: MaterialApp(theme: AppTheme.light, home: const AdminShell()),
+          // The Products tab reads the admin menu from the tree.
+          child: MultiRepositoryProvider(
+            providers: [
+              RepositoryProvider<MenuRepository>(
+                create: (_) => FakeMenuRepository(),
+              ),
+              RepositoryProvider<AdminMenuRepository>(
+                create: (_) => FakeAdminMenuRepository(),
+              ),
+            ],
+            child: MaterialApp(theme: AppTheme.light, home: const AdminShell()),
+          ),
         ),
       );
       await tester.pump(const Duration(seconds: 2));

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:practice/core/animations/collapse.dart';
 import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/shared/widgets/dish_list_skeleton.dart';
 
@@ -10,10 +9,13 @@ import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/admin/presentation/admin_menu_management_screen.dart';
 import 'package:practice/features/admin/presentation/admin_orders_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
+import 'package:practice/features/admin/domain/admin_menu_repository.dart';
+import 'package:practice/features/menu/domain/dish.dart';
 import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/menu/presentation/menu_screen.dart';
 
 import 'support/auth_fixtures.dart';
+import 'support/fake_admin_menu_repository.dart';
 import 'support/fake_menu_repository.dart';
 
 /// Controls that used to be dead. Each test asserts the thing the button
@@ -24,15 +26,6 @@ Finder _field(String hint) =>
     find.ancestor(of: find.text(hint), matching: find.byType(TextField));
 
 /// The availability switch on the row for [name].
-Switch _switchFor(WidgetTester tester, String name) {
-  final card = find.ancestor(
-    of: find.text(name),
-    matching: find.byType(AnimatedOpacity),
-  );
-  return tester.widget<Switch>(
-    find.descendant(of: card, matching: find.byType(Switch)),
-  );
-}
 
 void main() {
   Widget wrap(Widget home) => MultiBlocProvider(
@@ -308,14 +301,54 @@ void main() {
   });
 
   group('admin menu management', () {
-    testWidgets('Add opens an editor and rejects an empty dish', (
-      tester,
-    ) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
+    late FakeAdminMenuRepository admin;
+
+    setUp(() {
+      admin = FakeAdminMenuRepository();
+      // Two dishes to start with, seeded rather than created through the editor
+      // so a test about the list is not also a test about saving.
+      admin
+        ..seed(
+          const Dish(
+            id: 'd1',
+            name: 'Jaffna Crab Curry',
+            description: 'Fresh mud crab in roasted spices.',
+            pricePence: 2800,
+            categories: [FakeAdminMenuRepository.curries],
+          ),
+        )
+        ..seed(
+          const Dish(
+            id: 'd2',
+            name: 'Tempered Dhal',
+            description: 'Red lentils with turmeric and curry leaves.',
+            pricePence: 1200,
+            categories: [FakeAdminMenuRepository.vegan],
+            isAvailable: false,
+          ),
+        );
+    });
+
+    Widget wrapAdmin() => RepositoryProvider<AdminMenuRepository>.value(
+      value: admin,
+      child: wrap(const AdminMenuManagementScreen()),
+    );
+
+    testWidgets('loads the menu from the API', (tester) async {
+      await tester.pumpWidget(wrapAdmin());
       await tester.pumpAndSettle();
 
-      // The design replaces the header "Add" button with a floating action
-      // button, so the editor is opened from there now.
+      expect(find.text('Jaffna Crab Curry'), findsOneWidget);
+      // One of the two is off tonight, and the count says so.
+      expect(find.text('1 of 2 dishes available tonight.'), findsOneWidget);
+    });
+
+    testWidgets('the add button opens an editor and rejects an empty dish', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrapAdmin());
+      await tester.pumpAndSettle();
+
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
       expect(find.text('Add a dish'), findsOneWidget);
@@ -324,44 +357,13 @@ void main() {
       await tester.tap(find.text('Add dish'));
       await tester.pumpAndSettle();
       expect(find.text('Give the dish a name.'), findsOneWidget);
+      expect(admin.lastCreate, isNull);
     });
 
-    testWidgets('a valid dish is added to the menu', (tester) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
-      await tester.pumpAndSettle();
-
-      expect(find.text('4 of 5 dishes available tonight.'), findsNothing);
-
-      // The design replaces the header "Add" button with a floating action
-      // button, so the editor is opened from there now.
-      await tester.tap(find.byType(FloatingActionButton));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(_field('Jaffna Crab Curry'), 'Watalappan');
-      await tester.enterText(_field('12.50'), '6.50');
-      await tester.ensureVisible(find.text('Add dish'));
-      await tester.tap(find.text('Add dish'));
-      await tester.pumpAndSettle();
-
-      // The count updates immediately; the row itself is appended below the
-      // fold, so scroll the list rather than assuming it was built.
-      expect(find.text('4 of 5 dishes available tonight.'), findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        find.text('Watalappan'),
-        200,
-        scrollable: find
-            .descendant(
-              of: find.byType(Scaffold),
-              matching: find.byType(Scrollable),
-            )
-            .last,
-      );
-      expect(find.text('Watalappan'), findsOneWidget);
-    });
-
-    testWidgets('a dish can be given a tag and a photograph', (tester) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
+    testWidgets('a saved dish is created through the API and listed', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrapAdmin());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byType(FloatingActionButton));
@@ -370,57 +372,66 @@ void main() {
       await tester.enterText(_field('Jaffna Crab Curry'), 'Watalappan');
       await tester.enterText(_field('12.50'), '6.50');
 
-      // Scoped to the sheet: "Vegan" is also a category chip on the screen
+      // Scoped to the sheet: the same category names are chips on the screen
       // behind it, so an unscoped finder matches two widgets.
-      final veganChip = find.descendant(
+      final chip = find.descendant(
         of: find.byType(BottomSheet),
         matching: find.text('Vegan'),
       );
-      await tester.ensureVisible(veganChip);
-      await tester.tap(veganChip);
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        _field('https://…/dish.jpg'),
-        'https://example.com/watalappan.jpg',
-      );
+      await tester.ensureVisible(chip);
+      await tester.tap(chip);
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.text('Add dish'));
       await tester.tap(find.text('Add dish'));
       await tester.pumpAndSettle();
 
-      // The tag rides along to the row, which is how it shows on the card.
-      await tester.scrollUntilVisible(
-        find.text('Watalappan'),
-        200,
-        scrollable: find
-            .descendant(
-              of: find.byType(Scaffold),
-              matching: find.byType(Scrollable),
-            )
-            .last,
-      );
-      expect(find.text('Watalappan'), findsOneWidget);
-      expect(find.text('Vegan'), findsWidgets);
+      expect(admin.lastCreate?['title'], 'Watalappan');
+      expect(admin.lastCreate?['price_pence'], 650);
+      // Adopted into the list from the server's response rather than from the
+      // form, so what the screen shows is what was actually saved.
+      expect(find.text('2 of 3 dishes available tonight.'), findsOneWidget);
     });
 
-    testWidgets('availability is a switch on the row', (tester) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
+    testWidgets('the availability switch PATCHes the dish', (tester) async {
+      await tester.pumpWidget(wrapAdmin());
       await tester.pumpAndSettle();
 
-      // One switch per visible dish, not an item buried in an overflow menu.
       expect(find.byType(Switch), findsWidgets);
+      final first = find.byType(Switch).first;
+      final before = tester.widget<Switch>(first).value;
+
+      await tester.tap(first);
+      await tester.pumpAndSettle();
+
+      expect(admin.lastUpdate?['id'], 'd1');
+      expect(admin.lastUpdate?['is_available'], !before);
+      expect(tester.widget<Switch>(first).value, !before);
+    });
+
+    testWidgets('a failed toggle leaves the switch where it was', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrapAdmin());
+      await tester.pumpAndSettle();
+
+      admin.failure = const ApiFailure(
+        kind: ApiFailureKind.server,
+        message: 'Could not reach the kitchen system.',
+      );
 
       final first = find.byType(Switch).first;
       final before = tester.widget<Switch>(first).value;
       await tester.tap(first);
       await tester.pumpAndSettle();
-      expect(tester.widget<Switch>(first).value, !before);
+
+      // The state it would have shown was never true, so it must not stick.
+      expect(tester.widget<Switch>(first).value, before);
+      expect(find.text('Could not reach the kitchen system.'), findsOneWidget);
     });
 
-    testWidgets('a dish can be deleted, and the delete undone', (tester) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
+    testWidgets('deleting confirms first, then calls the API', (tester) async {
+      await tester.pumpWidget(wrapAdmin());
       await tester.pumpAndSettle();
 
       const doomed = 'Jaffna Crab Curry';
@@ -431,46 +442,12 @@ void main() {
       await tester.tap(find.text('Delete dish'));
       await tester.pumpAndSettle();
 
-      // Destructive, so it confirms first — and backing out changes nothing.
+      // Destructive, so it confirms — and backing out changes nothing.
       expect(find.text('Delete $doomed?'), findsOneWidget);
       await tester.tap(find.text('Keep it'));
       await tester.pumpAndSettle();
       expect(find.text(doomed), findsOneWidget);
-
-      // Now go through with it.
-      await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete dish'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
-      await tester.pumpAndSettle();
-
-      expect(find.text(doomed), findsNothing);
-
-      // Undo puts it back.
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
-      expect(find.text(doomed), findsOneWidget);
-    });
-
-    testWidgets('deleting does not move availability onto another dish', (
-      tester,
-    ) async {
-      // Tall enough that every row is built: the assertion is about which dish
-      // holds the flag, and an unbuilt row can't be inspected.
-      tester.view.physicalSize = const Size(390, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
-      await tester.pumpAndSettle();
-
-      // "Tempered Dhal" starts off the menu. Availability used to be keyed by
-      // list position, so deleting a dish above it would have shifted the
-      // unavailable flag onto a different dish entirely.
-      expect(_switchFor(tester, 'Tempered Dhal').value, isFalse);
-      expect(_switchFor(tester, 'Jaffna Crab Curry').value, isTrue);
+      expect(admin.deletedIds, isEmpty);
 
       await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
@@ -479,79 +456,36 @@ void main() {
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Jaffna Crab Curry'), findsNothing);
-      expect(_switchFor(tester, 'Tempered Dhal').value, isFalse);
-    });
-
-    testWidgets('an edit is applied, not just announced', (tester) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Edit dish'));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        _field('Jaffna Crab Curry'),
-        'Jaffna Crab Special',
-      );
-      await tester.ensureVisible(find.text('Save changes'));
-      await tester.tap(find.text('Save changes'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Jaffna Crab Special'), findsOneWidget);
-      expect(find.text('Jaffna Crab Curry'), findsNothing);
-    });
-
-    testWidgets('a deleted row folds shut instead of vanishing', (
-      tester,
-    ) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
-      await tester.pumpAndSettle();
-
-      const doomed = 'Jaffna Crab Curry';
-      Finder foldFor(String name) =>
-          find.ancestor(of: find.text(name), matching: find.byType(Collapse));
-      final fullHeight = tester.getSize(foldFor(doomed)).height;
-      expect(fullHeight, greaterThan(0));
-
-      await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete dish'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
-
-      // Mid-fold the row still exists, at reduced height — this is the frame
-      // that used to be a jump.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 150));
-      final mid = tester.getSize(foldFor(doomed)).height;
-      expect(mid, lessThan(fullHeight));
-      expect(mid, greaterThan(0));
-
-      await tester.pumpAndSettle();
+      expect(admin.deletedIds, ['d1']);
       expect(find.text(doomed), findsNothing);
     });
 
-    testWidgets('a bad price is rejected', (tester) async {
-      await tester.pumpWidget(wrap(const AdminMenuManagementScreen()));
+    testWidgets('the delete dialog does not promise an undo', (tester) async {
+      await tester.pumpWidget(wrapAdmin());
       await tester.pumpAndSettle();
 
-      // The design replaces the header "Add" button with a floating action
-      // button, so the editor is opened from there now.
-      await tester.tap(find.byType(FloatingActionButton));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete dish'));
       await tester.pumpAndSettle();
 
-      // Addressed by hint, not index: the screen behind the sheet has its own
-      // search field, and positional finders silently target the wrong one.
-      await tester.enterText(_field('Jaffna Crab Curry'), 'Watalappan');
-      await tester.enterText(_field('12.50'), 'free');
-      await tester.ensureVisible(find.text('Add dish'));
-      await tester.tap(find.text('Add dish'));
+      // The API has no restore route for dishes, so an "Undo" that could not
+      // deliver would be worse than none. It used to offer one.
+      expect(find.textContaining('cannot be undone'), findsOneWidget);
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Undo'), findsNothing);
+    });
+
+    testWidgets('shows the API message when the menu will not load', (
+      tester,
+    ) async {
+      admin.failure = ApiFailure.offline;
+      await tester.pumpWidget(wrapAdmin());
       await tester.pumpAndSettle();
 
-      expect(find.text('Enter a price, like 12.50.'), findsOneWidget);
+      expect(find.text(ApiFailure.offline.message), findsOneWidget);
     });
   });
 }

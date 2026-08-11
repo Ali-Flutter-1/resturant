@@ -20,8 +20,16 @@ enum ApiFailureKind {
   /// The server could not be reached, or hung up.
   unreachable,
 
-  /// 401/403 — signed out, or not allowed.
+  /// 401 — signed out, or the session expired.
   unauthorised,
+
+  /// 403 — signed in, but this role may not do it.
+  ///
+  /// Deliberately not folded into [unauthorised]. A customer reaching an
+  /// admin route is not a session problem, and telling them to sign in again
+  /// sends them round a loop that cannot help: signing in again produces the
+  /// same role and the same refusal.
+  forbidden,
 
   /// 404.
   notFound,
@@ -47,6 +55,7 @@ class ApiFailure implements Exception {
     required this.kind,
     required this.message,
     this.statusCode,
+    this.code,
     this.fieldErrors = const {},
   });
 
@@ -56,6 +65,14 @@ class ApiFailure implements Exception {
   final String message;
 
   final int? statusCode;
+
+  /// The API's machine-readable reason, e.g. `ORDER_TOO_LATE_TO_CANCEL` or
+  /// `DISH_SOLD_OUT`.
+  ///
+  /// [message] is what a person reads; this is what code branches on, for the
+  /// handful of cases where the app should do something specific rather than
+  /// just report. Never shown.
+  final String? code;
 
   /// Per-field complaints, keyed by the API's field name, for forms that can
   /// point at the offending input rather than showing one message at the top.
@@ -73,6 +90,8 @@ class ApiFailure implements Exception {
   };
 
   /// True when the session is gone and the user must sign in again.
+  ///
+  /// 401 only. A 403 means the account is fine and the *role* is not allowed.
   bool get requiresSignIn => kind == ApiFailureKind.unauthorised;
 
   /// The offline case, raised before a request is attempted.
@@ -95,6 +114,7 @@ class ApiFailure implements Exception {
 
     final serverMessage = _messageFrom(envelope);
     final fields = _fieldErrorsFrom(envelope);
+    final code = _codeFrom(envelope);
 
     final kind = switch (error.type) {
       DioExceptionType.connectionTimeout ||
@@ -114,13 +134,15 @@ class ApiFailure implements Exception {
       kind: resolved,
       message: serverMessage ?? _fallbackMessage(resolved),
       statusCode: status,
+      code: code,
       fieldErrors: fields,
     );
   }
 
   static ApiFailureKind _kindForStatus(int? status) => switch (status) {
     null => ApiFailureKind.unknown,
-    401 || 403 => ApiFailureKind.unauthorised,
+    401 => ApiFailureKind.unauthorised,
+    403 => ApiFailureKind.forbidden,
     404 => ApiFailureKind.notFound,
     409 => ApiFailureKind.conflict,
     422 || 400 => ApiFailureKind.invalid,
@@ -140,6 +162,7 @@ class ApiFailure implements Exception {
           'moment.',
     ApiFailureKind.unauthorised =>
       'Your session has expired. Please sign in again.',
+    ApiFailureKind.forbidden => "You don't have permission to do that.",
     ApiFailureKind.notFound => "We couldn't find that.",
     ApiFailureKind.conflict =>
       'Someone just got there first. Please choose something else.',
@@ -150,6 +173,15 @@ class ApiFailure implements Exception {
       'The restaurant’s server is having trouble. Please try again shortly.',
     ApiFailureKind.unknown => 'Something went wrong. Please try again.',
   };
+
+  /// The API's `error.code`, where it sent one.
+  static String? _codeFrom(Object? body) {
+    if (body is! Map) return null;
+    final error = body['error'];
+    if (error is! Map) return null;
+    final code = error['code'];
+    return code is String && code.isNotEmpty ? code : null;
+  }
 
   /// Pulls `message` out of the API's `{success, message, data}` envelope.
   static String? _messageFrom(Object? body) {
@@ -170,15 +202,34 @@ class ApiFailure implements Exception {
     return null;
   }
 
-  /// FastAPI reports validation problems as
-  /// `detail: [{loc: [body, email], msg: "..."}]`. Flattening that to
-  /// `{email: "..."}` lets a form mark the field itself.
+  /// Per-field complaints, flattened to `{field: message}` so a form can mark
+  /// the offending input rather than showing one message at the top.
+  ///
+  /// This API sends them as `error.details: [{field, message}]`. The app was
+  /// only reading FastAPI's raw `detail: [{loc, msg}]` shape, which this
+  /// backend never emits — so every field error was silently dropped and a
+  /// rejected sign-up showed one sentence at the top with no indication of
+  /// which box was wrong. Both shapes are read now: the API's own first, the
+  /// framework's as a fallback for anything not wrapped by the envelope.
   static Map<String, String> _fieldErrorsFrom(Object? body) {
     if (body is! Map) return const {};
-    final detail = body['detail'];
-    if (detail is! List) return const {};
-
     final errors = <String, String>{};
+
+    final error = body['error'];
+    if (error is Map && error['details'] is List) {
+      for (final entry in error['details'] as List) {
+        if (entry is! Map) continue;
+        final field = entry['field'];
+        final message = entry['message'];
+        if (field is String && field.isNotEmpty && message is String) {
+          errors[field] = message;
+        }
+      }
+      if (errors.isNotEmpty) return errors;
+    }
+
+    final detail = body['detail'];
+    if (detail is! List) return errors;
     for (final entry in detail) {
       if (entry is! Map) continue;
       final loc = entry['loc'];

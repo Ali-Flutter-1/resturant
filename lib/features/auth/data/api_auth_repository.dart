@@ -94,7 +94,9 @@ class ApiAuthRepository implements AuthRepository {
     final refresh = _tokens.refreshToken;
     try {
       if (refresh != null) {
-        await _client.object(
+        // `send`, not `object`: this route answers `{success, message, data:
+        // null}`, and asking for an object would throw on the null.
+        await _client.send(
           ApiConstants.logout,
           method: 'POST',
           body: {'refresh_token': refresh},
@@ -107,15 +109,38 @@ class ApiAuthRepository implements AuthRepository {
     }
   }
 
+  /// Closes the account, then forgets the session.
+  ///
+  /// Unlike [logout], a failure here is *not* swallowed: if the server refused
+  /// to delete the account, clearing the tokens locally would leave the user
+  /// signed out of an account that still exists — and convinced it was gone.
+  /// The error propagates so the screen can say what happened.
+  @override
+  Future<void> deleteAccount(String password) async {
+    await _client.send(
+      ApiConstants.profile,
+      method: 'DELETE',
+      // A body on DELETE is unusual but this is what the endpoint documents,
+      // and it is the right call: re-authenticating is what separates "close my
+      // account" from a mis-tap.
+      body: {'password': password},
+    );
+    await _tokens.clear();
+  }
+
   /// Always reports success, whether or not the address is registered — the API
   /// is deliberately silent about which addresses exist, and the UI must not
   /// undo that by saying "no such account".
   @override
   Future<void> requestPasswordReset(String email) async {
-    await _client.object(
+    // `send`, not `object`. This route returns `{success, message, data: null}`
+    // — there is nothing to send back — and `object` demands a Map, so it threw
+    // "The server sent something unexpected" on every *successful* request. The
+    // email went out and the app reported a failure.
+    await _client.send(
       ApiConstants.forgotPassword,
       method: 'POST',
-      body: {'email': email.trim()},
+      body: {'email': email.trim().toLowerCase()},
     );
   }
 
@@ -124,10 +149,11 @@ class ApiAuthRepository implements AuthRepository {
     required String token,
     required String newPassword,
   }) async {
-    await _client.object(
+    // Also a null-data route — see [requestPasswordReset].
+    await _client.send(
       ApiConstants.resetPassword,
       method: 'POST',
-      body: {'token': token, 'new_password': newPassword},
+      body: {'token': token.trim(), 'new_password': newPassword},
     );
   }
 

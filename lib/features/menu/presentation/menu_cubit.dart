@@ -40,16 +40,18 @@ class MenuState extends Equatable {
   List<Dish> get visible {
     final needle = query.trim().toLowerCase();
     return dishes.where((dish) {
+      // A dish can sit in several sections, so this is a membership test rather
+      // than an equality one.
       final inCategory =
           categorySlug == null ||
-          categories
-                  .firstWhere(
-                    (c) => c.slug == categorySlug,
-                    orElse: () =>
-                        const MenuCategory(id: '', slug: '', name: ''),
-                  )
-                  .id ==
-              dish.categoryId;
+          dish.categoryIds.contains(
+            categories
+                .firstWhere(
+                  (c) => c.slug == categorySlug,
+                  orElse: () => const MenuCategory(id: '', slug: '', name: ''),
+                )
+                .id,
+          );
 
       final matches =
           needle.isEmpty ||
@@ -103,9 +105,17 @@ class MenuState extends Equatable {
 /// `category_id`: without the sections, a category chip has nothing to match
 /// against. Fetching them in parallel costs one round trip rather than two.
 class MenuCubit extends Cubit<MenuState> {
-  MenuCubit({required MenuRepository repository, String? initialQuery})
-    : _repository = repository,
-      super(MenuState(query: initialQuery ?? ''));
+  MenuCubit({
+    required MenuRepository repository,
+    String? initialQuery,
+    String? initialCategorySlug,
+  }) : _repository = repository,
+       super(
+         MenuState(
+           query: initialQuery ?? '',
+           categorySlug: initialCategorySlug,
+         ),
+       );
 
   final MenuRepository _repository;
 

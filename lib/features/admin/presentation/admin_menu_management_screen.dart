@@ -1,72 +1,59 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/animations/collapse.dart';
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../shared/preview/sample_content.dart';
-import '../../../shared/widgets/app_surface.dart';
-import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/admin_nav.dart';
+import '../../../shared/widgets/api_error_view.dart';
+import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/app_sheet.dart';
+import '../../../shared/widgets/app_surface.dart';
 import '../../../shared/widgets/dish_image.dart';
+import '../../../shared/widgets/dish_list_skeleton.dart';
+import '../../menu/domain/dish.dart';
+import '../domain/admin_menu_repository.dart';
+import 'admin_menu_cubit.dart';
 import 'dish_editor_sheet.dart';
 
 /// What's on and what's off tonight.
 ///
-/// Transcribed from "Admin Mobile: Menu Management (Polished)" (`1:3368`) —
-/// but from the frame's *metadata* only, because the Figma MCP quota allows no
-/// more than a call or two on this plan. Layout, geometry and copy are the
-/// design's; every colour, weight and radius is this app's existing token,
-/// inferred rather than read off the frame. Treat the styling as unverified.
+/// Layout transcribed from "Admin Mobile: Menu Management (Polished)"
+/// (`1:3368`) — 44pt search row, 38pt category pills, 114pt list items on a
+/// 32pt rhythm, 80pt thumbnail, 46pt floating action button.
 ///
-/// Geometry taken from the frame: 44pt search row, 38pt category pills, 114pt
-/// list items on a 32pt rhythm, 80pt thumbnail, 46pt floating action button.
-class AdminMenuManagementScreen extends StatefulWidget {
+/// Now backed by the API rather than by preview content: categories and dishes
+/// come from `/admin/categories` and `/admin/dishes`, the availability switch
+/// PATCHes the dish, and delete DELETEs it. Every mutation adopts what the
+/// server returned instead of updating locally and hoping — an availability
+/// switch that flips on a failed request leaves the kitchen believing a dish is
+/// off the menu while customers keep ordering it.
+class AdminMenuManagementScreen extends StatelessWidget {
   const AdminMenuManagementScreen({super.key});
 
   @override
-  State<AdminMenuManagementScreen> createState() =>
-      _AdminMenuManagementScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) =>
+          AdminMenuCubit(repository: context.read<AdminMenuRepository>())
+            ..load(),
+      child: const _AdminMenuView(),
+    );
+  }
 }
 
-class _AdminMenuManagementScreenState extends State<AdminMenuManagementScreen> {
-  /// Every piece of per-dish state is keyed by the dish's *original* name
-  /// rather than its position.
-  ///
-  /// Position was fine while dishes could only be appended, but deleting one
-  /// shifts every index after it — which would silently move "unavailable"
-  /// onto a different dish. The original name also survives a rename, so an
-  /// edit cannot detach a dish from its own state.
-  ///
-  /// Seeded by name rather than by `SampleContent.menu[3]`: an index into a
-  /// list this screen doesn't own throws the moment that list gets shorter,
-  /// whereas a name that no longer exists simply seeds nothing. `late` is
-  /// unnecessary here — the initialiser touches only statics, never `this`.
-  final _unavailable = <String>{'Tempered Dhal'};
+class _AdminMenuView extends StatefulWidget {
+  const _AdminMenuView();
 
-  /// Dishes added during this session, kept beside the const preview list.
-  final _added = <SampleDish>[];
+  @override
+  State<_AdminMenuView> createState() => _AdminMenuViewState();
+}
 
-  /// Dishes removed this session. The preview list is const, so removal is
-  /// recorded here rather than by mutating it — which is also what makes undo
-  /// a one-line operation.
-  final _deleted = <String>{};
-
-  /// Edits made this session, against the dish's original name.
-  final _edits = <String, SampleDish>{};
-
-  /// The row currently folding shut. It is still in [_dishes] while it
-  /// animates — dropping it from state first is exactly the jump the fold
-  /// exists to avoid.
-  String? _collapsing;
-
-  int _category = 0;
+class _AdminMenuViewState extends State<_AdminMenuView> {
   final _search = TextEditingController();
-  String _query = '';
 
   @override
   void dispose() {
@@ -74,64 +61,56 @@ class _AdminMenuManagementScreenState extends State<AdminMenuManagementScreen> {
     super.dispose();
   }
 
-  /// The menu as it now stands: preview content plus additions, with deletions
-  /// removed and edits applied.
-  List<({String key, SampleDish dish})> get _dishes => [
-    for (final dish in [...SampleContent.menu, ..._added])
-      if (!_deleted.contains(dish.name))
-        (key: dish.name, dish: _edits[dish.name] ?? dish),
-  ];
+  Future<void> _openEditor({Dish? dish}) async {
+    final cubit = context.read<AdminMenuCubit>();
+    final saved = await showDishEditor(
+      context: context,
+      repository: context.read<AdminMenuRepository>(),
+      categories: cubit.state.categories,
+      dish: dish,
+    );
+    if (saved == null || !mounted) return;
 
-  /// Filtering runs here rather than in the list builder so the count in the
-  /// subtitle and the rows below can never disagree.
-  List<({String key, SampleDish dish})> get _visible {
-    final label = SampleContent.menuFilters[_category].toLowerCase();
-    final query = _query.trim().toLowerCase();
-
-    return _dishes.where((entry) {
-      final dish = entry.dish;
-      final matchesQuery =
-          query.isEmpty ||
-          dish.name.toLowerCase().contains(query) ||
-          dish.description.toLowerCase().contains(query);
-
-      final matchesCategory = switch (label) {
-        'vegan' => dish.tag?.toLowerCase() == 'vegan',
-        'curry dishes' => dish.name.toLowerCase().contains('curry'),
-        'main dishes' => dish.tag?.toLowerCase() != 'vegan',
-        _ => true,
-      };
-
-      return matchesQuery && matchesCategory;
-    }).toList();
+    cubit.adopt(saved);
+    // A category created inside the editor arrives attached to the dish, which
+    // is the only place its id is known — so the chip strip learns about it from
+    // here rather than by reloading the whole menu.
+    for (final category in saved.categories) {
+      cubit.adoptCategory(category);
+    }
+    showAppSnack(
+      context,
+      dish == null
+          ? '${saved.name} added to the menu.'
+          : '${saved.name} updated.',
+    );
   }
 
-  Future<void> _editDish(String key, SampleDish dish) async {
-    final result = await showDishEditor(context: context, dish: dish);
-    if (result == null || !mounted) return;
-    // The edit is now applied rather than merely announced: this used to show
-    // "updated" and change nothing.
-    setState(() => _edits[key] = result);
-    showAppSnack(context, '${result.name} updated.');
-  }
-
-  Future<void> _addDish() async {
-    final result = await showDishEditor(context: context);
-    if (result != null && mounted) {
-      setState(() => _added.add(result));
-      showAppSnack(context, '${result.name} added to the menu.');
+  Future<void> _setAvailability(Dish dish, bool value) async {
+    AppHaptics.toggle();
+    final error = await context.read<AdminMenuCubit>().setAvailability(
+      dish.id,
+      value,
+    );
+    if (error != null && mounted) {
+      AppHaptics.failure();
+      showAppSnack(context, error, isError: true);
     }
   }
 
-  /// Confirms, then removes — with undo, because a mistake here takes a dish
-  /// off the menu mid-service.
-  Future<void> _deleteDish(String key, SampleDish dish) async {
+  /// Confirms, then deletes.
+  ///
+  /// No undo, and the dialog says so: the API has no restore route for dishes,
+  /// and a snackbar offering "Undo" that could not deliver it would be worse
+  /// than not offering one.
+  Future<void> _deleteDish(Dish dish) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Delete ${dish.name}?'),
         content: const Text(
-          'It comes off the menu straight away. You can undo this.',
+          'It comes off the menu straight away and this cannot be undone. '
+          'Past orders keep their own copy, so order history is unaffected.',
         ),
         actions: [
           TextButton(
@@ -148,56 +127,24 @@ class _AdminMenuManagementScreenState extends State<AdminMenuManagementScreen> {
         ],
       ),
     );
-
     if (confirmed != true || !mounted) return;
 
     AppHaptics.commit();
-    // Start the fold. The row leaves state in `_finishDelete`, once the gap
-    // has actually closed.
-    setState(() => _collapsing = key);
+    final error = await context.read<AdminMenuCubit>().deleteDish(dish.id);
+    if (!mounted) return;
 
-    showAppSnack(
-      context,
-      '${dish.name} deleted.',
-      action: SnackBarAction(
-        label: 'Undo',
-        onPressed: () {
-          if (!mounted) return;
-          // Works whether the fold is still running or already finished: one
-          // reopens the row, the other puts it back.
-          setState(() {
-            _collapsing = null;
-            _deleted.remove(key);
-          });
-        },
-      ),
-    );
-  }
-
-  void _finishDelete(String key) {
-    if (!mounted || _collapsing != key) return;
-    setState(() {
-      _deleted.add(key);
-      _collapsing = null;
-    });
-  }
-
-  void _setAvailability(String key, {required bool available}) {
-    setState(() {
-      available ? _unavailable.remove(key) : _unavailable.add(key);
-    });
+    if (error != null) {
+      AppHaptics.failure();
+      showAppSnack(context, error, isError: true);
+    } else {
+      showAppSnack(context, '${dish.name} deleted.');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final visible = _visible;
-    final available = _dishes.length - _unavailable.length;
-
     return Scaffold(
       appBar: buildAdminAppBar(context),
-      // The frame puts a 46pt FAB at the bottom right rather than an "Add"
-      // button in the header, which is where this screen had it.
-      //
       // Lifted clear of the tab bar. Scaffold anchors a FAB to its own bottom
       // edge, and the shell's bar is an overlay in a Stack above this screen
       // rather than a `Scaffold.bottomNavigationBar` — so the FAB sat directly
@@ -211,75 +158,99 @@ class _AdminMenuManagementScreenState extends State<AdminMenuManagementScreen> {
           child: FloatingActionButton(
             onPressed: () {
               AppHaptics.commit();
-              _addDish();
+              _openEditor();
             },
             tooltip: 'Add a dish to the menu',
             child: const Icon(Icons.add, size: AppIconSize.xl),
           ),
         ),
       ),
-      body: Column(
-        children: [
-          _SearchAndFilter(
-            controller: _search,
-            onChanged: (value) => setState(() => _query = value),
-          ).reveal(),
-          const SizedBox(height: AppSpacing.x4),
-          _CategoryStrip(
-            selected: _category,
-            onSelected: (index) => setState(() => _category = index),
-          ).revealItem(1),
-          const SizedBox(height: AppSpacing.x4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '$available of ${_dishes.length} dishes available tonight.',
-                    style: context.texts.bodySmall,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      body: BlocBuilder<AdminMenuCubit, AdminMenuState>(
+        builder: (context, state) {
+          final cubit = context.read<AdminMenuCubit>();
+
+          if (state.status == AdminMenuStatus.loading) {
+            return const DishListSkeleton(rows: 4, imageHeight: 80);
+          }
+          if (state.status == AdminMenuStatus.failure &&
+              state.failure != null) {
+            return ApiErrorView(
+              failure: state.failure!,
+              onRetry: () => cubit.load(),
+            );
+          }
+
+          final visible = state.visible;
+
+          return Column(
+            children: [
+              _SearchAndFilter(
+                controller: _search,
+                onChanged: cubit.search,
+              ).reveal(),
+              const SizedBox(height: AppSpacing.x4),
+              _CategoryStrip(
+                categories: state.categories,
+                selectedId: state.categoryId,
+                onSelected: cubit.selectCategory,
+              ).revealItem(1),
+              const SizedBox(height: AppSpacing.x4),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.gutter,
                 ),
-              ],
-            ),
-          ).revealItem(2),
-          const SizedBox(height: AppSpacing.x3),
-          Expanded(
-            child: visible.isEmpty
-                ? const _NoDishes().reveal()
-                : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      AppSpacing.gutter,
-                      0,
-                      AppSpacing.gutter,
-                      // Clear the FAB as well as the tab bar.
-                      AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${state.availableCount} of ${state.dishes.length} '
+                        'dishes available tonight.',
+                        style: context.texts.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    itemCount: visible.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(height: AppSpacing.x8),
-                    itemBuilder: (context, position) {
-                      final entry = visible[position];
-                      return Collapse(
-                        collapsed: _collapsing == entry.key,
-                        onCollapsed: () => _finishDelete(entry.key),
-                        child: _DishCard(
-                          // Keyed so a delete or a rename can't hand this card's
-                          // state to the dish that took its place.
-                          key: ValueKey(entry.key),
-                          dish: entry.dish,
-                          available: !_unavailable.contains(entry.key),
-                          onAvailabilityChanged: (value) =>
-                              _setAvailability(entry.key, available: value),
-                          onEdit: () => _editDish(entry.key, entry.dish),
-                          onDelete: () => _deleteDish(entry.key, entry.dish),
+                  ],
+                ),
+              ).revealItem(2),
+              const SizedBox(height: AppSpacing.x3),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => cubit.load(silent: true),
+                  child: visible.isEmpty
+                      ? _EmptyMenu(filtered: state.isFilteredEmpty)
+                      : ListView.separated(
+                          padding: EdgeInsets.fromLTRB(
+                            AppSpacing.gutter,
+                            0,
+                            AppSpacing.gutter,
+                            // Clear the FAB as well as the tab bar.
+                            AppSpacing.x12 +
+                                MediaQuery.paddingOf(context).bottom,
+                          ),
+                          itemCount: visible.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: AppSpacing.x8),
+                          itemBuilder: (context, position) {
+                            final dish = visible[position];
+                            return _DishCard(
+                              // Keyed by id so a delete or a rename cannot hand
+                              // this card's state to the dish that took its
+                              // place.
+                              key: ValueKey(dish.id),
+                              dish: dish,
+                              busy: state.busyIds.contains(dish.id),
+                              onAvailabilityChanged: (value) =>
+                                  _setAvailability(dish, value),
+                              onEdit: () => _openEditor(dish: dish),
+                              onDelete: () => _deleteDish(dish),
+                            ).revealItem(position, duration: Motion.fast);
+                          },
                         ),
-                      ).revealItem(position, duration: Motion.fast);
-                    },
-                  ),
-          ),
-        ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -343,14 +314,20 @@ class _SearchAndFilter extends StatelessWidget {
   }
 }
 
-/// The frame carries five category pills. Their labels are not recoverable
-/// from metadata — only their widths — so this uses the filter set already
-/// documented elsewhere in the app from the same design file.
+/// The frame's category pills, from the API rather than a hardcoded list.
+///
+/// "All" is prepended here rather than invented in the state: it is a view
+/// affordance, and a null selection already means every section.
 class _CategoryStrip extends StatelessWidget {
-  const _CategoryStrip({required this.selected, required this.onSelected});
+  const _CategoryStrip({
+    required this.categories,
+    required this.selectedId,
+    required this.onSelected,
+  });
 
-  final int selected;
-  final ValueChanged<int> onSelected;
+  final List<MenuCategory> categories;
+  final String? selectedId;
+  final ValueChanged<String?> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -359,15 +336,24 @@ class _CategoryStrip extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
-        itemCount: SampleContent.menuFilters.length,
+        itemCount: categories.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.x2),
         itemBuilder: (context, index) {
-          final isSelected = index == selected;
-
+          if (index == 0) {
+            return SelectableChip(
+              label: 'All',
+              selected: selectedId == null,
+              onSelected: () => onSelected(null),
+            );
+          }
+          final category = categories[index - 1];
           return SelectableChip(
-            label: SampleContent.menuFilters[index],
-            selected: isSelected,
-            onSelected: () => onSelected(index),
+            label: category.name,
+            selected: selectedId == category.id,
+            // Tapping the selected section clears it, which is the same gesture
+            // as tapping "All" and is what a chip row is expected to do.
+            onSelected: () =>
+                onSelected(selectedId == category.id ? null : category.id),
           );
         },
       ),
@@ -375,6 +361,7 @@ class _CategoryStrip extends StatelessWidget {
   }
 }
 
+/// What the overflow menu on a row offers.
 enum _DishAction { edit, delete }
 
 /// One dish, laid out as the frame's 114pt item: 80pt thumbnail, then name and
@@ -385,14 +372,16 @@ class _DishCard extends StatelessWidget {
   const _DishCard({
     super.key,
     required this.dish,
-    required this.available,
+    required this.busy,
     required this.onAvailabilityChanged,
     required this.onEdit,
     required this.onDelete,
   });
 
-  final SampleDish dish;
-  final bool available;
+  final Dish dish;
+
+  /// True while this row's own request is in flight.
+  final bool busy;
   final ValueChanged<bool> onAvailabilityChanged;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -400,6 +389,7 @@ class _DishCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final available = dish.isAvailable;
 
     return AnimatedOpacity(
       duration: context.motion.fade(Motion.fast),
@@ -478,10 +468,9 @@ class _DishCard extends StatelessWidget {
                   // Shrink-wrapped so the switch doesn't claim a 48pt tap
                   // target's worth of extra width on a 320pt phone.
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  onChanged: (value) {
-                    AppHaptics.toggle();
-                    onAvailabilityChanged(value);
-                  },
+                  // Disabled mid-request, so a second flick can't queue a
+                  // contradictory PATCH behind the first.
+                  onChanged: busy ? null : onAvailabilityChanged,
                 ),
                 // Editing and deleting live behind the overflow. Deleting in
                 // particular should not be one stray tap away from a row the
@@ -497,6 +486,7 @@ class _DishCard extends StatelessWidget {
                       size: AppIconSize.lg,
                       color: context.surfaces.inkSoft,
                     ),
+                    enabled: !busy,
                     onSelected: (action) => switch (action) {
                       _DishAction.edit => onEdit(),
                       _DishAction.delete => onDelete(),
@@ -533,21 +523,25 @@ class _DishCard extends StatelessWidget {
 class _Tags extends StatelessWidget {
   const _Tags({required this.dish, required this.available});
 
-  final SampleDish dish;
+  final Dish dish;
   final bool available;
 
   @override
   Widget build(BuildContext context) {
-    final tag = dish.tag;
+    // The dish's sections, which is what the API actually carries — it has no
+    // dietary flags any more, so a "Vegan" pill would have nothing behind it.
+    // The first only: a dish in four sections would wrap the card to twice its
+    // height.
+    final section = dish.categories.isEmpty ? null : dish.categories.first.name;
 
-    // Both branches flexible: a tag like "Authentic Sri Lankan" and the
+    // Both branches flexible: a name like "Authentic Sri Lankan" and the
     // fallback label are each wider than this column gets on a 320pt phone.
     return Row(
       children: [
         Flexible(
-          child: tag != null
+          child: section != null
               ? AppChip(
-                  label: tag,
+                  label: section,
                   foreground: Theme.of(context).colorScheme.primary,
                   background: AppColors.crimson50,
                 )
@@ -562,8 +556,30 @@ class _Tags extends StatelessWidget {
 
 /// The design file has no empty state for any screen; this is invented, on the
 /// same reasoning as the one on the customer menu.
-class _NoDishes extends StatelessWidget {
-  const _NoDishes();
+class _EmptyMenu extends StatelessWidget {
+  const _EmptyMenu({required this.filtered});
+
+  /// True when a filter is hiding everything, rather than the menu being empty.
+  final bool filtered;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      // Scrollable so pull-to-refresh still works on an empty menu, which is
+      // exactly when someone will try it.
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
+        _EmptyBody(filtered: filtered),
+      ],
+    );
+  }
+}
+
+class _EmptyBody extends StatelessWidget {
+  const _EmptyBody({required this.filtered});
+
+  final bool filtered;
 
   @override
   Widget build(BuildContext context) {
@@ -574,19 +590,21 @@ class _NoDishes extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.search_off,
+              filtered ? Icons.search_off : Icons.restaurant_menu,
               size: AppIconSize.hero,
               color: context.surfaces.inkSoft,
             ),
             const SizedBox(height: AppSpacing.x4),
             Text(
-              'Nothing on this filter',
+              filtered ? 'Nothing on this filter' : 'No dishes yet',
               style: context.texts.headlineMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.x2),
             Text(
-              'Try another category, or clear the search.',
+              filtered
+                  ? 'Try another category, or clear the search.'
+                  : 'Tap the plus button to add the first one.',
               style: context.texts.bodyMedium,
               textAlign: TextAlign.center,
             ),

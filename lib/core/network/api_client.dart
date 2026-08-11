@@ -179,6 +179,71 @@ class ApiClient {
     }
   }
 
+  /// Uploads files as `multipart/form-data` and returns the envelope's `data`.
+  ///
+  /// Kept alongside [send] rather than folded into it: a multipart body is not a
+  /// JSON body, and giving [send] a second body type would mean every caller
+  /// reads a branch that only one of them uses. Everything else — the
+  /// connectivity pre-flight, the auth header, the 401 refresh, the failure
+  /// translation — is shared, because it all lives in the interceptors and the
+  /// catch below rather than in [send].
+  Future<Object?> upload(
+    String path, {
+    required String field,
+    required List<String> filePaths,
+    Map<String, dynamic>? query,
+  }) async {
+    if (!await _connectivity.isOnline) throw ApiFailure.offline;
+
+    try {
+      final form = FormData();
+      for (final filePath in filePaths) {
+        // Repeated entries under one field name, which is how a list of files is
+        // sent — `MapEntry`s rather than a map, because a map could only hold
+        // one.
+        form.files.add(MapEntry(field, await MultipartFile.fromFile(filePath)));
+      }
+
+      final response = await _dio.post<dynamic>(
+        path,
+        data: form,
+        queryParameters: query,
+      );
+      return _dataOf(response.data);
+    } on DioException catch (error) {
+      throw ApiFailure.fromDio(error);
+    } on ApiFailure {
+      rethrow;
+    } on Object catch (_) {
+      // A file that vanished between being picked and being read, most often.
+      // Reported like any other failure so the caller has one thing to catch.
+      throw const ApiFailure(
+        kind: ApiFailureKind.unknown,
+        message: 'That image could not be read. Try choosing it again.',
+      );
+    }
+  }
+
+  /// [upload] for endpoints returning a JSON array.
+  Future<List<Map<String, dynamic>>> uploadList(
+    String path, {
+    required String field,
+    required List<String> filePaths,
+  }) async {
+    final data = await upload(path, field: field, filePaths: filePaths);
+    final rows = data is Map && data['items'] is List ? data['items'] : data;
+    if (rows is! List) {
+      throw const ApiFailure(
+        kind: ApiFailureKind.unknown,
+        message: 'The server sent something unexpected. Please try again.',
+      );
+    }
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
   /// [send] for endpoints returning a JSON object.
   Future<Map<String, dynamic>> object(
     String path, {
