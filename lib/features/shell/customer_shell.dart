@@ -6,6 +6,7 @@ import '../../shared/preview/sample_content.dart';
 import '../menu/domain/dish.dart';
 import '../../shared/shell/tabbed_shell.dart';
 import '../about/presentation/about_contact_screen.dart';
+import '../auth/presentation/profile_screen.dart';
 import '../booking/presentation/book_table_screen.dart';
 import '../checkout/presentation/checkout_screen.dart';
 import '../discover/presentation/discover_screen.dart';
@@ -73,7 +74,8 @@ class CustomerShell extends StatelessWidget {
           icon: Icons.restaurant_outlined,
           selectedIcon: Icons.restaurant,
           builder: (context) => DiscoverScreen(
-            onOpenDish: (dish) => _openDish(context, dish),
+            // Adapted like the menu's: Discover now hands over an API dish.
+            onOpenDish: (dish) => _openDish(context, _asPreview(dish)),
             onOpenMenu: () => _openMenu(context),
             // Search and the filter button both open the full menu, which is
             // where filtering actually lives.
@@ -107,7 +109,14 @@ class CustomerShell extends StatelessWidget {
           sfSymbol: 'person',
           icon: Icons.person_outline,
           selectedIcon: Icons.person,
-          builder: (context) => const AboutContactScreen(),
+          builder: (context) => ProfileScreen(
+            // About-and-contact is pushed rather than being the tab itself: the
+            // tab is the person's account, and the contact form is one thing
+            // they might want from it.
+            onGetInTouch: () => Navigator.of(context).push(
+              AppPageRoute<void>(builder: (_) => const AboutContactScreen()),
+            ),
+          ),
         ),
       ],
     );

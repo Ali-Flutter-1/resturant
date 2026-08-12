@@ -8,11 +8,10 @@ import '../../core/haptics/app_haptics.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../shared/widgets/app_buttons.dart';
-import '../../shared/widgets/app_sheet.dart';
 import 'auth_cubit.dart';
 import 'presentation/auth_form_parts.dart';
 import 'register_screen.dart';
-import 'reset_password_screen.dart';
+import 'forgot_password_flow.dart';
 
 /// Sign-in.
 ///
@@ -86,41 +85,19 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _forgotPassword() async {
-    final email = _email.text.trim();
-    if (AuthRules.email(email) != null) {
-      setState(
-        () => _localErrors = {
-          'email': 'Enter your email address first, then tap this again.',
-        },
-      );
-      return;
-    }
-
-    final error = await context.read<AuthCubit>().requestPasswordReset(email);
-    if (!mounted) return;
-
-    if (error != null) {
-      showAppSnack(context, error, isError: true);
-      return;
-    }
-
-    showAppSnack(
-      context,
-      // Worded to match the API's deliberate silence about which addresses
-      // exist. Saying "we've sent you an email" would confirm the account.
-      'If that address has an account, a reset code is on its way.',
-    );
-
-    // Straight on to the screen that finishes the job. The API emails a token
-    // and expects it back at `/auth/reset-password`; leaving the user on
-    // sign-in with a code in their inbox and nowhere to type it is where this
-    // flow used to dead-end.
-    await Navigator.of(context).push(
+  /// Opens the reset flow, which asks for the email itself.
+  ///
+  /// No longer sends the request from here. The flow is three steps — email,
+  /// code, new password — and firing step 1 before the screen exists spent one
+  /// of the user's five hourly codes on a screen they might not have reached.
+  void _forgotPassword() {
+    Navigator.of(context).push(
       AppPageRoute<void>(
-        builder: (_) => ResetPasswordScreen(
-          email: email,
-          onDone: () => Navigator.of(context).maybePop(),
+        builder: (_) => ForgotPasswordFlow(
+          // Prefilled from whatever is already typed, so the common case is one
+          // tap to send.
+          email: _email.text.trim().isEmpty ? null : _email.text.trim(),
+          onFinished: () => Navigator.of(context).maybePop(),
         ),
       ),
     );
@@ -216,29 +193,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // For a code requested earlier, on another device. Without
-                  // this, the only way back to the reset screen is to ask for a
-                  // second email and invalidate the first.
-                  TextButton(
-                    onPressed: state.isSubmitting
-                        ? null
-                        : () => Navigator.of(context).push(
-                            AppPageRoute<void>(
-                              builder: (_) => ResetPasswordScreen(
-                                onDone: () => Navigator.of(context).maybePop(),
-                              ),
-                            ),
-                          ),
-                    child: const Text('I have a code'),
-                  ),
-                  TextButton(
-                    onPressed: state.isSubmitting ? null : _forgotPassword,
-                    child: const Text('Forgot password?'),
-                  ),
-                ],
+              // One entry point now. "I have a code" is gone: verifying a code
+              // needs the email it was sent to, so a screen reached without one
+              // could not do anything with it.
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: state.isSubmitting ? null : _forgotPassword,
+                  child: const Text('Forgot password?'),
+                ),
               ),
 
               // A permanent slot that grows to fit. Keeping the child count

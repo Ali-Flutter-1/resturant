@@ -87,13 +87,14 @@ class _Branding extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          child: Image.asset(
-            'assets/images/logo.jpg',
-            width: 192,
-            fit: BoxFit.contain,
-          ),
+        // PNG rather than the old JPEG: the crest has transparency around it,
+        // which a JPEG cannot carry — so the previous asset sat in a white box
+        // on top of the photograph. No rounded clip for the same reason: there
+        // is no longer a rectangle to soften.
+        Image.asset(
+          'assets/images/logo.png',
+          width: 208,
+          fit: BoxFit.contain,
         ).reveal(delay: Motion.cinematicFor(1)),
         const SizedBox(height: AppSpacing.x8),
         Text(

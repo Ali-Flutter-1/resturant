@@ -310,7 +310,11 @@ class _MenuCard extends StatelessWidget {
             boxShadow: context.surfaces.cardShadow,
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            // Stretch, so the photograph spans the card whether it is a real
+            // image or the tinted placeholder. Under `start` the image block was
+            // only as wide as it chose to be, which is why a dish with a picture
+            // and one without did not match.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
               Stack(
@@ -319,8 +323,12 @@ class _MenuCard extends StatelessWidget {
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(AppRadius.lg),
                     ),
-                    child: AspectRatio(
-                      aspectRatio: 2.1,
+                    // A stated height rather than a ratio. A ratio's size
+                    // depends on the width it happens to be handed, which is
+                    // exactly what let the two cases differ.
+                    child: SizedBox(
+                      height: 168,
+                      width: double.infinity,
                       child: DishImage(
                         name: dish.name,
                         imageUrl: dish.imageUrl,
@@ -328,18 +336,17 @@ class _MenuCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (dish.dietaryTag != null)
+                  // The dish's section, which is what the API actually carries.
+                  // The dietary chip that used to sit here had nothing behind it
+                  // once the backend dropped its vegan/vegetarian flags.
+                  if (dish.categories.isNotEmpty)
                     Positioned(
                       left: AppSpacing.x3,
                       bottom: AppSpacing.x3,
                       child: AppChip(
-                        label: dish.dietaryTag!,
-                        foreground: dish.isVegan
-                            ? context.orderColors.ready
-                            : context.orderColors.preparing,
-                        background: dish.isVegan
-                            ? context.orderColors.readyContainer
-                            : context.orderColors.preparingContainer,
+                        label: dish.categories.first.name,
+                        foreground: scheme.onPrimary,
+                        background: scheme.primary.withValues(alpha: 0.9),
                       ),
                     ),
                   if (!dish.isAvailable)
@@ -347,7 +354,11 @@ class _MenuCard extends StatelessWidget {
                       left: AppSpacing.x3,
                       top: AppSpacing.x3,
                       child: AppChip.status(
-                        label: 'Sold out',
+                        // "Not available" rather than "Sold out": an admin turns a dish
+                        // off, which may be because it is finished for the night
+                        // or because it is not being served at all. The app does
+                        // not know which, so it should not claim to.
+                        label: 'Not available',
                         foreground: context.orderColors.overdue,
                         background: context.orderColors.overdueContainer,
                       ),
@@ -387,7 +398,34 @@ class _MenuCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.x1),
-                    Text(dish.description, style: context.texts.bodyMedium),
+                    // Capped at three lines. Uncapped, a dish with a paragraph
+                    // of description made its card twice the height of the one
+                    // above it and pushed the button off the fold.
+                    Text(
+                      dish.description,
+                      style: context.texts.bodyMedium,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (dish.prepTime != null) ...[
+                      const SizedBox(height: AppSpacing.x2),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.schedule,
+                            size: AppIconSize.sm,
+                            color: context.surfaces.inkSoft,
+                          ),
+                          const SizedBox(width: AppSpacing.x1 + 2),
+                          Text(
+                            dish.prepTime!,
+                            style: context.texts.bodySmall?.copyWith(
+                              color: context.surfaces.inkSoft,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.x4),
                     OutlinedButton(
                       onPressed: onTap == null || !dish.isAvailable
@@ -401,7 +439,7 @@ class _MenuCard extends StatelessWidget {
                         foregroundColor: scheme.primary,
                       ),
                       child: Text(
-                        dish.isAvailable ? 'Add to Order' : 'Sold out today',
+                        dish.isAvailable ? 'Add to Order' : 'Not available',
                       ),
                     ),
                   ],

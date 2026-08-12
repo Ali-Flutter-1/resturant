@@ -6,6 +6,7 @@ import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/shared/widgets/dish_list_skeleton.dart';
 
 import 'package:practice/core/theme/app_theme.dart';
+import 'package:practice/shared/widgets/app_chip.dart';
 import 'package:practice/features/admin/presentation/admin_menu_management_screen.dart';
 import 'package:practice/features/admin/presentation/admin_orders_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
@@ -177,12 +178,19 @@ void main() {
       await tester.pumpWidget(menu());
       await tester.pumpAndSettle();
 
-      // "All" is the app's own affordance; the rest are real sections.
-      expect(find.text('All'), findsOneWidget);
-      expect(find.text('Curry Dishes'), findsOneWidget);
-      expect(find.text('Small Plates'), findsOneWidget);
+      // Scoped to the filter chips: a dish card now carries its own section
+      // name too, so an unscoped finder matches once per card as well.
+      expect(find.widgetWithText(SelectableChip, 'All'), findsOneWidget);
+      expect(
+        find.widgetWithText(SelectableChip, 'Curry Dishes'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(SelectableChip, 'Small Plates'),
+        findsOneWidget,
+      );
 
-      await tester.tap(find.text('Small Plates'));
+      await tester.tap(find.widgetWithText(SelectableChip, 'Small Plates'));
       await tester.pumpAndSettle();
 
       expect(find.text('Heritage Hoppers'), findsOneWidget);
@@ -216,7 +224,7 @@ void main() {
       // Still on the menu — the API keeps listing it so the menu doesn't
       // appear to shrink through the evening.
       expect(find.text('Black Pork Curry'), findsOneWidget);
-      expect(find.text('Sold out today'), findsOneWidget);
+      expect(find.text('Not available'), findsWidgets);
 
       await tester.tap(find.text('Black Pork Curry'));
       await tester.pumpAndSettle();

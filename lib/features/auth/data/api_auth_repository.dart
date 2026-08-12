@@ -4,6 +4,7 @@ import '../../../core/network/api_failure.dart';
 import '../../../core/network/token_store.dart';
 import '../domain/auth_repository.dart';
 import '../domain/auth_user.dart';
+import '../domain/password_reset.dart';
 
 /// The HTTP implementation of [AuthRepository].
 ///
@@ -128,6 +129,18 @@ class ApiAuthRepository implements AuthRepository {
     await _tokens.clear();
   }
 
+  @override
+  Future<AuthUser> updateProfile({String? firstName, String? lastName}) async {
+    final data = await _client.object(
+      ApiConstants.profile,
+      method: 'PATCH',
+      // Only what changed. A PATCH carrying every field would overwrite a name
+      // somebody edited on another device with whatever this form last read.
+      body: {'first_name': ?firstName?.trim(), 'last_name': ?lastName?.trim()},
+    );
+    return AuthUser.fromJson(data);
+  }
+
   /// Always reports success, whether or not the address is registered — the API
   /// is deliberately silent about which addresses exist, and the UI must not
   /// undo that by saying "no such account".
@@ -143,6 +156,27 @@ class ApiAuthRepository implements AuthRepository {
       body: {'email': email.trim().toLowerCase()},
     );
   }
+
+  @override
+  Future<PasswordResetSession> verifyResetCode({
+    required String email,
+    required String code,
+  }) async {
+    final data = await _client.object(
+      ApiConstants.verifyResetCode,
+      method: 'POST',
+      body: {
+        'email': email.trim().toLowerCase(),
+        // Spaces stripped here as well as server-side: a code pasted out of an
+        // email arrives as "482 913", and the field should not have to care.
+        'code': code.replaceAll(RegExp(r'\s+'), ''),
+      },
+    );
+    return PasswordResetSession.fromJson(data);
+  }
+
+  @override
+  Future<void> forgetSession() => _tokens.clear();
 
   @override
   Future<void> resetPassword({

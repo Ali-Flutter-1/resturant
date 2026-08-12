@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../contact/domain/contact_repository.dart';
+import '../../auth/presentation/auth_form_parts.dart';
+import '../../auth/auth_cubit.dart';
+import '../../../core/network/api_failure.dart';
+import '../../../core/haptics/app_haptics.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../auth/presentation/account_panel.dart';
 
@@ -485,22 +491,46 @@ class _ContactForm extends StatefulWidget {
 class _ContactFormState extends State<_ContactForm> {
   final _name = TextEditingController();
   final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _subject = TextEditingController();
   final _message = TextEditingController();
+
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Prefilled for a signed-in person, because asking someone for their own
+    // name and email inside an app they are signed in to is a form they have
+    // already filled in once. Editable, since a message can be about someone
+    // else's booking.
+    final user = context.read<AuthCubit>().state.user;
+    if (user != null) {
+      _name.text = user.displayName;
+      _email.text = user.email;
+    }
+  }
 
   @override
   void dispose() {
     _name.dispose();
     _email.dispose();
+    _phone.dispose();
+    _subject.dispose();
     _message.dispose();
     super.dispose();
   }
 
-  void _send() {
+  static String? _blankToNull(String value) =>
+      value.trim().isEmpty ? null : value.trim();
+
+  Future<void> _send() async {
     FocusScope.of(context).unfocus();
 
-    // Checked here rather than server-side, so the user is told what is
-    // missing before anything is sent.
+    // Checked here rather than server-side, so the user is told what is missing
+    // before anything is sent.
     if (_name.text.trim().isEmpty || _message.text.trim().isEmpty) {
+      AppHaptics.failure();
       showAppSnack(
         context,
         'Add your name and a message so we can reply.',
@@ -508,19 +538,42 @@ class _ContactFormState extends State<_ContactForm> {
       );
       return;
     }
-    if (!_email.text.contains('@') || !_email.text.contains('.')) {
-      showAppSnack(
-        context,
-        'That email address looks incomplete.',
-        isError: true,
-      );
+    final emailError = AuthRules.email(_email.text);
+    if (emailError != null) {
+      AppHaptics.failure();
+      showAppSnack(context, emailError, isError: true);
       return;
     }
 
-    _name.clear();
-    _email.clear();
-    _message.clear();
-    showAppSnack(context, 'Message sent — we usually reply within a day.');
+    setState(() => _sending = true);
+    try {
+      await context.read<ContactRepository>().send(
+        name: _name.text,
+        email: _email.text,
+        message: _message.text,
+        // Null, not empty: absent is what the API means by a missing optional
+        // field, and "" would be stored as a subject of nothing.
+        phone: _blankToNull(_phone.text),
+        subject: _blankToNull(_subject.text),
+      );
+      if (!mounted) return;
+
+      AppHaptics.success();
+      // Only the message is cleared. The name and email are almost certainly
+      // right for a second message, and re-typing them is the annoyance that
+      // stops people sending one.
+      _message.clear();
+      _subject.clear();
+      setState(() => _sending = false);
+      showAppSnack(context, 'Message sent — we usually reply within a day.');
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      AppHaptics.failure();
+      setState(() => _sending = false);
+      // The API's own words. Nothing here is cleared, so a failed send does not
+      // cost the user their message.
+      showAppSnack(context, failure.message, isError: true);
+    }
   }
 
   @override
@@ -529,24 +582,54 @@ class _ContactFormState extends State<_ContactForm> {
       children: [
         TextField(
           controller: _name,
+          enabled: !_sending,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(hintText: 'Your name'),
         ),
         const SizedBox(height: AppSpacing.x3),
         TextField(
           controller: _email,
+          enabled: !_sending,
           keyboardType: TextInputType.emailAddress,
           autocorrect: false,
           decoration: const InputDecoration(hintText: 'Email address'),
         ),
         const SizedBox(height: AppSpacing.x3),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _phone,
+                enabled: !_sending,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(hintText: 'Phone (optional)'),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.x3),
+            Expanded(
+              child: TextField(
+                controller: _subject,
+                enabled: !_sending,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Subject (optional)',
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.x3),
         TextField(
           controller: _message,
+          enabled: !_sending,
           maxLines: 4,
           decoration: const InputDecoration(hintText: 'How can we help?'),
         ),
         const SizedBox(height: AppSpacing.x4),
-        FilledButton(onPressed: _send, child: const Text('Send Message')),
+        FilledButton(
+          onPressed: _sending ? null : _send,
+          child: Text(_sending ? 'Sending…' : 'Send Message'),
+        ),
       ],
     );
   }

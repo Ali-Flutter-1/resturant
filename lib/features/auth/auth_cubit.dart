@@ -3,9 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/network/api_failure.dart';
 import 'domain/auth_repository.dart';
+import 'domain/password_reset.dart';
 import 'domain/auth_user.dart';
 
 export 'domain/auth_user.dart' show AuthUser, UserRole;
+export 'domain/password_reset.dart' show PasswordResetSession, ResetErrorCodes;
 
 class AuthState extends Equatable {
   const AuthState({
@@ -213,6 +215,53 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  /// Re-reads `/auth/me`.
+  ///
+  /// For pulling in a change made elsewhere — a role promoted in the admin
+  /// panel, a name edited on another device. Quiet on failure: the session
+  /// already on screen is still usable, and an error banner for a refresh
+  /// nobody asked for would be noise.
+  Future<void> refreshUser() async {
+    final repository = _repository;
+    if (repository == null) return;
+    try {
+      emit(state.copyWith(user: await repository.currentUser()));
+    } on ApiFailure {
+      // Kept as-is deliberately.
+    }
+  }
+
+  /// Updates the signed-in person's own name.
+  ///
+  /// Returns an error message to show, or null on success. The state adopts the
+  /// user the server returned rather than the strings typed in, so what the app
+  /// shows afterwards is what was actually saved.
+  Future<String?> updateProfile({
+    required String firstName,
+    required String lastName,
+  }) async {
+    if (_repository == null) return 'Not available in this build.';
+
+    emit(state.copyWith(isSubmitting: true, clearError: true));
+    try {
+      final user = await _repository.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+      );
+      emit(state.copyWith(user: user, isSubmitting: false));
+      return null;
+    } on ApiFailure catch (failure) {
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: failure.message,
+          fieldErrors: failure.fieldErrors,
+        ),
+      );
+      return failure.message;
+    }
+  }
+
   /// Changes the password on the signed-in account.
   ///
   /// Returns an error message to show, or null on success. The repository adopts
@@ -245,21 +294,80 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  /// Step 2 of the reset: exchanges the emailed code for a token.
+  ///
+  /// Returns the session on success, or the [ApiFailure] on refusal — the whole
+  /// failure rather than just its message, because the flow branches on
+  /// `error.code`: a wrong code keeps the user on the same screen, a lockout
+  /// sends them back to the start.
+  ///
+  /// Nothing is stored in state. The token is a bearer credential for changing a
+  /// password and lives only as long as the screen holding it.
+  Future<(PasswordResetSession?, ApiFailure?)> verifyResetCode({
+    required String email,
+    required String code,
+  }) async {
+    if (_repository == null) {
+      return (
+        null,
+        const ApiFailure(
+          kind: ApiFailureKind.unknown,
+          message: 'Not available in this build.',
+        ),
+      );
+    }
+
+    try {
+      final session = await _repository.verifyResetCode(
+        email: email,
+        code: code,
+      );
+      return (session, null);
+    } on ApiFailure catch (failure) {
+      return (null, failure);
+    }
+  }
+
+  /// Forgets this device's tokens without calling the server.
+  ///
+  /// Used after a reset, which revokes every session server-side — so a `logout`
+  /// call would be a request that cannot succeed.
+  Future<void> forgetSession() async {
+    await _repository?.forgetSession();
+    emit(const AuthState(hasRestored: true));
+  }
+
   /// Completes a reset with the token from the email.
   ///
   /// Returns an error message to show, or null on success. Deliberately does
   /// not sign the user in: the API returns no tokens here, and the reset may
   /// well have been requested because someone else had the old password.
-  Future<String?> resetPassword({
+  /// Step 3: sets the new password, then forgets this device's session.
+  ///
+  /// Returns the failure on refusal so the flow can branch on `error.code` — a
+  /// weak password keeps the user on the screen with the token still good, an
+  /// invalid token sends them back to the start.
+  ///
+  /// On success every session everywhere is revoked, so the local tokens are
+  /// cleared here rather than being left to expire and fail confusingly later.
+  /// The user is deliberately *not* signed in: the API returns no tokens, and a
+  /// reset is often requested precisely because somebody else had the old
+  /// password.
+  Future<ApiFailure?> resetPassword({
     required String token,
     required String newPassword,
   }) async {
-    if (_repository == null) return 'Not available in this build.';
+    if (_repository == null) {
+      return const ApiFailure(
+        kind: ApiFailureKind.unknown,
+        message: 'Not available in this build.',
+      );
+    }
 
     emit(state.copyWith(isSubmitting: true, clearError: true));
     try {
       await _repository.resetPassword(token: token, newPassword: newPassword);
-      emit(state.copyWith(isSubmitting: false));
+      await forgetSession();
       return null;
     } on ApiFailure catch (failure) {
       emit(
@@ -269,7 +377,7 @@ class AuthCubit extends Cubit<AuthState> {
           fieldErrors: failure.fieldErrors,
         ),
       );
-      return failure.message;
+      return failure;
     }
   }
 

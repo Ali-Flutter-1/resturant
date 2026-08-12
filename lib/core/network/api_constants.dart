@@ -48,7 +48,17 @@ abstract final class ApiConstants {
   /// replayed, which is why refresh is serialised inside [ApiClient].
   static const String refresh = '/auth/refresh';
   static const String logout = '/auth/logout';
+
+  /// Step 1 of the reset: emails a six-digit code. Always answers 200 with the
+  /// same message whether or not the address is registered, so the app cannot be
+  /// used to discover who has an account.
   static const String forgotPassword = '/auth/forgot-password';
+
+  /// Step 2: exchanges `{email, code}` for a short-lived `reset_token`.
+  static const String verifyResetCode = '/auth/verify-reset-code';
+
+  /// Step 3: `{token, new_password}` — the reset token from step 2, never the
+  /// six-digit code.
   static const String resetPassword = '/auth/reset-password';
 
   /// Needs a Google ID token from `google_sign_in`, and a configured

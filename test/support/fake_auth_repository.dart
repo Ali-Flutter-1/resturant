@@ -96,12 +96,66 @@ class FakeAuthRepository implements AuthRepository {
     deletedWithPassword = password;
   }
 
+  String? updatedFirstName;
+  String? updatedLastName;
+
+  @override
+  Future<AuthUser> updateProfile({String? firstName, String? lastName}) async {
+    final error = failure;
+    if (error != null) throw error;
+    updatedFirstName = firstName;
+    updatedLastName = lastName;
+    final current = user ?? defaultUser;
+    // Returns the *stored* user, so a test can prove the screen adopts what the
+    // server sent back rather than the strings that were typed in.
+    user = AuthUser(
+      id: current.id,
+      email: current.email,
+      firstName: firstName ?? current.firstName,
+      lastName: lastName ?? current.lastName,
+      role: current.role,
+      avatarUrl: current.avatarUrl,
+    );
+    return user!;
+  }
+
   @override
   Future<void> requestPasswordReset(String email) async {
     forgotEmail = email;
     final error = failure;
     if (error != null) throw error;
   }
+
+  /// The failure the *code* step should answer with, separate from [failure] so
+  /// a test can let step 1 succeed and have step 2 refuse.
+  ApiFailure? verifyFailure;
+  String? verifiedEmail;
+  String? verifiedCode;
+  int verifyCalls = 0;
+
+  /// What a successful verification hands back.
+  PasswordResetSession session = PasswordResetSession(
+    token: 'reset-token-abc',
+    expiresAt: DateTime.now().add(const Duration(minutes: 10)),
+  );
+
+  @override
+  Future<PasswordResetSession> verifyResetCode({
+    required String email,
+    required String code,
+  }) async {
+    verifyCalls++;
+    verifiedEmail = email;
+    verifiedCode = code;
+    final error = verifyFailure ?? failure;
+    if (error != null) throw error;
+    return session;
+  }
+
+  int forgetCalls = 0;
+
+  @override
+  Future<void> forgetSession() async => forgetCalls++;
 
   @override
   Future<void> resetPassword({

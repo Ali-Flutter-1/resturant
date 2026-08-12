@@ -10,8 +10,12 @@ import 'core/network/api_client.dart';
 import 'core/network/connectivity_service.dart';
 import 'core/network/token_store.dart';
 import 'features/auth/data/api_auth_repository.dart';
+import 'features/admin/data/api_admin_contact_repository.dart';
 import 'features/admin/data/api_admin_menu_repository.dart';
+import 'features/admin/domain/admin_contact_repository.dart';
 import 'features/admin/domain/admin_menu_repository.dart';
+import 'features/contact/data/api_contact_repository.dart';
+import 'features/contact/domain/contact_repository.dart';
 import 'features/menu/data/api_menu_repository.dart';
 import 'features/menu/domain/menu_repository.dart';
 import 'features/orders/data/api_order_repository.dart';
@@ -60,6 +64,8 @@ Future<void> main() async {
       // [AppConfig.useDemoOrders]. Chosen here rather than inside the
       // repository so nothing downstream can serve invented orders.
       adminMenu: ApiAdminMenuRepository(client: client),
+      contact: ApiContactRepository(client: client),
+      adminContact: ApiAdminContactRepository(client: client),
       orders: AppConfig.useDemoOrders
           ? DemoOrderRepository()
           : ApiOrderRepository(client: client),
@@ -73,6 +79,8 @@ class TsCafeApp extends StatelessWidget {
     required this.auth,
     required this.menu,
     required this.adminMenu,
+    required this.contact,
+    required this.adminContact,
     required this.orders,
   });
 
@@ -89,6 +97,13 @@ class TsCafeApp extends StatelessWidget {
   /// check in [AppRoot] is what keeps it out of a customer's reach.
   final AdminMenuRepository adminMenu;
 
+  /// The Contact Us form. Needs no session — somebody who cannot sign in is
+  /// exactly who most needs to reach the restaurant.
+  final ContactRepository contact;
+
+  /// The inbox those messages land in.
+  final AdminContactRepository adminContact;
+
   /// The signed-in customer's orders. Scoped to the bearer token, so it needs
   /// nothing from the session beyond the client it already shares.
   final OrderRepository orders;
@@ -99,6 +114,8 @@ class TsCafeApp extends StatelessWidget {
       providers: [
         RepositoryProvider<MenuRepository>.value(value: menu),
         RepositoryProvider<AdminMenuRepository>.value(value: adminMenu),
+        RepositoryProvider<ContactRepository>.value(value: contact),
+        RepositoryProvider<AdminContactRepository>.value(value: adminContact),
         RepositoryProvider<OrderRepository>.value(value: orders),
       ],
       child: MultiBlocProvider(

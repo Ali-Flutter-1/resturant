@@ -6,7 +6,6 @@ import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/auth/auth_cubit.dart';
 import 'package:practice/features/auth/login_screen.dart';
 import 'package:practice/features/auth/presentation/account_panel.dart';
-import 'package:practice/features/auth/reset_password_screen.dart';
 import 'package:practice/features/welcome/presentation/welcome_screen.dart';
 import 'package:practice/main.dart';
 
@@ -210,91 +209,6 @@ void main() {
 
       expect(cubit.state.isSignedIn, isFalse);
       expect(repository.logoutCalls, 1);
-    });
-  });
-
-  group('reset password', () {
-    testWidgets('refuses to send without a code', (tester) async {
-      final repository = FakeAuthRepository();
-      final cubit = AuthCubit(repository: repository);
-
-      await tester.pumpWidget(
-        BlocProvider.value(
-          value: cubit,
-          child: MaterialApp(
-            theme: AppTheme.light,
-            home: const ResetPasswordScreen(email: 'a@b.com'),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Set new password'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Paste the code from the email.'), findsOne);
-      expect(repository.resetCalls, 0);
-    });
-
-    testWidgets('sends the token and the new password', (tester) async {
-      final repository = FakeAuthRepository();
-      final cubit = AuthCubit(repository: repository);
-      var done = false;
-
-      await tester.pumpWidget(
-        BlocProvider.value(
-          value: cubit,
-          child: MaterialApp(
-            theme: AppTheme.light,
-            home: ResetPasswordScreen(
-              email: 'a@b.com',
-              onDone: () => done = true,
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextField).first, 'reset-token-123');
-      await tester.enterText(find.byType(TextField).last, 'newpass123');
-      await tester.tap(find.text('Set new password'));
-      await tester.pumpAndSettle();
-
-      expect(repository.resetToken, 'reset-token-123');
-      expect(repository.resetNewPassword, 'newpass123');
-      expect(done, isTrue);
-      // Deliberately not signed in: the API returns no tokens, and a reset is
-      // often requested because someone else may have had the old password.
-      expect(cubit.state.isSignedIn, isFalse);
-    });
-
-    testWidgets('shows the API message when the code is rejected', (
-      tester,
-    ) async {
-      final repository = FakeAuthRepository()
-        ..failure = const ApiFailure(
-          kind: ApiFailureKind.invalid,
-          message: 'That reset code has expired.',
-        );
-      final cubit = AuthCubit(repository: repository);
-
-      await tester.pumpWidget(
-        BlocProvider.value(
-          value: cubit,
-          child: MaterialApp(
-            theme: AppTheme.light,
-            home: const ResetPasswordScreen(),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextField).first, 'stale');
-      await tester.enterText(find.byType(TextField).last, 'newpass123');
-      await tester.tap(find.text('Set new password'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('That reset code has expired.'), findsOne);
     });
   });
 

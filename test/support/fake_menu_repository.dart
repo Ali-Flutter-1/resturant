@@ -68,8 +68,9 @@ class FakeMenuRepository implements MenuRepository {
     isVegetarian: true,
   );
 
-  /// Sold out: the API keeps listing these with `is_available` false so the app
-  /// greys them out rather than making the menu appear to shrink.
+  /// Turned off by an admin. The API keeps listing these with `is_available`
+  /// false so the app greys them out rather than making the menu appear to
+  /// shrink.
   static const soldOut = Dish(
     id: 'd4',
     name: 'Black Pork Curry',

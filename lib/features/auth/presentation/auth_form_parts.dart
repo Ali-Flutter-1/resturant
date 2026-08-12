@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/shake.dart';
@@ -33,6 +34,7 @@ class AuthField extends StatelessWidget {
     this.suffix,
     this.fieldError,
     this.autofillHints,
+    this.inputFormatters,
   });
 
   final String label;
@@ -46,6 +48,10 @@ class AuthField extends StatelessWidget {
   final Widget? suffix;
   final String? fieldError;
   final Iterable<String>? autofillHints;
+
+  /// For fields with a shape — a six-digit code, say — so the keyboard cannot
+  /// produce something the field will only refuse afterwards.
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +76,7 @@ class AuthField extends StatelessWidget {
             textCapitalization: textCapitalization,
             autocorrect: !obscure && keyboardType != TextInputType.emailAddress,
             autofillHints: autofillHints,
+            inputFormatters: inputFormatters,
             onSubmitted: onSubmitted,
             decoration: InputDecoration(
               hintText: hint,

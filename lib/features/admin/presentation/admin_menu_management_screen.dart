@@ -169,19 +169,13 @@ class _AdminMenuViewState extends State<_AdminMenuView> {
         builder: (context, state) {
           final cubit = context.read<AdminMenuCubit>();
 
-          if (state.status == AdminMenuStatus.loading) {
-            return const DishListSkeleton(rows: 4, imageHeight: 80);
-          }
-          if (state.status == AdminMenuStatus.failure &&
-              state.failure != null) {
-            return ApiErrorView(
-              failure: state.failure!,
-              onRetry: () => cubit.load(),
-            );
-          }
-
+          final loading = state.status == AdminMenuStatus.loading;
           final visible = state.visible;
 
+          // The search box and the category chips stay put through every state,
+          // for the same reason as the inbox: a reload used to take the controls
+          // away and put them back, so the filter you had just tapped vanished
+          // while the request it started was still running.
           return Column(
             children: [
               _SearchAndFilter(
@@ -203,8 +197,11 @@ class _AdminMenuViewState extends State<_AdminMenuView> {
                   children: [
                     Expanded(
                       child: Text(
-                        '${state.availableCount} of ${state.dishes.length} '
-                        'dishes available tonight.',
+                        loading
+                            ? 'Loading tonight’s menu…'
+                            : '${state.availableCount} of '
+                                  '${state.dishes.length} dishes available '
+                                  'tonight.',
                         style: context.texts.bodySmall,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -213,41 +210,55 @@ class _AdminMenuViewState extends State<_AdminMenuView> {
                 ),
               ).revealItem(2),
               const SizedBox(height: AppSpacing.x3),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () => cubit.load(silent: true),
-                  child: visible.isEmpty
-                      ? _EmptyMenu(filtered: state.isFilteredEmpty)
-                      : ListView.separated(
-                          padding: EdgeInsets.fromLTRB(
-                            AppSpacing.gutter,
-                            0,
-                            AppSpacing.gutter,
-                            // Clear the FAB as well as the tab bar.
-                            AppSpacing.x12 +
-                                MediaQuery.paddingOf(context).bottom,
+              if (loading)
+                // Only the list is a placeholder; everything above it is real.
+                const Expanded(
+                  child: DishListSkeleton(rows: 4, imageHeight: 80),
+                )
+              else if (state.status == AdminMenuStatus.failure &&
+                  state.failure != null)
+                Expanded(
+                  child: ApiErrorView(
+                    failure: state.failure!,
+                    onRetry: () => cubit.load(),
+                  ),
+                )
+              else
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => cubit.load(silent: true),
+                    child: visible.isEmpty
+                        ? _EmptyMenu(filtered: state.isFilteredEmpty)
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              AppSpacing.gutter,
+                              0,
+                              AppSpacing.gutter,
+                              // Clear the FAB as well as the tab bar.
+                              AppSpacing.x12 +
+                                  MediaQuery.paddingOf(context).bottom,
+                            ),
+                            itemCount: visible.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: AppSpacing.x8),
+                            itemBuilder: (context, position) {
+                              final dish = visible[position];
+                              return _DishCard(
+                                // Keyed by id so a delete or a rename cannot hand
+                                // this card's state to the dish that took its
+                                // place.
+                                key: ValueKey(dish.id),
+                                dish: dish,
+                                busy: state.busyIds.contains(dish.id),
+                                onAvailabilityChanged: (value) =>
+                                    _setAvailability(dish, value),
+                                onEdit: () => _openEditor(dish: dish),
+                                onDelete: () => _deleteDish(dish),
+                              ).revealItem(position, duration: Motion.fast);
+                            },
                           ),
-                          itemCount: visible.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: AppSpacing.x8),
-                          itemBuilder: (context, position) {
-                            final dish = visible[position];
-                            return _DishCard(
-                              // Keyed by id so a delete or a rename cannot hand
-                              // this card's state to the dish that took its
-                              // place.
-                              key: ValueKey(dish.id),
-                              dish: dish,
-                              busy: state.busyIds.contains(dish.id),
-                              onAvailabilityChanged: (value) =>
-                                  _setAvailability(dish, value),
-                              onEdit: () => _openEditor(dish: dish),
-                              onDelete: () => _deleteDish(dish),
-                            ).revealItem(position, duration: Motion.fast);
-                          },
-                        ),
+                  ),
                 ),
-              ),
             ],
           );
         },

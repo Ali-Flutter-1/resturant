@@ -1,4 +1,5 @@
 import 'auth_user.dart';
+import 'password_reset.dart';
 
 /// What the session needs from the outside world.
 ///
@@ -35,12 +36,44 @@ abstract interface class AuthRepository {
   /// be used to close someone's account.
   Future<void> deleteAccount(String password);
 
+  /// Updates the signed-in person's own details.
+  ///
+  /// Only what is passed changes. Email is deliberately absent: the API refuses
+  /// to change it here because it needs verification, so offering the field
+  /// would be offering a dead end.
+  ///
+  /// Returns the updated user, so the session can adopt it without a second
+  /// call to `/auth/me`.
+  Future<AuthUser> updateProfile({String? firstName, String? lastName});
+
+  /// Step 1: asks for a six-digit code by email.
+  ///
+  /// Succeeds whether or not the address is registered — the API is deliberately
+  /// silent about that, and the app must not undo it.
   Future<void> requestPasswordReset(String email);
 
+  /// Step 2: exchanges the emailed code for a reset token.
+  ///
+  /// Throws [ApiFailure] with an `error.code` the caller branches on — see
+  /// [ResetErrorCodes].
+  Future<PasswordResetSession> verifyResetCode({
+    required String email,
+    required String code,
+  });
+
+  /// Step 3: sets the new password using the token from step 2.
+  ///
+  /// Every session on every device is revoked by this, including this one.
   Future<void> resetPassword({
     required String token,
     required String newPassword,
   });
+
+  /// Forgets this device's tokens without calling the server.
+  ///
+  /// For after a password reset: the refresh token has already been revoked, so
+  /// `logout` would be a request that cannot succeed. The session is simply gone.
+  Future<void> forgetSession();
 
   Future<void> changePassword({
     required String currentPassword,

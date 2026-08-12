@@ -56,6 +56,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -115,3 +116,34 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Launcher icons, generated from one source image by `flutter_launcher_icons`.
+#
+# Run after changing the logo:
+#   dart run flutter_launcher_icons
+#
+# The source must be a square PNG — 1024x1024 is the safe size, since iOS wants
+# 1024 for the App Store and Android's adaptive foreground is downscaled from it.
+# `adaptive_icon_background` is a flat colour rather than an image because
+# Android crops the foreground to a circle, squircle or rounded square depending
+# on the launcher, and any detail near the edge is what gets cut.
+flutter_launcher_icons:
+  # A squared, upscaled copy of logo.png — not logo.png itself, which is
+  # 232x220. The generator needs a square source, and iOS wants 1024 for the
+  # App Store, so feeding it the original would stretch the crest and ship a
+  # soft icon. Regenerate with:
+  #   sips --padToHeightWidth 232 232 --padColor FFFFFF \
+  #     assets/images/logo.png --out /tmp/sq.png
+  #   sips -z 1024 1024 /tmp/sq.png --out tool/app_icon/logo_icon.png
+  #
+  # Kept outside `assets/` on purpose: the whole directory is bundled, and a
+  # 1024x1024 source is ~800KB of the download that nothing reads at runtime.
+  # It is only needed at build time, by the command above.
+  image_path: "tool/app_icon/logo_icon.png"
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "tool/app_icon/logo_icon.png"
+  # Padding, so the mark is not clipped by the launcher's mask.
+  adaptive_icon_foreground_inset: 18

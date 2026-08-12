@@ -87,6 +87,7 @@ class Dish extends Equatable {
     this.isGlutenFree = false,
     this.allergens = const [],
     this.isAvailable = true,
+    this.createdAt,
   });
 
   factory Dish.fromJson(Map<String, dynamic> json) {
@@ -132,6 +133,9 @@ class Dish extends Equatable {
       // explicit that it comes back with this false so the app can grey it out
       // rather than hide it.
       isAvailable: json['is_available'] != false,
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.tryParse(json['created_at'].toString())?.toLocal(),
     );
   }
 
@@ -159,8 +163,13 @@ class Dish extends Equatable {
   final bool isGlutenFree;
   final List<String> allergens;
 
-  /// False means sold out today. Still on the menu, not orderable.
+  /// False means the admin has taken it off the menu. Still listed, not
+  /// orderable — the API is explicit about that so the menu doesn't appear to
+  /// shrink through the evening.
   final bool isAvailable;
+
+  /// When the dish was added, for showing the newest first.
+  final DateTime? createdAt;
 
   /// The picture to draw. The API's `image_url` first, then the gallery's first
   /// entry, which is the one it treats as primary.
@@ -212,5 +221,6 @@ class Dish extends Equatable {
     isGlutenFree,
     allergens,
     isAvailable,
+    createdAt,
   ];
 }

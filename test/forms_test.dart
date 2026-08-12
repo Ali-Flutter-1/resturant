@@ -7,22 +7,30 @@ import 'package:practice/features/about/presentation/about_contact_screen.dart';
 import 'package:practice/features/booking/presentation/book_table_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/checkout/presentation/checkout_screen.dart';
+import 'package:practice/features/contact/domain/contact_repository.dart';
+import 'package:practice/core/network/api_failure.dart';
 
 import 'support/auth_fixtures.dart';
+import 'support/fake_contact_repository.dart';
 
 /// Forms refuse bad input and say why. Each of these was a no-op button
 /// before, so the tests exist to keep them honest.
 void main() {
   late CartCubit cart;
+  late FakeContactRepository contact;
 
   Widget wrap(Widget home) {
     cart = CartCubit()..add(2);
+    contact = FakeContactRepository();
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
         BlocProvider.value(value: cart),
       ],
-      child: MaterialApp(theme: AppTheme.light, home: home),
+      child: RepositoryProvider<ContactRepository>.value(
+        value: contact,
+        child: MaterialApp(theme: AppTheme.light, home: home),
+      ),
     );
   }
 
@@ -161,12 +169,17 @@ void main() {
     testWidgets('requires a name and a message', (tester) async {
       await openForm(tester);
 
+      // The form prefills a signed-in person's name and email; emptying the
+      // name is what exercises the refusal.
+      await tester.enterText(find.widgetWithText(TextField, 'Your name'), '');
       await tapAt(tester, find.text('Send Message'));
 
       expect(
         find.text('Add your name and a message so we can reply.'),
         findsOneWidget,
       );
+      // Nothing left the device.
+      expect(contact.sendCalls, 0);
     });
 
     testWidgets('rejects an incomplete email', (tester) async {
@@ -188,6 +201,7 @@ void main() {
       await tapAt(tester, find.text('Send Message'));
 
       expect(find.text('That email address looks incomplete.'), findsOneWidget);
+      expect(contact.sendCalls, 0);
     });
 
     testWidgets('a complete message is accepted and clears the form', (
@@ -209,10 +223,65 @@ void main() {
       );
 
       await tapAt(tester, find.text('Send Message'));
+      await tester.pumpAndSettle();
+
+      // It really went. This button used to clear the form and claim success
+      // with no request behind it at all.
+      expect(contact.sendCalls, 1);
+      expect(contact.lastSend?['name'], 'Sam');
+      expect(contact.lastSend?['email'], 'sam@example.com');
+      expect(contact.lastSend?['message'], 'Do you cater?');
+      // Blank optional fields are omitted rather than sent as empty strings,
+      // which the API would store as a subject of "".
+      expect(contact.lastSend?['phone'], isNull);
+      expect(contact.lastSend?['subject'], isNull);
 
       expect(find.textContaining('Message sent'), findsOneWidget);
-      // Cleared, so a second message does not resend the first.
-      expect(find.text('Sam'), findsNothing);
+      // The message is cleared but the name is not: it is almost certainly
+      // right for a second message, and re-typing it is what stops people
+      // sending one.
+      expect(find.text('Do you cater?'), findsNothing);
+      expect(find.widgetWithText(TextField, 'Sam'), findsOneWidget);
+    });
+
+    testWidgets('a failed send keeps the message and says why', (tester) async {
+      await openForm(tester);
+      contact.failure = const ApiFailure(
+        kind: ApiFailureKind.server,
+        message: 'We could not send that just now. Please try again.',
+      );
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Your name'),
+        'Sam',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'How can we help?'),
+        'Do you cater?',
+      );
+      await tapAt(tester, find.text('Send Message'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('We could not send that just now. Please try again.'),
+        findsOneWidget,
+      );
+      // A failed send must not cost the user what they wrote.
+      expect(find.text('Do you cater?'), findsOneWidget);
+    });
+
+    testWidgets('prefills a signed-in person rather than asking again', (
+      tester,
+    ) async {
+      await openForm(tester);
+
+      // Scoped to the inputs: the account panel further down the screen shows
+      // the same name and email, so an unscoped finder matches twice.
+      expect(find.widgetWithText(TextField, 'Test Customer'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextField, 'customer@example.com'),
+        findsOneWidget,
+      );
     });
   });
 }
