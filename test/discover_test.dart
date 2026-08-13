@@ -147,10 +147,19 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
 
       final search = tester.getRect(find.byType(TextField));
-      final hero = tester.getRect(find.byType(PageView));
+      // The card, not the pager: the pager itself is deliberately full-bleed so
+      // consecutive cards are a gutter apart, and each page pads itself back in.
+      final card = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(PageView),
+              matching: find.byType(DishImage),
+            )
+            .first,
+      );
 
-      expect(hero.left, closeTo(search.left, 0.5));
-      expect(hero.right, closeTo(search.right, 0.5));
+      expect(card.left, closeTo(search.left, 0.5));
+      expect(card.right, closeTo(search.right, 0.5));
     });
 
     testWidgets('the image block is the same size with or without a photo', (
@@ -437,6 +446,43 @@ void main() {
       // disagree — so the off one is last, not absent.
       expect(state.heroes.map((d) => d.id), ['on1', 'on2', 'on3']);
       expect(state.strip.map((d) => d.id), ['on4', 'off']);
+    });
+  });
+
+  group('the greeting', () {
+    testWidgets('names no city, and offers no fake location picker', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap(FakeMenuRepository()));
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(find.text("T's Lover"), findsOne);
+      // It said "Colombo, LK" — the wrong country — behind a pin and a chevron
+      // that looked like a picker and opened nothing.
+      expect(find.text('Colombo, LK'), findsNothing);
+      expect(find.byIcon(Icons.place), findsNothing);
+      expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
+    });
+
+    testWidgets('greets by the hour rather than always "Good Morning"', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap(FakeMenuRepository()));
+      await tester.pump(const Duration(seconds: 2));
+
+      // Whichever it is where this runs, it is one of the three and it came from
+      // the clock.
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              (w.data == 'Good morning,' ||
+                  w.data == 'Good afternoon,' ||
+                  w.data == 'Good evening,'),
+        ),
+        findsOne,
+      );
+      expect(find.text('Good Morning,'), findsNothing);
     });
   });
 }

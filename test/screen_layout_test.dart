@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/admin/domain/admin_menu_repository.dart';
+import 'package:practice/features/admin/domain/admin_order_repository.dart';
+import 'package:practice/features/orders/domain/order_repository.dart';
 import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/about/presentation/about_contact_screen.dart';
@@ -20,6 +22,8 @@ import 'package:practice/features/welcome/presentation/welcome_screen.dart';
 
 import 'support/auth_fixtures.dart';
 import 'support/fake_admin_menu_repository.dart';
+import 'support/fake_admin_order_repository.dart';
+import 'support/fake_order_repository.dart';
 import 'support/fake_menu_repository.dart';
 
 /// Every screen, laid out in both themes at two viewport sizes.
@@ -85,6 +89,12 @@ void main() {
                     ),
                     RepositoryProvider<AdminMenuRepository>(
                       create: (_) => FakeAdminMenuRepository(),
+                    ),
+                    RepositoryProvider<AdminOrderRepository>(
+                      create: (_) => FakeAdminOrderRepository(),
+                    ),
+                    RepositoryProvider<OrderRepository>(
+                      create: (_) => FakeOrderRepository(),
                     ),
                   ],
                   child: MaterialApp(theme: theme.value, home: entry.value()),

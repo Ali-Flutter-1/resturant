@@ -26,13 +26,17 @@ class AdminShell extends StatelessWidget {
 
     return TabbedShell(
       tabs: [
-        ShellTab(
-          label: 'Analytics',
-          sfSymbol: 'chart.bar.fill',
-          icon: Icons.insights_outlined,
-          selectedIcon: Icons.insights,
-          builder: (context) => const AdminDashboardScreen(),
-        ),
+        // Analytics is takings and trends — the owner's view of the business,
+        // not the kitchen's. Staff work the queue; what the venue earned is not
+        // theirs to see.
+        if (canManageVenue)
+          ShellTab(
+            label: 'Analytics',
+            sfSymbol: 'chart.bar.fill',
+            icon: Icons.insights_outlined,
+            selectedIcon: Icons.insights,
+            builder: (context) => const AdminDashboardScreen(),
+          ),
         ShellTab(
           label: 'Orders',
           sfSymbol: 'list.bullet.rectangle.fill',
@@ -40,13 +44,18 @@ class AdminShell extends StatelessWidget {
           selectedIcon: Icons.receipt_long,
           builder: (context) => const AdminOrdersScreen(),
         ),
-        ShellTab(
-          label: 'Products',
-          sfSymbol: 'shippingbox.fill',
-          icon: Icons.inventory_2_outlined,
-          selectedIcon: Icons.inventory_2,
-          builder: (context) => const AdminMenuManagementScreen(),
-        ),
+        // Managing the menu is `canManageVenue` work. A staff member reaching
+        // this tab could open every control on it and be refused by the API on
+        // each one — a screen you can enter and not use is worse than one that
+        // isn't there.
+        if (canManageVenue)
+          ShellTab(
+            label: 'Products',
+            sfSymbol: 'shippingbox.fill',
+            icon: Icons.inventory_2_outlined,
+            selectedIcon: Icons.inventory_2,
+            builder: (context) => const AdminMenuManagementScreen(),
+          ),
         // Staff and admin had no way to reach their own account at all — no
         // profile, and sign-out was buried on the customers' About screen,
         // which this shell never shows.

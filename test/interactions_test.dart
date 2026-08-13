@@ -8,7 +8,6 @@ import 'package:practice/shared/widgets/dish_list_skeleton.dart';
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/shared/widgets/app_chip.dart';
 import 'package:practice/features/admin/presentation/admin_menu_management_screen.dart';
-import 'package:practice/features/admin/presentation/admin_orders_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/admin/domain/admin_menu_repository.dart';
 import 'package:practice/features/menu/domain/dish.dart';
@@ -237,74 +236,6 @@ void main() {
 
       expect(find.text('Heritage Hoppers'), findsOneWidget);
       expect(find.text('Jaffna Crab Curry'), findsNothing);
-    });
-  });
-
-  group('admin orders', () {
-    testWidgets('tapping an order offers its next states', (tester) async {
-      await tester.pumpWidget(wrap(const AdminOrdersScreen()));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Table 4'));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.descendant(
-          of: find.byType(BottomSheet),
-          matching: find.text('Order #042'),
-        ),
-        findsOneWidget,
-      );
-      // A preparing order can become ready or overdue — never served
-      // directly, and never back to preparing. Scoped to the sheet, since
-      // the filter chips behind it carry the same words.
-      final sheet = find.byType(BottomSheet);
-      expect(
-        find.descendant(of: sheet, matching: find.text('Ready')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: sheet, matching: find.text('Served')),
-        findsNothing,
-      );
-    });
-
-    testWidgets('choosing a state updates the row', (tester) async {
-      await tester.pumpWidget(wrap(const AdminOrdersScreen()));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Table 4'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(
-          of: find.byType(BottomSheet),
-          matching: find.text('Ready'),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Scoped to #042's own card. A global count would depend on how many
-      // cards happen to be built, and the design's cards are tall enough that
-      // the answer changes with the viewport.
-      final card = find.ancestor(
-        of: find.text('Table 4'),
-        matching: find.byType(Card),
-      );
-      expect(
-        find.descendant(
-          of: card.evaluate().isEmpty ? find.byType(Scaffold) : card,
-          matching: find.text('READY'),
-        ),
-        findsWidgets,
-      );
-      // And #042 is no longer preparing.
-      expect(
-        find.descendant(
-          of: find.byType(Scaffold),
-          matching: find.text('PREPARING'),
-        ),
-        findsOneWidget,
-      );
     });
   });
 

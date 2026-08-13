@@ -535,4 +535,72 @@ void main() {
       expect(after.status, CustomerOrderStatus.cancelled);
     });
   });
+
+  group('the receipt sheet', () {
+    testWidgets('is padded and scrolls', (tester) async {
+      await tester.pumpWidget(
+        _wrapOrders(
+          FakeOrderRepository(
+            orders: [
+              OrderFixtures.order(
+                id: '1',
+                reference: '#0041',
+                status: CustomerOrderStatus.completed,
+                items: const [
+                  CustomerOrderItem(
+                    dishName: 'Jaffna Crab',
+                    quantity: 1,
+                    linePence: 1850,
+                  ),
+                  CustomerOrderItem(
+                    dishName: 'Hoppers',
+                    quantity: 2,
+                    linePence: 1000,
+                  ),
+                  CustomerOrderItem(
+                    dishName: 'Kottu',
+                    quantity: 3,
+                    linePence: 2400,
+                  ),
+                  CustomerOrderItem(
+                    dishName: 'Watalappan',
+                    quantity: 2,
+                    linePence: 1200,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.text('#0041'));
+      await tester.pumpAndSettle();
+
+      // It was a bare Column: no gutter, so the lines ran to both edges, and no
+      // scroll, so a long receipt clipped its own total off the bottom.
+      final scroller = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(SingleChildScrollView),
+      );
+      expect(scroller, findsOne);
+
+      final sheet = tester.getRect(find.byType(BottomSheet));
+      final line = tester.getRect(find.text('Jaffna Crab'));
+      expect(
+        line.left - sheet.left,
+        greaterThanOrEqualTo(16),
+        reason: 'the receipt should not run to the sheet edge',
+      );
+      expect(find.text('Total'), findsOne);
+    });
+  });
 }
+
+/// The orders screen with a repository in scope.
+Widget _wrapOrders(OrderRepository repository) =>
+    RepositoryProvider<OrderRepository>.value(
+      value: repository,
+      child: MaterialApp(theme: AppTheme.light, home: const MyOrdersScreen()),
+    );

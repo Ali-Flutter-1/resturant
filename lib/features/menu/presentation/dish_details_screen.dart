@@ -9,8 +9,8 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../features/cart/cart_cubit.dart';
 import '../../../shared/preview/sample_content.dart';
+import '../domain/dish.dart';
 import '../../../shared/animations/fly_to_cart.dart';
-import '../../../shared/widgets/app_sheet.dart';
 import '../../../shared/widgets/cart_icon_button.dart';
 import '../../../shared/widgets/dish_image.dart';
 import '../../../shared/widgets/quantity_stepper.dart';
@@ -26,9 +26,12 @@ class DishDetailsScreen extends StatefulWidget {
     this.onOpenCart,
   });
 
-  /// The dish that was tapped. Falls back to the featured one so the screen
-  /// still renders standalone (tests, deep links before routing exists).
-  final SampleDish? dish;
+  /// The dish that was tapped, straight from the API.
+  ///
+  /// It used to arrive as a preview object adapted from the real one, and the
+  /// screen filled the gaps with hardcoded copy — so every dish showed the same
+  /// description and the same delivery time regardless of what had been tapped.
+  final Dish? dish;
 
   final VoidCallback? onBack;
 
@@ -71,7 +74,15 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
       ),
       onArrive: () {
         if (!mounted) return;
-        context.read<CartCubit>().add(_quantity);
+        // The spice level and any add-ons go into the line's `notes`, which is
+        // the only free field the API offers on an order line. They are
+        // therefore *instructions*, not priced extras — the server prices from
+        // `dish_id` alone, so a paid modifier would have to be its own dish.
+        context.read<CartCubit>().addDish(
+          _dish,
+          quantity: _quantity,
+          notes: _notes(),
+        );
         AppHaptics.success();
         widget.onAddToCart?.call();
       },
@@ -80,7 +91,11 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
     if (mounted) setState(() => _flying = false);
   }
 
-  SampleDish get _dish => widget.dish ?? SampleContent.featured;
+  /// Falls back to an empty dish so the screen still renders standalone, in a
+  /// test or before a route has anything to hand it.
+  Dish get _dish =>
+      widget.dish ??
+      const Dish(id: '', name: 'Dish', description: '', pricePence: 0);
 
   double get _total {
     final addOns = _selectedAddOns.fold<double>(
@@ -88,6 +103,24 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
       (sum, i) => sum + SampleContent.addOns[i].price,
     );
     return (_dish.price + addOns) * _quantity;
+  }
+
+  /// What the kitchen is told about this line.
+  ///
+  /// The chosen spice level, then any add-ons, in one string of at most 200
+  /// characters — the API's limit. Truncated rather than refused: losing the tail
+  /// of a long note is better than refusing to add the dish.
+  ///
+  /// They are *instructions*, not priced extras. The server prices from
+  /// `dish_id` alone, so anything that should cost money has to be its own dish.
+  String? _notes() {
+    final parts = <String>[
+      SampleContent.spiceLevels[_spiceLevel],
+      for (final i in _selectedAddOns) SampleContent.addOns[i].name,
+    ];
+    final text = parts.join(', ');
+    if (text.isEmpty) return null;
+    return text.length <= 200 ? text : text.substring(0, 200);
   }
 
   @override
@@ -119,33 +152,37 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
                 // landed and the page was simply there. Staggering the sections
                 // lets the eye follow the same order it reads in.
                 children: [
-                  if (_dish.tag != null) _AuthenticityTag(label: _dish.tag!),
+                  // The dish's own sections, not an invented "authenticity"
+                  // label — the API carries categories and no such tag.
+                  if (_dish.categories.isNotEmpty)
+                    _AuthenticityTag(label: _dish.categories.first.name),
                   const SizedBox(height: AppSpacing.x3),
                   Text(_dish.name, style: context.texts.displayLarge),
                   const SizedBox(height: AppSpacing.x2),
-                  _RatingRow(dish: _dish),
-                  const SizedBox(height: AppSpacing.x2),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.schedule,
-                        size: AppIconSize.sm,
-                        color: context.surfaces.inkSoft,
-                      ),
-                      const SizedBox(width: AppSpacing.x1 + 2),
-                      Text(
-                        '45-60 min delivery',
-                        style: context.texts.bodyMedium,
-                      ),
-                    ],
-                  ),
+                  // The kitchen's own estimate, and only when it sent one. This
+                  // was "45-60 min delivery" for every dish on the menu.
+                  if (_dish.prepTime != null)
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.schedule,
+                          size: AppIconSize.sm,
+                          color: context.surfaces.inkSoft,
+                        ),
+                        const SizedBox(width: AppSpacing.x1 + 2),
+                        Text(
+                          'Ready in ${_dish.prepTime}',
+                          style: context.texts.bodyMedium,
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: AppSpacing.x5),
                   Text(
-                    'A rich, aromatic fusion of tender pork and authentic Sri '
-                    'Lankan spices. Slow-cooked to perfection with roasted '
-                    'curry powder, goraka, and black pepper, delivering a '
-                    'profound depth of flavor that honors culinary heritage '
-                    'while embracing modern refinement.',
+                    // The dish's real description. A dish with none says so
+                    // rather than borrowing another dish's paragraph.
+                    _dish.description.isEmpty
+                        ? 'No description yet.'
+                        : _dish.description,
                     style: context.texts.bodyLarge?.copyWith(
                       color: scheme.primary.withValues(alpha: 0.9),
                     ),
@@ -224,7 +261,7 @@ class _DishHeader extends StatelessWidget {
     this.onOpenCart,
   });
 
-  final SampleDish dish;
+  final Dish dish;
   final GlobalKey imageKey;
   final GlobalKey cartKey;
   final VoidCallback? onBack;
@@ -299,48 +336,6 @@ class _AuthenticityTag extends StatelessWidget {
             ?.copyWith(color: colours.preparing)
             .withWeight(FontWeight.w600),
       ),
-    );
-  }
-}
-
-class _RatingRow extends StatelessWidget {
-  const _RatingRow({required this.dish});
-
-  final SampleDish dish;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (dish.rating == null) return const SizedBox.shrink();
-
-    return Row(
-      children: [
-        Icon(
-          Icons.star,
-          size: AppIconSize.md,
-          color: context.orderColors.preparing,
-        ),
-        const SizedBox(width: AppSpacing.x1),
-        Text(dish.rating!.toStringAsFixed(1), style: context.texts.titleMedium),
-        const SizedBox(width: AppSpacing.x2),
-        InkWell(
-          onTap: () => showAppSheet<void>(
-            context: context,
-            title: 'Reviews',
-            subtitle:
-                '${dish.rating!.toStringAsFixed(1)} average from '
-                '${dish.reviewCount} diners.',
-            child: const _Reviews(),
-          ),
-          child: Text(
-            '(${dish.reviewCount} reviews)',
-            style: context.texts.bodySmall?.copyWith(
-              color: scheme.primary,
-              decoration: TextDecoration.underline,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -617,56 +612,3 @@ class _AddToCartBar extends StatelessWidget {
 
 /// Sample reviews so the ratings link is a working control. Replaced by the
 /// reviews endpoint when it exists.
-class _Reviews extends StatelessWidget {
-  const _Reviews();
-
-  static const _items = [
-    (
-      name: 'Priyanka F.',
-      rating: 5,
-      body: 'Tastes like my grandmother\'s. The goraka is exactly right.',
-    ),
-    (
-      name: 'James W.',
-      rating: 5,
-      body: 'Rich and properly hot. Ask for extra roti.',
-    ),
-    (
-      name: 'Aisha R.',
-      rating: 4,
-      body: 'Excellent depth of flavour, though I would have liked more pork.',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      shrinkWrap: true,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
-      itemCount: _items.length,
-      separatorBuilder: (_, _) => const Divider(height: AppSpacing.x6),
-      itemBuilder: (context, index) {
-        final review = _items[index];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(review.name, style: context.texts.titleMedium),
-                const SizedBox(width: AppSpacing.x2),
-                for (var i = 0; i < review.rating; i++)
-                  Icon(
-                    Icons.star,
-                    size: AppIconSize.xs,
-                    color: context.orderColors.preparing,
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.x1),
-            Text(review.body, style: context.texts.bodyMedium),
-          ],
-        );
-      },
-    );
-  }
-}

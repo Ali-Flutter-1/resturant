@@ -170,7 +170,10 @@ class _ChangePasswordFormState extends State<_ChangePasswordForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    // Scrollable for the same reason as the inbox sheet: the sheet bounds its
+    // child's height, so with the keyboard up an unscrollable column puts its
+    // own submit button out of reach.
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.gutter,
         0,
@@ -268,7 +271,10 @@ class _DeleteAccountFormState extends State<_DeleteAccountForm> {
   Widget build(BuildContext context) {
     final colours = context.orderColors;
 
-    return Padding(
+    // Scrollable for the same reason as the inbox sheet: the sheet bounds its
+    // child's height, so with the keyboard up an unscrollable column puts its
+    // own submit button out of reach.
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.gutter,
         0,

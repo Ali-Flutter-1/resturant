@@ -1,40 +1,37 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../features/admin/domain/admin_order.dart';
 import 'app_chip.dart';
 
-/// The lifecycle of an order, as the kitchen and counter see it.
-enum OrderStatus {
-  preparing('Preparing'),
-  ready('Ready'),
-  served('Served'),
-
-  /// Past its target time. Not present in the Figma design — added because an
-  /// order queue needs a way to say "this one is late".
-  overdue('Overdue');
-
-  const OrderStatus(this.label);
-  final String label;
-}
-
+/// Colour for an order status.
+///
+/// The status enum itself lives in the admin domain — it is the API's, not this
+/// widget's. There used to be a second one here with `served` and `overdue`,
+/// invented before the backend's own vocabulary was known; two enums called
+/// OrderStatus in one app is a trap, so this is the only one left.
 extension OrderStatusPalette on OrderStatus {
   Color foreground(BuildContext context) {
     final c = context.orderColors;
     return switch (this) {
+      OrderStatus.placed => c.preparing,
       OrderStatus.preparing => c.preparing,
-      OrderStatus.ready => c.ready,
-      OrderStatus.served => c.served,
-      OrderStatus.overdue => c.overdue,
+      OrderStatus.ready || OrderStatus.outForDelivery => c.ready,
+      OrderStatus.completed => c.served,
+      OrderStatus.cancelled || OrderStatus.rejected => c.overdue,
+      OrderStatus.unknown => c.served,
     };
   }
 
   Color container(BuildContext context) {
     final c = context.orderColors;
     return switch (this) {
+      OrderStatus.placed => c.preparingContainer,
       OrderStatus.preparing => c.preparingContainer,
-      OrderStatus.ready => c.readyContainer,
-      OrderStatus.served => c.servedContainer,
-      OrderStatus.overdue => c.overdueContainer,
+      OrderStatus.ready || OrderStatus.outForDelivery => c.readyContainer,
+      OrderStatus.completed => c.servedContainer,
+      OrderStatus.cancelled || OrderStatus.rejected => c.overdueContainer,
+      OrderStatus.unknown => c.servedContainer,
     };
   }
 }

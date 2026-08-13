@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/animations/page_transitions.dart';
 
-import '../../shared/preview/sample_content.dart';
 import '../menu/domain/dish.dart';
 import '../../shared/shell/tabbed_shell.dart';
 import '../about/presentation/about_contact_screen.dart';
@@ -22,7 +21,7 @@ import '../orders/presentation/my_orders_screen.dart';
 class CustomerShell extends StatelessWidget {
   const CustomerShell({super.key});
 
-  static void _openDish(BuildContext context, SampleDish dish) {
+  static void _openDish(BuildContext context, Dish dish) {
     Navigator.of(context).push(
       AppPageRoute<void>(
         builder: (context) => DishDetailsScreen(
@@ -47,7 +46,7 @@ class CustomerShell extends StatelessWidget {
         builder: (context) => MenuScreen(
           initialQuery: query,
           initialCategorySlug: categorySlug,
-          onOpenDish: (dish) => _openDish(context, _asPreview(dish)),
+          onOpenDish: (dish) => _openDish(context, dish),
         ),
       ),
     );
@@ -58,7 +57,12 @@ class CustomerShell extends StatelessWidget {
       AppPageRoute<void>(
         builder: (context) => CheckoutScreen(
           onBack: () => Navigator.of(context).pop(),
-          onPlaceOrder: () => Navigator.of(context).popUntil((r) => r.isFirst),
+          // Back to the tab root, then over to Orders: the order now exists, and
+          // the tracker is where the customer wants to be looking at it.
+          onPlaceOrder: (_) {
+            Navigator.of(context).popUntil((r) => r.isFirst);
+            TabbedShell.selectTab(context, 2);
+          },
         ),
       ),
     );
@@ -74,8 +78,7 @@ class CustomerShell extends StatelessWidget {
           icon: Icons.restaurant_outlined,
           selectedIcon: Icons.restaurant,
           builder: (context) => DiscoverScreen(
-            // Adapted like the menu's: Discover now hands over an API dish.
-            onOpenDish: (dish) => _openDish(context, _asPreview(dish)),
+            onOpenDish: (dish) => _openDish(context, dish),
             onOpenMenu: () => _openMenu(context),
             // Search and the filter button both open the full menu, which is
             // where filtering actually lives.
@@ -122,18 +125,3 @@ class CustomerShell extends StatelessWidget {
     );
   }
 }
-
-/// Adapts an API [Dish] to the preview shape the dish detail screen still
-/// expects.
-///
-/// Temporary scaffolding, and deliberately visible as such. The menu now comes
-/// from the API but the detail screen has not been migrated yet, so this
-/// converts between the two rather than blocking the menu on that work. It goes
-/// away when `DishDetailsScreen` takes a [Dish].
-SampleDish _asPreview(Dish dish) => SampleDish(
-  name: dish.name,
-  description: dish.description,
-  price: dish.price,
-  tag: dish.dietaryTag,
-  imageUrl: dish.imageUrl,
-);

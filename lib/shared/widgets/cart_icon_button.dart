@@ -69,8 +69,8 @@ class _CartIconButtonState extends State<CartIconButton>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return BlocListener<CartCubit, int>(
-      listenWhen: (previous, current) => current > previous,
+    return BlocListener<CartCubit, CartState>(
+      listenWhen: (previous, current) => current.count > previous.count,
       listener: (context, _) => _bump(),
       child: IconButton(
         tooltip: 'Cart',
@@ -103,7 +103,7 @@ class _CartBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final count = context.watch<CartCubit>().state;
+    final count = context.watch<CartCubit>().state.count;
 
     return AnimatedScale(
       scale: count == 0 ? 0 : 1,

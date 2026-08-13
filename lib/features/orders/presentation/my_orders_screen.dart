@@ -436,91 +436,102 @@ void _showReceipt(BuildContext context, CustomerOrder order) {
   showAppSheet<void>(
     context: context,
     title: 'Order ${order.reference}',
+    // Padded and scrollable. It was a bare Column: no gutter, so the lines ran
+    // to both edges, and no scroll, so a receipt with several items grew the
+    // sheet to the height cap and then clipped the total off the bottom.
     child: Builder(
-      builder: (context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              AppChip.status(
-                label: order.statusLabel,
-                foreground: order.status.foreground(context),
-                background: order.status.container(context),
-              ),
-              const SizedBox(width: AppSpacing.x2),
-              if (order.placedAt != null)
-                Text(
-                  _date(order.placedAt!),
-                  style: context.texts.bodySmall?.copyWith(
-                    color: context.surfaces.inkSoft,
+      builder: (context) => SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.gutter,
+          0,
+          AppSpacing.gutter,
+          AppSpacing.x2 + MediaQuery.paddingOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                AppChip.status(
+                  label: order.statusLabel,
+                  foreground: order.status.foreground(context),
+                  background: order.status.container(context),
+                ),
+                const SizedBox(width: AppSpacing.x2),
+                if (order.placedAt != null)
+                  Text(
+                    _date(order.placedAt!),
+                    style: context.texts.bodySmall?.copyWith(
+                      color: context.surfaces.inkSoft,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.x4),
+
+            if (order.items.isEmpty)
+              // Only reached when the detail fetch failed, since the API always
+              // sends lines on a single order. Saying so beats an empty gap that
+              // reads as a rendering fault.
+              Text(
+                'Could not load the item breakdown. Pull to refresh and try '
+                'again.',
+                style: context.texts.bodyMedium?.copyWith(
+                  color: context.surfaces.inkSoft,
+                ),
+              )
+            else
+              for (final item in order.items)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        child: Text(
+                          '${item.quantity}×',
+                          style: context.texts.titleMedium,
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.dishName, style: context.texts.bodyLarge),
+                            if (item.notes != null)
+                              Text(
+                                item.notes!,
+                                style: context.texts.bodySmall?.copyWith(
+                                  color: context.surfaces.inkSoft,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.x2),
+                      Text(
+                        '£${(item.linePence / 100).toStringAsFixed(2)}',
+                        style: context.texts.bodyLarge,
+                      ),
+                    ],
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.x4),
 
-          if (order.items.isEmpty)
-            // Only reached when the detail fetch failed, since the API always
-            // sends lines on a single order. Saying so beats an empty gap that
-            // reads as a rendering fault.
-            Text(
-              'Could not load the item breakdown. Pull to refresh and try '
-              'again.',
-              style: context.texts.bodyMedium?.copyWith(
-                color: context.surfaces.inkSoft,
-              ),
-            )
-          else
-            for (final item in order.items)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.x3),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 28,
-                      child: Text(
-                        '${item.quantity}×',
-                        style: context.texts.titleMedium,
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.dishName, style: context.texts.bodyLarge),
-                          if (item.notes != null)
-                            Text(
-                              item.notes!,
-                              style: context.texts.bodySmall?.copyWith(
-                                color: context.surfaces.inkSoft,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.x2),
-                    Text(
-                      '£${(item.linePence / 100).toStringAsFixed(2)}',
-                      style: context.texts.bodyLarge,
-                    ),
-                  ],
+            Divider(height: AppSpacing.x6, color: context.surfaces.line),
+            Row(
+              children: [
+                Expanded(child: Text('Total', style: context.texts.titleLarge)),
+                Text(
+                  order.formattedTotal,
+                  style: AppTypography.money(
+                    Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
-              ),
-
-          Divider(height: AppSpacing.x6, color: context.surfaces.line),
-          Row(
-            children: [
-              Expanded(child: Text('Total', style: context.texts.titleLarge)),
-              Text(
-                order.formattedTotal,
-                style: AppTypography.money(
-                  Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     ),
   );

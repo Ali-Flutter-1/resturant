@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
+import 'package:practice/features/menu/domain/dish.dart';
 import 'package:practice/shared/animations/fly_to_cart.dart';
 import 'package:practice/shared/widgets/cart_icon_button.dart';
 
@@ -48,7 +49,16 @@ void main() {
                         sourceKey: sourceKey,
                         targetKey: cartKey,
                         child: const ColoredBox(color: Colors.red),
-                        onArrive: cart.add,
+                        // The flight's only job is to land; what it lands *is*
+                        // decided by the screen that launched it.
+                        onArrive: () => cart.addDish(
+                          const Dish(
+                            id: 'd1',
+                            name: 'Kottu',
+                            description: '',
+                            pricePence: 895,
+                          ),
+                        ),
                       ),
                       child: const Text('Add'),
                     ),
@@ -111,13 +121,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(
-      cart.state,
+      cart.state.count,
       0,
       reason: 'the badge must not update before the item arrives',
     );
 
     await tester.pumpAndSettle();
-    expect(cart.state, 1);
+    expect(cart.state.count, 1);
   });
 
   testWidgets('the overlay is torn down when the flight ends', (tester) async {
@@ -146,7 +156,7 @@ void main() {
     await tester.pump();
 
     expect(
-      cart.state,
+      cart.state.count,
       1,
       reason: 'the outcome must not depend on the animation running',
     );

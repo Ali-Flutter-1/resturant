@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/haptics/app_haptics.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/time/uk_time.dart';
 import '../../../core/animations/reveal.dart';
 import '../../../core/animations/skeleton.dart';
 import '../../../core/theme/app_colors.dart';
@@ -182,23 +183,37 @@ class _HeroCarouselState extends State<_HeroCarousel> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 16:10 plus the tallest the text overlay gets, so the pager has a
-        // bounded height without the cards being cropped.
+        // 16:10, so the pager has a bounded height without cropping the cards.
         AspectRatio(
           aspectRatio: 16 / 10,
-          child: PageView.builder(
-            controller: _controller,
-            itemCount: widget.dishes.length,
-            onPageChanged: (page) {
-              AppHaptics.selection();
-              setState(() => _page = page);
-            },
-            // No inner padding: the card *is* the page, so it spans exactly the
-            // width the gutter leaves. The dots below say there is more.
-            itemBuilder: (context, index) => _FeaturedCard(
-              dish: widget.dishes[index],
-              onOrder: widget.onOpenDish,
-              position: index,
+          // The pager runs the full width of the screen while each *page* keeps
+          // the page gutter. Two things fall out of that, and they were
+          // previously in conflict: a card's edges land exactly on the gutter —
+          // the line the search bar sits on — and consecutive cards are a full
+          // gutter apart, so mid-swipe they never touch.
+          //
+          // `OverflowBox` is what lets the pager exceed the width its parent
+          // allows. Escaping the page's own padding any other way would mean
+          // restructuring every child of the screen to pad itself.
+          child: OverflowBox(
+            maxWidth: MediaQuery.sizeOf(context).width,
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: widget.dishes.length,
+              onPageChanged: (page) {
+                AppHaptics.selection();
+                setState(() => _page = page);
+              },
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.gutter,
+                ),
+                child: _FeaturedCard(
+                  dish: widget.dishes[index],
+                  onOrder: widget.onOpenDish,
+                  position: index,
+                ),
+              ),
             ),
           ),
         ),
@@ -261,7 +276,10 @@ class _DishStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 244,
+      // Tall enough for the photograph, two lines of description and the price
+      // row. At 244 the description was squeezed to one line and ellipsised
+      // after a couple of words.
+      height: 268,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         // Bleeds to the screen edges, so a card can sit half-off it. The list's
@@ -331,7 +349,7 @@ class _HighlightsSkeleton extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.x3),
           SizedBox(
-            height: 244,
+            height: 268,
             // A horizontal list, not a Row: three 168pt cards are wider than the
             // screen, which is the point — the strip they stand in for scrolls.
             // A Row would overflow rather than run off the edge.
@@ -407,31 +425,14 @@ class _Greeting extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Good Morning,', style: context.texts.bodyMedium),
+              // On the restaurant's clock, not the device's — and no longer the
+              // literal words "Good Morning," at every hour of the day.
+              Text('${UkTime.greeting()},', style: context.texts.bodyMedium),
               const SizedBox(height: 2),
               Text("T's Lover", style: context.texts.displayLarge),
-              const SizedBox(height: AppSpacing.x1),
-              Row(
-                children: [
-                  Icon(
-                    Icons.place,
-                    size: AppIconSize.sm,
-                    color: scheme.primary,
-                  ),
-                  const SizedBox(width: AppSpacing.x1),
-                  Text(
-                    'Colombo, LK',
-                    style: context.texts.bodySmall
-                        ?.copyWith(color: scheme.primary)
-                        .withWeight(FontWeight.w600),
-                  ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: AppIconSize.md,
-                    color: scheme.primary,
-                  ),
-                ],
-              ),
+              // The "Colombo, LK" line is gone. It named the wrong country, and
+              // its pin and chevron looked like a location picker that opened
+              // nothing.
             ],
           ),
         ),
@@ -877,6 +878,9 @@ class _PopularCard extends StatelessWidget {
                         child: Text(
                           dish.description,
                           style: context.texts.bodySmall,
+                          // Two lines, and the card is now tall enough for
+                          // both. It was being squeezed to one and ellipsised
+                          // after a couple of words.
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),

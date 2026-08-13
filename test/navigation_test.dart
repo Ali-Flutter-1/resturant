@@ -6,11 +6,14 @@ import 'package:practice/core/animations/page_transitions.dart';
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/about/presentation/about_contact_screen.dart';
 import 'package:practice/features/booking/presentation/book_table_screen.dart';
+import 'package:practice/features/auth/auth_cubit.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/checkout/presentation/checkout_screen.dart';
 import 'package:practice/features/discover/presentation/discover_screen.dart';
 import 'package:practice/features/menu/presentation/dish_details_screen.dart';
 import 'package:practice/features/admin/domain/admin_menu_repository.dart';
+import 'package:practice/features/admin/domain/admin_order_repository.dart';
+import 'package:practice/features/orders/domain/order_repository.dart';
 import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/menu/presentation/menu_screen.dart';
 import 'package:practice/features/shell/admin_shell.dart';
@@ -18,6 +21,8 @@ import 'package:practice/shared/widgets/flutter_glass_nav_bar.dart';
 
 import 'support/auth_fixtures.dart';
 import 'support/fake_admin_menu_repository.dart';
+import 'support/fake_admin_order_repository.dart';
+import 'support/fake_order_repository.dart';
 import 'support/fake_menu_repository.dart';
 
 /// Every screen needs a way out, and no screen may advertise one it doesn't
@@ -40,6 +45,12 @@ Widget _host(Widget home, {TargetPlatform? platform}) {
         RepositoryProvider<MenuRepository>(create: (_) => FakeMenuRepository()),
         RepositoryProvider<AdminMenuRepository>(
           create: (_) => FakeAdminMenuRepository(),
+        ),
+        RepositoryProvider<AdminOrderRepository>(
+          create: (_) => FakeAdminOrderRepository(),
+        ),
+        RepositoryProvider<OrderRepository>(
+          create: (_) => FakeOrderRepository(),
         ),
       ],
       child: MaterialApp(theme: theme, home: home),
@@ -237,6 +248,12 @@ void main() {
               RepositoryProvider<AdminMenuRepository>(
                 create: (_) => FakeAdminMenuRepository(),
               ),
+              RepositoryProvider<AdminOrderRepository>(
+                create: (_) => FakeAdminOrderRepository(),
+              ),
+              RepositoryProvider<OrderRepository>(
+                create: (_) => FakeOrderRepository(),
+              ),
             ],
             child: MaterialApp(theme: AppTheme.light, home: const AdminShell()),
           ),
@@ -265,6 +282,97 @@ void main() {
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
       expect(find.text('Add a dish'), findsOneWidget);
+    });
+  });
+
+  group('what each role may reach', () {
+    Widget shellFor(AuthUser user) => MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => AuthCubit(initialUser: user)),
+        BlocProvider(create: (_) => CartCubit()),
+      ],
+      child: MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<MenuRepository>(
+            create: (_) => FakeMenuRepository(),
+          ),
+          RepositoryProvider<AdminMenuRepository>(
+            create: (_) => FakeAdminMenuRepository(),
+          ),
+          RepositoryProvider<AdminOrderRepository>(
+            create: (_) => FakeAdminOrderRepository(),
+          ),
+          RepositoryProvider<OrderRepository>(
+            create: (_) => FakeOrderRepository(),
+          ),
+        ],
+        child: MaterialApp(theme: AppTheme.light, home: const AdminShell()),
+      ),
+    );
+
+    testWidgets('an admin gets every tab', (tester) async {
+      await tester.pumpWidget(shellFor(AuthFixtures.admin));
+      await tester.pump(const Duration(seconds: 2));
+
+      Finder tab(String label) => find.descendant(
+        of: find.byType(FlutterGlassNavBar),
+        matching: find.text(label),
+      );
+
+      expect(tab('Analytics'), findsOneWidget);
+      expect(tab('Orders'), findsOneWidget);
+      expect(tab('Products'), findsOneWidget);
+      expect(tab('Reservations'), findsOneWidget);
+      expect(tab('Profile'), findsOneWidget);
+    });
+
+    testWidgets('staff get neither analytics nor the menu', (tester) async {
+      await tester.pumpWidget(shellFor(AuthFixtures.staff));
+      await tester.pump(const Duration(seconds: 2));
+
+      // Takings are the owner's view of the business, and managing the menu is
+      // `canManageVenue` work — a staff member could open every control on that
+      // screen and be refused by the API on each one.
+      Finder tab(String label) => find.descendant(
+        of: find.byType(FlutterGlassNavBar),
+        matching: find.text(label),
+      );
+
+      expect(tab('Analytics'), findsNothing);
+      expect(tab('Products'), findsNothing);
+
+      // What they do need is untouched.
+      expect(tab('Orders'), findsOneWidget);
+      expect(tab('Reservations'), findsOneWidget);
+      expect(tab('Profile'), findsOneWidget);
+    });
+
+    Finder barTab(String label) => find.descendant(
+      of: find.byType(FlutterGlassNavBar),
+      matching: find.text(label),
+    );
+
+    testWidgets('an admin is offered the contact inbox', (tester) async {
+      await tester.pumpWidget(shellFor(AuthFixtures.admin));
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(barTab('Profile'));
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(find.text('Messages'), findsOneWidget);
+    });
+
+    testWidgets('staff are not', (tester) async {
+      // A separate test rather than a second `pumpWidget`: re-pumping the same
+      // widget type reuses the element, so the BlocProvider keeps the first
+      // role and the assertion passes for the wrong reason.
+      await tester.pumpWidget(shellFor(AuthFixtures.staff));
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(barTab('Profile'));
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(find.text('Messages'), findsNothing);
     });
   });
 }

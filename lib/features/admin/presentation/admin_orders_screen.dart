@@ -1,444 +1,295 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
-import '../../../core/haptics/app_haptics.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
+import '../../../core/haptics/app_haptics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../shared/preview/sample_content.dart';
 import '../../../shared/widgets/admin_nav.dart';
+import '../../../shared/widgets/api_error_view.dart';
+import '../../../shared/widgets/app_chip.dart';
+import '../../../shared/widgets/app_sheet.dart';
+import '../../../shared/widgets/app_surface.dart';
+import '../../../shared/widgets/skeleton.dart';
 import '../../../shared/widgets/status_pill.dart';
-import 'order_actions_sheet.dart';
+import '../domain/admin_order.dart';
+import '../domain/admin_order_repository.dart';
+import 'admin_orders_cubit.dart';
 
-/// The live order queue.
+/// The kitchen queue.
 ///
-/// Transcribed from "Admin Mobile: Manage Orders (Polished)" (`1:3482`), from
-/// the frame's *metadata* only — the Figma MCP quota on this plan allows no
-/// more than a call or two, so geometry and structure are the design's while
-/// every colour and weight is this app's existing token, inferred rather than
-/// read off the frame. Treat the styling as unverified.
+/// Live orders from `/admin/orders`, and the documented status machine on each
+/// row: placed → preparing → ready → out_for_delivery (delivery only) →
+/// completed, with reject and cancel available early.
 ///
-/// The frame replaces this screen's filter chips and compact rows with one
-/// expanded card per order: a 4pt status stripe down the left edge, reference
-/// and status chip on a line, destination, detail and amount, then the order's
-/// line items and the actions that apply to it.
-///
-/// Two things in the frame are deliberately *not* adopted. Its cards are
-/// labelled Pending / Preparing / Out for Delivery, which is a different
-/// status vocabulary from this app's; changing that touches the dashboard, the
-/// order row, the actions sheet and their tests, and the frame shows only
-/// three of the states so the full set cannot be recovered from it. And the
-/// per-card action buttons cannot express every transition, so tapping a card
-/// still opens the actions sheet.
-class AdminOrdersScreen extends StatefulWidget {
+/// One tap advances an order, because that is the gesture a kitchen makes twenty
+/// times a service. The other moves — rejecting, cancelling — sit behind the
+/// overflow, where a stray tap cannot reach them.
+class AdminOrdersScreen extends StatelessWidget {
   const AdminOrdersScreen({super.key});
 
   @override
-  State<AdminOrdersScreen> createState() => _AdminOrdersScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) =>
+          AdminOrdersCubit(repository: context.read<AdminOrderRepository>())
+            ..load(),
+      child: const _QueueView(),
+    );
+  }
 }
 
-class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
-  OrderStatus? _filter;
+class _QueueView extends StatefulWidget {
+  const _QueueView();
 
-  /// Status changes made in this session. The list itself is const preview
-  /// content, so overrides live beside it rather than mutating it.
-  final _statusOverrides = <String, OrderStatus>{};
+  @override
+  State<_QueueView> createState() => _QueueViewState();
+}
 
-  OrderStatus _statusOf(
-    ({
-      String amount,
-      String destination,
-      String detail,
-      String reference,
-      OrderStatus status,
-    })
-    order,
-  ) => _statusOverrides[order.reference] ?? order.status;
+class _QueueViewState extends State<_QueueView> {
+  final _search = TextEditingController();
+  Timer? _poll;
 
-  Future<void> _openOrder(
-    ({
-      String amount,
-      String destination,
-      String detail,
-      String reference,
-      OrderStatus status,
-    })
-    order,
-  ) async {
-    final next = await showOrderActionsSheet(
-      context: context,
-      reference: order.reference,
-      destination: order.destination,
-      amount: order.amount,
-      status: _statusOf(order),
+  @override
+  void initState() {
+    super.initState();
+    // The queue changes because customers order, not because staff refresh. The
+    // guide notes there is no realtime subscription yet, so this polls — quietly,
+    // so a ticket never disappears under someone's hand mid-read.
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) context.read<AdminOrdersCubit>().load(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _advance(AdminOrder order) async {
+    final next = order.advanceTo;
+    if (next == null) return;
+
+    AppHaptics.commit();
+    final error = await context.read<AdminOrdersCubit>().changeStatus(
+      order.id,
+      next,
     );
-    if (next != null && mounted) {
-      setState(() => _statusOverrides[order.reference] = next);
+    if (!mounted) return;
+
+    if (error != null) {
+      AppHaptics.failure();
+      showAppSnack(context, error, isError: true);
+    } else {
+      showAppSnack(
+        context,
+        '${order.orderNumber} is now ${next.label.toLowerCase()}.',
+      );
     }
   }
 
-  static const _orders = [
-    (
-      reference: '#042',
-      destination: 'Table 4',
-      detail: '2 items · 5 mins ago',
-      amount: '£28.50',
-      status: OrderStatus.preparing,
-    ),
-    (
-      reference: '#043',
-      destination: 'Table 9',
-      detail: '3 items · 2 mins ago',
-      amount: '£52.00',
-      status: OrderStatus.preparing,
-    ),
-    (
-      reference: '#041',
-      destination: 'Takeaway',
-      detail: '4 items · 12 mins ago',
-      amount: '£45.00',
-      status: OrderStatus.ready,
-    ),
-    (
-      reference: '#038',
-      destination: 'Delivery · SW1A',
-      detail: '2 items · 58 mins ago',
-      amount: '£31.00',
-      status: OrderStatus.overdue,
-    ),
-    (
-      reference: '#040',
-      destination: 'Table 12',
-      detail: '1 item · 25 mins ago',
-      amount: '£8.00',
-      status: OrderStatus.served,
-    ),
-  ];
-
-  List<
-    ({
-      String amount,
-      String destination,
-      String detail,
-      String reference,
-      OrderStatus status,
-    })
-  >
-  get _visible => _filter == null
-      ? _orders
-      : _orders.where((o) => o.status == _filter).toList();
-
-  /// The one transition a card's primary button offers. Anything else — going
-  /// back, or marking an order late — stays in the actions sheet, which is why
-  /// the card itself remains tappable.
-  static OrderStatus? _advanceFrom(OrderStatus status) => switch (status) {
-    OrderStatus.preparing => OrderStatus.ready,
-    OrderStatus.overdue => OrderStatus.ready,
-    OrderStatus.ready => OrderStatus.served,
-    OrderStatus.served => null,
-  };
-
   @override
   Widget build(BuildContext context) {
-    final counts = <OrderStatus, int>{
-      for (final status in OrderStatus.values)
-        status: _orders.where((o) => _statusOf(o) == status).length,
-    };
-
     return Scaffold(
       appBar: buildAdminAppBar(context),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.gutter,
-              AppSpacing.x2,
-              AppSpacing.gutter,
-              0,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+      body: BlocBuilder<AdminOrdersCubit, AdminOrdersState>(
+        builder: (context, state) {
+          final cubit = context.read<AdminOrdersCubit>();
+          final loading = state.status == QueueStatus.loading;
+
+          // The controls stay put through every state, so a filter does not
+          // vanish while the request it started is in flight.
+          return Column(
+            children: [
+              _StatsStrip(stats: state.stats, loading: loading).reveal(),
+              const SizedBox(height: AppSpacing.x3),
+              _SearchField(
+                controller: _search,
+                onChanged: cubit.search,
+              ).revealItem(1),
+              const SizedBox(height: AppSpacing.x3),
+              _QueueFilter(
+                selected: state.filter,
+                openOnly: state.openOnly,
+                onStatus: cubit.filterBy,
+                onOpenOnly: cubit.showOpenOnly,
+              ).revealItem(2),
+              const SizedBox(height: AppSpacing.x3),
+              if (loading)
+                const Expanded(child: OrderListSkeleton())
+              else if (state.status == QueueStatus.failure &&
+                  state.failure != null)
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Manage Orders',
-                        style: context.texts.headlineLarge,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: AppSpacing.x1),
-                      Text(
-                        '${counts[OrderStatus.preparing]} in the kitchen, '
-                        '${counts[OrderStatus.ready]} awaiting collection.',
-                        style: context.texts.bodyMedium,
-                      ),
-                    ],
+                  child: ApiErrorView(
+                    failure: state.failure!,
+                    onRetry: () => cubit.load(),
+                  ),
+                )
+              else
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => cubit.load(silent: true),
+                    child: state.visible.isEmpty
+                        ? _EmptyQueue(
+                            searched: state.isSearchEmpty,
+                            openOnly: state.openOnly,
+                            filtered: state.filter != null,
+                          )
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              AppSpacing.gutter,
+                              0,
+                              AppSpacing.gutter,
+                              AppSpacing.x12 +
+                                  MediaQuery.paddingOf(context).bottom,
+                            ),
+                            itemCount: state.visible.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: AppSpacing.x3),
+                            itemBuilder: (context, index) {
+                              final order = state.visible[index];
+                              return _OrderTicket(
+                                key: ValueKey(order.id),
+                                order: order,
+                                busy: state.busyIds.contains(order.id),
+                                onAdvance: () => _advance(order),
+                                onOpen: () => _showOrder(context, order),
+                              ).revealItem(index, duration: Motion.fast);
+                            },
+                          ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.x2),
-                // The frame carries one small control here rather than a row
-                // of chips, so filtering became a menu.
-                _FilterButton(
-                  selected: _filter,
-                  onSelected: (s) => setState(() => _filter = s),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.x4),
-          Expanded(
-            child: _visible.isEmpty
-                ? _EmptyQueue(status: _filter)
-                : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      AppSpacing.gutter,
-                      0,
-                      AppSpacing.gutter,
-                      AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
-                    ),
-                    itemCount: _visible.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(height: AppSpacing.x4),
-                    itemBuilder: (context, index) {
-                      final order = _visible[index];
-                      final status = _statusOf(order);
-                      return _OrderCard(
-                        reference: order.reference,
-                        destination: order.destination,
-                        detail: order.detail,
-                        amount: order.amount,
-                        status: status,
-                        onTap: () => _openOrder(order),
-                        onAdvance: _advanceFrom(status) == null
-                            ? null
-                            : () => setState(() {
-                                _statusOverrides[order.reference] =
-                                    _advanceFrom(status)!;
-                              }),
-                      ).revealItem(
-                        index,
-                        duration: Motion.fast,
-                        direction: AxisDirection.left,
-                      );
-                    },
-                  ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// The frame's single trailing control, in place of a chip row.
-class _FilterButton extends StatelessWidget {
-  const _FilterButton({required this.selected, required this.onSelected});
+/// Today's counters.
+class _StatsStrip extends StatelessWidget {
+  const _StatsStrip({required this.stats, required this.loading});
 
-  final OrderStatus? selected;
-  final ValueChanged<OrderStatus?> onSelected;
+  final OrderStats stats;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 32,
-      child: PopupMenuButton<OrderStatus?>(
-        tooltip: 'Filter by status',
-        initialValue: selected,
-        onSelected: (value) {
-          AppHaptics.selection();
-          onSelected(value);
-        },
-        itemBuilder: (context) => [
-          const PopupMenuItem<OrderStatus?>(value: null, child: Text('All')),
-          for (final status in OrderStatus.values)
-            PopupMenuItem<OrderStatus?>(
-              value: status,
-              child: Text(status.label),
-            ),
+      height: 78,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
+        children: [
+          _StatTile(
+            label: 'Open',
+            value: loading ? '—' : '${stats.openOrders}',
+            emphasise: true,
+          ),
+          const SizedBox(width: AppSpacing.x3),
+          _StatTile(label: 'New', value: loading ? '—' : '${stats.placed}'),
+          const SizedBox(width: AppSpacing.x3),
+          _StatTile(
+            label: 'Cooking',
+            value: loading ? '—' : '${stats.preparing}',
+          ),
+          const SizedBox(width: AppSpacing.x3),
+          _StatTile(label: 'Ready', value: loading ? '—' : '${stats.ready}'),
+          const SizedBox(width: AppSpacing.x3),
+          _StatTile(
+            label: 'Out',
+            value: loading ? '—' : '${stats.outForDelivery}',
+          ),
+          const SizedBox(width: AppSpacing.x3),
+          _StatTile(
+            label: 'Today',
+            value: loading ? '—' : stats.formattedRevenue,
+          ),
         ],
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: context.surfaces.line),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.filter_list,
-                size: AppIconSize.sm,
-                color: context.surfaces.inkMuted,
-              ),
-              const SizedBox(width: AppSpacing.x1),
-              Text(selected?.label ?? 'All', style: context.texts.labelLarge),
-            ],
-          ),
-        ),
       ),
     );
   }
 }
 
-/// One order as the frame draws it: a status stripe down the left edge, the
-/// reference beside a status chip, destination, detail and amount, then — for
-/// an order the kitchen has yet to finish — its line items, and the action
-/// that moves it on.
-class _OrderCard extends StatelessWidget {
-  const _OrderCard({
-    required this.reference,
-    required this.destination,
-    required this.detail,
-    required this.amount,
-    required this.status,
-    this.onTap,
-    this.onAdvance,
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    this.emphasise = false,
   });
 
-  final String reference;
-  final String destination;
-  final String detail;
-  final String amount;
-  final OrderStatus status;
-  final VoidCallback? onTap;
-
-  /// Null once the order is finished, which is when the frame's action row has
-  /// nothing left to offer.
-  final VoidCallback? onAdvance;
-
-  /// The frame shows line items only on the card that still needs cooking.
-  bool get _showsItems => status != OrderStatus.served;
+  final String label;
+  final String value;
+  final bool emphasise;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final settled = status == OrderStatus.served;
 
-    return AnimatedOpacity(
-      duration: context.motion.fade(Motion.fast),
-      opacity: settled ? 0.72 : 1,
-      child: Material(
-        color: scheme.surface,
+    return Container(
+      width: 92,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.x3,
+        vertical: AppSpacing.x2,
+      ),
+      decoration: BoxDecoration(
+        color: emphasise ? scheme.primary : context.surfaces.ground,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          // A Stack rather than a stretched Row: inside a ListView the card's
-          // height is unbounded, and `CrossAxisAlignment.stretch` cannot
-          // resolve against that. The Stack takes its size from the padded
-          // content and the stripe stretches to match.
-          child: Stack(
-            children: [
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: 4,
-                child: AnimatedContainer(
-                  duration: context.motion.fade(Motion.fast),
-                  color: status.foreground(context),
+        border: emphasise ? null : Border.all(color: context.surfaces.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: AppTypography.caption(
+              emphasise ? scheme.onPrimary : context.surfaces.inkSoft,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Flexible(
+            child: FittedBox(
+              child: Text(
+                value,
+                style: context.texts.headlineMedium?.copyWith(
+                  color: emphasise ? scheme.onPrimary : null,
                 ),
               ),
-              Padding(
-                // Left padding clears the stripe.
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.x4 + 4,
-                  AppSpacing.x4,
-                  AppSpacing.x4,
-                  AppSpacing.x4,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  // The frame's reference box is about five
-                                  // characters wide, so it carries the bare
-                                  // reference rather than "Order #042".
-                                  Flexible(
-                                    child: Text(
-                                      reference,
-                                      style: context.texts.labelLarge,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.x2),
-                                  Flexible(child: StatusPill(status: status)),
-                                ],
-                              ),
-                              const SizedBox(height: AppSpacing.x2),
-                              Text(
-                                destination,
-                                style: context.texts.titleMedium,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: AppSpacing.x1),
-                              Text(
-                                detail,
-                                style: context.texts.bodySmall,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.x2),
-                        Text(
-                          amount,
-                          style: AppTypography.money(
-                            scheme.onSurface,
-                            size: MoneySize.small,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_showsItems) ...[
-                      const SizedBox(height: AppSpacing.x3),
-                      _LineItems(),
-                    ],
-                    if (onAdvance != null) ...[
-                      const SizedBox(height: AppSpacing.x3),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: onTap,
-                              child: const Text('Change status'),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.x3),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: () {
-                                AppHaptics.commit();
-                                onAdvance!();
-                              },
-                              child: Text(
-                                'Mark ${_AdminOrdersScreenState._advanceFrom(status)!.label.toLowerCase()}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchField extends StatelessWidget {
+  const _SearchField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
+      child: SizedBox(
+        height: 44,
+        child: TextField(
+          controller: controller,
+          textInputAction: TextInputAction.search,
+          onChanged: onChanged,
+          decoration: const InputDecoration(
+            hintText: 'Search order number, name or phone...',
+            prefixIcon: Icon(Icons.search, size: AppIconSize.lg),
           ),
         ),
       ),
@@ -446,44 +297,530 @@ class _OrderCard extends StatelessWidget {
   }
 }
 
-/// The tinted panel of line items inside a card.
-///
-/// The frame shows two rows here but names neither, so the copy is not
-/// recoverable from metadata — this reuses the basket the rest of the app
-/// previews with. Per-order line items will come from the API.
-class _LineItems extends StatelessWidget {
+/// The kitchen queue, or one status, or everything.
+class _QueueFilter extends StatelessWidget {
+  const _QueueFilter({
+    required this.selected,
+    required this.openOnly,
+    required this.onStatus,
+    required this.onOpenOnly,
+  });
+
+  final OrderStatus? selected;
+  final bool openOnly;
+  final ValueChanged<OrderStatus?> onStatus;
+  final ValueChanged<bool> onOpenOnly;
+
+  /// Only the states an order can actually be in — `unknown` is a decoding
+  /// fallback, not something to filter by.
+  static const _filterable = [
+    OrderStatus.placed,
+    OrderStatus.preparing,
+    OrderStatus.ready,
+    OrderStatus.outForDelivery,
+    OrderStatus.completed,
+    OrderStatus.cancelled,
+    OrderStatus.rejected,
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final items = SampleContent.basket.take(2);
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.x3),
-      decoration: BoxDecoration(
-        color: context.surfaces.ground,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-      ),
-      child: Column(
+    return SizedBox(
+      height: 38,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
         children: [
-          for (final (index, item) in items.indexed) ...[
-            if (index > 0) const SizedBox(height: AppSpacing.x2),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${item.quantity}× ${item.name}',
-                    style: context.texts.bodySmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.x2),
-                Text(
-                  '£${(item.price * item.quantity).toStringAsFixed(2)}',
-                  style: context.texts.bodySmall,
-                ),
-              ],
+          SelectableChip(
+            label: 'Kitchen queue',
+            selected: openOnly && selected == null,
+            onSelected: () => onOpenOnly(true),
+          ),
+          const SizedBox(width: AppSpacing.x2),
+          SelectableChip(
+            label: 'All orders',
+            selected: !openOnly && selected == null,
+            onSelected: () => onOpenOnly(false),
+          ),
+          for (final status in _filterable) ...[
+            const SizedBox(width: AppSpacing.x2),
+            SelectableChip(
+              label: status.label,
+              selected: selected == status,
+              onSelected: () => onStatus(selected == status ? null : status),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One order in the queue.
+class _OrderTicket extends StatelessWidget {
+  const _OrderTicket({
+    super.key,
+    required this.order,
+    required this.busy,
+    required this.onAdvance,
+    required this.onOpen,
+  });
+
+  final AdminOrder order;
+  final bool busy;
+  final VoidCallback onAdvance;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final next = order.advanceTo;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: busy ? null : onOpen,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: AppSurface.row(
+          padding: const EdgeInsets.all(AppSpacing.x4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      order.orderNumber,
+                      style: context.texts.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.x2),
+                  StatusPill(status: order.status),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.x1),
+              Row(
+                children: [
+                  Icon(
+                    order.fulfilment == FulfilmentType.delivery
+                        ? Icons.delivery_dining_outlined
+                        : Icons.storefront_outlined,
+                    size: AppIconSize.sm,
+                    color: context.surfaces.inkSoft,
+                  ),
+                  const SizedBox(width: AppSpacing.x1 + 2),
+                  Expanded(
+                    child: Text(
+                      [
+                        order.fulfilment.label,
+                        '${order.itemCount} '
+                            '${order.itemCount == 1 ? 'item' : 'items'}',
+                        if (order.placedAt != null) _when(order.placedAt!),
+                        // A scheduled order is the one thing a kitchen must not
+                        // start early, so it says so on the row.
+                        if (!order.isAsap && order.requestedFor != null)
+                          'for ${_time(order.requestedFor!)}',
+                      ].join(' · '),
+                      style: context.texts.bodySmall?.copyWith(
+                        color: context.surfaces.inkSoft,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.x2),
+                  Text(
+                    order.formattedTotal,
+                    style: AppTypography.money(
+                      scheme.onSurface,
+                      size: MoneySize.small,
+                    ),
+                  ),
+                ],
+              ),
+              if (order.paymentStatus == PaymentStatus.pending &&
+                  order.status.isFinal) ...[
+                const SizedBox(height: AppSpacing.x2),
+                AppChip.outlined(label: 'Unpaid'),
+              ],
+              if (next != null || !order.status.isFinal) ...[
+                const SizedBox(height: AppSpacing.x3),
+                Row(
+                  children: [
+                    if (next != null)
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: busy ? null : onAdvance,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(40),
+                          ),
+                          // Named after the destination, not "Next": a kitchen
+                          // reads the word, not the arrow.
+                          child: Text(busy ? 'Saving…' : 'Mark ${_verb(next)}'),
+                        ),
+                      ),
+                    if (next != null) const SizedBox(width: AppSpacing.x2),
+                    // Rejecting and cancelling live behind the overflow. They
+                    // should not be one stray tap from a row being scrolled past.
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: IconButton(
+                        onPressed: busy ? null : onOpen,
+                        icon: Icon(
+                          Icons.more_horiz,
+                          color: context.surfaces.inkSoft,
+                        ),
+                        tooltip: 'More for ${order.orderNumber}',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _verb(OrderStatus status) => switch (status) {
+    OrderStatus.preparing => 'cooking',
+    OrderStatus.ready => 'ready',
+    OrderStatus.outForDelivery => 'out for delivery',
+    OrderStatus.completed => 'completed',
+    _ => status.label.toLowerCase(),
+  };
+}
+
+/// The full ticket, with every legal move on it.
+void _showOrder(BuildContext context, AdminOrder order) {
+  final cubit = context.read<AdminOrdersCubit>();
+  showAppSheet<void>(
+    context: context,
+    title: order.orderNumber,
+    subtitle: '${order.fulfilment.label} · ${order.formattedTotal}',
+    child: BlocProvider.value(
+      value: cubit,
+      child: _OrderDetail(id: order.id),
+    ),
+  );
+}
+
+class _OrderDetail extends StatefulWidget {
+  const _OrderDetail({required this.id});
+
+  final String id;
+
+  @override
+  State<_OrderDetail> createState() => _OrderDetailState();
+}
+
+class _OrderDetailState extends State<_OrderDetail> {
+  @override
+  void initState() {
+    super.initState();
+    // The list row carries no lines — `item_count` instead — so the ticket is
+    // fetched. It also picks up a change another member of staff just made.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<AdminOrdersCubit>().refreshOne(widget.id);
+    });
+  }
+
+  Future<void> _change(OrderStatus next) async {
+    // Rejecting or cancelling asks for a reason, which the API stores as the
+    // cancellation reason — the customer is told, so it should not be blank.
+    String? note;
+    if (next == OrderStatus.cancelled || next == OrderStatus.rejected) {
+      note = await _askReason(context, next);
+      if (note == null || !mounted) return;
+    }
+
+    final error = await context.read<AdminOrdersCubit>().changeStatus(
+      widget.id,
+      next,
+      note: note,
+    );
+    if (!mounted) return;
+
+    if (error != null) {
+      AppHaptics.failure();
+      showAppSnack(context, error, isError: true);
+      return;
+    }
+    AppHaptics.success();
+    Navigator.of(context).pop();
+    showAppSnack(context, 'Marked ${next.label.toLowerCase()}.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<AdminOrdersCubit, AdminOrdersState>(
+      builder: (context, state) {
+        final order = state.orders.where((o) => o.id == widget.id).firstOrNull;
+        // Gone from the list — completed and dropped from the kitchen queue, most
+        // likely — so the sheet closes rather than showing a blank.
+        if (order == null) return const SizedBox.shrink();
+
+        final busy = state.busyIds.contains(order.id);
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.gutter,
+            0,
+            AppSpacing.gutter,
+            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  StatusPill(status: order.status),
+                  const SizedBox(width: AppSpacing.x2),
+                  AppChip.outlined(label: order.paymentStatus.label),
+                  const Spacer(),
+                  if (order.placedAt != null)
+                    Text(
+                      _when(order.placedAt!),
+                      style: context.texts.bodySmall?.copyWith(
+                        color: context.surfaces.inkSoft,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.x4),
+
+              if (order.contactName != null)
+                _Line(icon: Icons.person_outline, value: order.contactName!),
+              if (order.contactPhone != null)
+                _Line(icon: Icons.phone_outlined, value: order.contactPhone!),
+              if (order.address != null)
+                _Line(icon: Icons.place_outlined, value: order.address!),
+              if (order.deliveryNotes != null)
+                _Line(icon: Icons.info_outline, value: order.deliveryNotes!),
+              if (!order.isAsap && order.requestedFor != null)
+                _Line(
+                  icon: Icons.schedule,
+                  value: 'Requested for ${_time(order.requestedFor!)}',
+                ),
+              if (order.customerNote != null)
+                _Line(icon: Icons.note_outlined, value: order.customerNote!),
+              if (order.cancellationReason != null)
+                _Line(
+                  icon: Icons.cancel_outlined,
+                  value: order.cancellationReason!,
+                ),
+
+              const SizedBox(height: AppSpacing.x4),
+              Text('Items', style: context.texts.titleMedium),
+              const SizedBox(height: AppSpacing.x2),
+              if (!order.hasLines)
+                Text(
+                  'Loading the items…',
+                  style: context.texts.bodyMedium?.copyWith(
+                    color: context.surfaces.inkSoft,
+                  ),
+                )
+              else
+                for (final line in order.lines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 28,
+                          child: Text(
+                            '${line.quantity}×',
+                            style: context.texts.titleMedium,
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(line.name, style: context.texts.bodyLarge),
+                              // The kitchen's instruction. Emphasised, because
+                              // this is the line that gets missed.
+                              if (line.notes != null)
+                                Text(
+                                  line.notes!,
+                                  style: context.texts.bodySmall?.copyWith(
+                                    color: context.orderColors.preparing,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+              Divider(height: AppSpacing.x6, color: context.surfaces.line),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Total', style: context.texts.titleLarge),
+                  ),
+                  Text(
+                    order.formattedTotal,
+                    style: AppTypography.money(
+                      Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.x5),
+
+              if (order.nextStatuses.isEmpty)
+                Text(
+                  'This order is ${order.status.label.toLowerCase()} and cannot '
+                  'change.',
+                  style: context.texts.bodyMedium?.copyWith(
+                    color: context.surfaces.inkSoft,
+                  ),
+                )
+              else ...[
+                Text('Move it on', style: context.texts.titleMedium),
+                const SizedBox(height: AppSpacing.x2),
+                // Only the legal moves for *this* order's fulfilment type. A
+                // button the API would refuse with a 409 is not worth drawing.
+                for (final next in order.nextStatuses)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.x2),
+                    child: _MoveButton(
+                      status: next,
+                      busy: busy,
+                      onPressed: () => _change(next),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MoveButton extends StatelessWidget {
+  const _MoveButton({
+    required this.status,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final OrderStatus status;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final destructive =
+        status == OrderStatus.cancelled || status == OrderStatus.rejected;
+
+    return SizedBox(
+      width: double.infinity,
+      child: destructive
+          ? OutlinedButton(
+              onPressed: busy ? null : onPressed,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+                foregroundColor: context.orderColors.overdue,
+                side: BorderSide(
+                  color: context.orderColors.overdue.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Text(status.label),
+            )
+          : FilledButton(
+              onPressed: busy ? null : onPressed,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+              ),
+              child: Text(status.label),
+            ),
+    );
+  }
+}
+
+/// Asks why, before cancelling or rejecting.
+Future<String?> _askReason(BuildContext context, OrderStatus status) {
+  final controller = TextEditingController();
+  return showAppSheet<String>(
+    context: context,
+    title: status == OrderStatus.rejected
+        ? 'Reject this order?'
+        : 'Cancel this order?',
+    subtitle: 'The customer is told, so a reason helps.',
+    child: Builder(
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.gutter,
+          0,
+          AppSpacing.gutter,
+          MediaQuery.viewInsetsOf(sheetContext).bottom + AppSpacing.x4,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: controller,
+              maxLines: 2,
+              maxLength: 500,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Kitchen closed early, out of an ingredient…',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.x2),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: sheetContext.orderColors.overdue,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () =>
+                  Navigator.of(sheetContext).pop(controller.text.trim()),
+              child: Text(
+                status == OrderStatus.rejected
+                    ? 'Reject order'
+                    : 'Cancel order',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.x2),
+            TextButton(
+              onPressed: () => Navigator.of(sheetContext).pop(),
+              child: const Text('Leave it as it is'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _Line extends StatelessWidget {
+  const _Line({required this.icon, required this.value});
+
+  final IconData icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.x1 + 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: AppIconSize.lg, color: context.surfaces.inkSoft),
+          const SizedBox(width: AppSpacing.x3),
+          Expanded(
+            child: SelectableText(value, style: context.texts.bodyMedium),
+          ),
         ],
       ),
     );
@@ -491,40 +828,92 @@ class _LineItems extends StatelessWidget {
 }
 
 class _EmptyQueue extends StatelessWidget {
-  const _EmptyQueue({this.status});
+  const _EmptyQueue({
+    required this.searched,
+    required this.openOnly,
+    required this.filtered,
+  });
 
-  final OrderStatus? status;
+  final bool searched;
+  final bool openOnly;
+  final bool filtered;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.x8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: AppIconSize.hero,
-              color: context.surfaces.inkSoft,
+    final (icon, title, body) = searched
+        ? (
+            Icons.search_off,
+            'No matches',
+            'Nothing loaded matches that. Try fewer words.',
+          )
+        : filtered
+        ? (
+            Icons.filter_alt_off_outlined,
+            'Nothing in this state',
+            'Try another status, or the whole queue.',
+          )
+        : openOnly
+        ? (
+            Icons.done_all,
+            'Nothing waiting',
+            'Every order is done. New ones appear here the moment they are '
+                'placed.',
+          )
+        : (
+            Icons.receipt_long_outlined,
+            'No orders yet',
+            'Orders appear here as soon as customers place them.',
+          );
+
+    return ListView(
+      // Scrollable so pull-to-refresh works on an empty queue, which is exactly
+      // when a kitchen will try it.
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(height: MediaQuery.sizeOf(context).height * 0.14),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.x8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: AppIconSize.hero,
+                  color: context.surfaces.inkSoft,
+                ),
+                const SizedBox(height: AppSpacing.x4),
+                Text(
+                  title,
+                  style: context.texts.headlineMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.x2),
+                Text(
+                  body,
+                  style: context.texts.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-            const SizedBox(height: AppSpacing.x4),
-            Text(
-              status == null
-                  ? 'No orders yet'
-                  : 'Nothing ${status!.label.toLowerCase()}',
-              style: context.texts.headlineMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.x2),
-            Text(
-              'New orders appear here the moment they are placed.',
-              style: context.texts.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-          ],
+          ),
         ),
-      ).reveal(),
+      ],
     );
   }
 }
+
+String _when(DateTime when) {
+  final now = DateTime.now();
+  final minutes = now.difference(when).inMinutes;
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return '$minutes min ago';
+  final day = DateTime(when.year, when.month, when.day);
+  final today = DateTime(now.year, now.month, now.day);
+  if (day == today) return _time(when);
+  return '${when.day}/${when.month} ${_time(when)}';
+}
+
+String _time(DateTime when) =>
+    '${when.hour.toString().padLeft(2, '0')}:'
+    '${when.minute.toString().padLeft(2, '0')}';

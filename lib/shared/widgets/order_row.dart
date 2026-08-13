@@ -5,6 +5,7 @@ import '../../core/animations/motion.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../features/admin/domain/admin_order.dart';
 import 'status_pill.dart';
 
 /// A single line in the orders queue.
@@ -44,8 +45,8 @@ class OrderRow extends StatelessWidget {
     final surfaces = context.surfaces;
     final scheme = Theme.of(context).colorScheme;
 
-    // Closed orders recede so the live ones carry the eye.
-    final settled = status == OrderStatus.served;
+    // Finished orders recede so the live ones carry the eye.
+    final settled = status.isFinal;
 
     return AnimatedOpacity(
       duration: context.motion.fade(Motion.fast),

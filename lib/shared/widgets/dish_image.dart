@@ -56,12 +56,29 @@ class DishImage extends StatelessWidget {
           : Image.file(
               File(url),
               fit: fit,
+              // See the note on the network branch below: without these the
+              // image sizes to its own pixels whenever it is handed loose
+              // constraints.
+              width: double.infinity,
+              height: double.infinity,
               errorBuilder: (context, _, _) => _Placeholder(name: name),
             );
     } else if (url != null && url.isNotEmpty) {
       image = Image.network(
         url,
         fit: fit,
+        // Fill the box, always.
+        //
+        // Without these, the image reports its *intrinsic* size whenever it is
+        // given loose constraints — and the `frameBuilder` below hands it
+        // exactly that, because `AnimatedSwitcher` lays its children out in a
+        // Stack. So a small photograph drew smaller than its slot while a large
+        // one filled it, and `wasSyncLoaded` skips the switcher entirely for a
+        // cached image — which is why the same dish looked right on a second
+        // visit and wrong on the first. `double.infinity` resolves to whatever
+        // the box allows, so `cover` crops into it either way.
+        width: double.infinity,
+        height: double.infinity,
         // Cross-fade from the shimmer rather than popping in.
         frameBuilder: (context, child, frame, wasSyncLoaded) {
           if (wasSyncLoaded) return child;

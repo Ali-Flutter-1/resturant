@@ -6,7 +6,7 @@ import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/about/presentation/about_contact_screen.dart';
 import 'package:practice/features/booking/presentation/book_table_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
-import 'package:practice/features/checkout/presentation/checkout_screen.dart';
+import 'package:practice/features/menu/domain/dish.dart';
 import 'package:practice/features/contact/domain/contact_repository.dart';
 import 'package:practice/core/network/api_failure.dart';
 
@@ -20,7 +20,16 @@ void main() {
   late FakeContactRepository contact;
 
   Widget wrap(Widget home) {
-    cart = CartCubit()..add(2);
+    cart = CartCubit()
+      ..addDish(
+        const Dish(
+          id: 'd1',
+          name: 'Chicken Kottu',
+          description: '',
+          pricePence: 895,
+        ),
+        quantity: 2,
+      );
     contact = FakeContactRepository();
     return MultiBlocProvider(
       providers: [
@@ -93,70 +102,6 @@ void main() {
       await tapAt(tester, find.text('Terrace'));
 
       expect(find.text('Terrace'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-  });
-
-  group('Checkout', () {
-    testWidgets('choosing Collection hides the delivery address', (
-      tester,
-    ) async {
-      await pumpForm(tester, const CheckoutScreen());
-
-      expect(find.text('DELIVERY ADDRESS'), findsOneWidget);
-
-      await tapAt(tester, find.text('Collection'));
-
-      // No address to capture when the customer is coming to collect.
-      expect(find.text('DELIVERY ADDRESS'), findsNothing);
-    });
-
-    testWidgets('switching back to Delivery restores the address', (
-      tester,
-    ) async {
-      await pumpForm(tester, const CheckoutScreen());
-
-      await tapAt(tester, find.text('Collection'));
-      await tapAt(tester, find.text('Delivery'));
-
-      expect(find.text('DELIVERY ADDRESS'), findsOneWidget);
-    });
-
-    testWidgets('Schedule reveals a time chooser', (tester) async {
-      await pumpForm(tester, const CheckoutScreen());
-
-      expect(find.text('Choose a time'), findsNothing);
-
-      await tapAt(tester, find.text('Schedule'));
-
-      expect(find.text('Choose a time'), findsOneWidget);
-    });
-
-    testWidgets('scheduling without a time blocks the order', (tester) async {
-      await pumpForm(tester, const CheckoutScreen());
-
-      await tapAt(tester, find.text('Schedule'));
-
-      await tapAt(tester, find.textContaining('Place Order'));
-
-      expect(find.text('Pick a delivery time first.'), findsOneWidget);
-      expect(cart.state, 2, reason: 'a blocked order must not clear the cart');
-    });
-
-    testWidgets('placing an ASAP order empties the cart', (tester) async {
-      await pumpForm(tester, const CheckoutScreen());
-
-      await tapAt(tester, find.textContaining('Place Order'));
-
-      expect(cart.state, 0);
-      expect(find.textContaining('Order placed'), findsOneWidget);
-    });
-
-    testWidgets('payment method can be switched', (tester) async {
-      await pumpForm(tester, const CheckoutScreen());
-
-      await tapAt(tester, find.text('Cash on Delivery'));
-
       expect(tester.takeException(), isNull);
     });
   });

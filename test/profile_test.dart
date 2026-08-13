@@ -60,8 +60,9 @@ void main() {
 
     expect(find.text('Ali Hassan'), findsWidgets);
     expect(find.text('ali@example.com'), findsWidgets);
-    // Initials rather than a silhouette, since there is no avatar.
-    expect(find.text('AH'), findsOne);
+    // A role glyph rather than initials: initials read as identity but say
+    // nothing about what the account can do.
+    expect(find.byIcon(Icons.person), findsWidgets);
   });
 
   for (final (role, label) in [
@@ -149,10 +150,10 @@ void main() {
     await tester.pumpWidget(build(customer).widget);
     await tester.pump(const Duration(seconds: 2));
 
-    // The API refuses to change an email here because it needs verification,
-    // so an editable field would be a dead end.
-    expect(find.text('Contact us to change this'), findsOne);
+    expect(find.text('ali@example.com'), findsWidgets);
 
+    // The API refuses to change an email here because it needs verification, and
+    // the absence of a field says so — no line of instructions needed.
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'ali@example.com'), findsNothing);
@@ -228,5 +229,47 @@ void main() {
 
     expect(built.cubit.state.isSignedIn, isFalse);
     expect(built.repo.logoutCalls, 1);
+  });
+
+  group('the avatar marks the role', () {
+    testWidgets('a customer is a person, with no badge', (tester) async {
+      await tester.pumpWidget(build(customer).widget);
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(find.byIcon(Icons.person), findsWidgets);
+      // On a customer's own profile a badge saying "customer" would be
+      // decoration.
+      expect(find.byIcon(Icons.shield), findsNothing);
+    });
+
+    testWidgets('staff carry the service mark', (tester) async {
+      const staff = AuthUser(
+        id: 'u2',
+        email: 'staff@tscafe.co.uk',
+        firstName: 'Sam',
+        lastName: 'Server',
+        role: UserRole.staff,
+      );
+      await tester.pumpWidget(build(staff).widget);
+      await tester.pump(const Duration(seconds: 2));
+
+      // Twice: the avatar glyph and the badge on its corner.
+      expect(find.byIcon(Icons.room_service), findsNWidgets(2));
+    });
+
+    testWidgets('an administrator carries the shield', (tester) async {
+      const admin = AuthUser(
+        id: 'u3',
+        email: 'owner@tscafe.co.uk',
+        firstName: 'Ada',
+        lastName: 'Owner',
+        role: UserRole.admin,
+      );
+      await tester.pumpWidget(build(admin).widget);
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(find.byIcon(Icons.admin_panel_settings), findsOne);
+      expect(find.byIcon(Icons.shield), findsOne);
+    });
   });
 }

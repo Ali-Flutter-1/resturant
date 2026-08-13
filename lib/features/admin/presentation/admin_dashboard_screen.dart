@@ -6,10 +6,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/admin_nav.dart';
+import '../domain/admin_order.dart';
 import '../../../shared/widgets/metric_card.dart';
 import '../../../shared/widgets/order_row.dart';
-import '../../../shared/widgets/status_pill.dart';
-import 'order_actions_sheet.dart';
 
 /// Thousands separators, so a counting figure doesn't lurch as it crosses a
 /// power of ten.
@@ -35,40 +34,11 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  final _statusOverrides = <String, OrderStatus>{};
-
-  OrderStatus _statusOf(
-    ({
-      String amount,
-      String destination,
-      String detail,
-      String reference,
-      OrderStatus status,
-    })
-    order,
-  ) => _statusOverrides[order.reference] ?? order.status;
-
-  Future<void> _openOrder(
-    ({
-      String amount,
-      String destination,
-      String detail,
-      String reference,
-      OrderStatus status,
-    })
-    order,
-  ) async {
-    final next = await showOrderActionsSheet(
-      context: context,
-      reference: order.reference,
-      destination: order.destination,
-      amount: order.amount,
-      status: _statusOf(order),
-    );
-    if (next != null && mounted) {
-      setState(() => _statusOverrides[order.reference] = next);
-    }
-  }
+  /// Tapping a row sends staff to the real queue rather than opening a status
+  /// sheet on a made-up order. These rows are still sample content — the
+  /// dashboard is not wired to `/admin/orders/stats` yet — and a control that
+  /// appears to change an order that does not exist is worse than no control.
+  void _openOrder(Object _) => widget.onViewAll?.call();
 
   static const _recentOrders = [
     (
@@ -90,7 +60,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       destination: 'Table 12',
       detail: '1 item · 25 mins ago',
       amount: '£8.00',
-      status: OrderStatus.served,
+      status: OrderStatus.completed,
     ),
   ];
 
@@ -180,7 +150,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               destination: order.destination,
               detail: order.detail,
               amount: order.amount,
-              status: _statusOf(order),
+              status: order.status,
               onTap: () => _openOrder(order),
             ).revealItem(
               index,

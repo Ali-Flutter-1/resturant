@@ -185,3 +185,46 @@ class ProfileSkeleton extends StatelessWidget {
     );
   }
 }
+
+/// Placeholder rows shaped like an order ticket: a number and status, a detail
+/// line, and the advance button.
+class OrderListSkeleton extends StatelessWidget {
+  const OrderListSkeleton({super.key, this.rows = 4});
+
+  final int rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Skeleton.list(
+      count: rows,
+      itemBuilder: (context, _) => Container(
+        padding: const EdgeInsets.all(AppSpacing.x4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          boxShadow: context.surfaces.restShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Skeleton.line(width: 90, height: 14),
+                const Spacer(),
+                Skeleton.box(width: 72, height: 20, radius: AppRadius.pill),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.x3),
+            Skeleton.line(width: 220),
+            const SizedBox(height: AppSpacing.x3),
+            Skeleton.box(
+              width: double.infinity,
+              height: 40,
+              radius: AppRadius.md,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

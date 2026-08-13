@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/theme/app_colors.dart';
 import 'package:practice/core/theme/app_theme.dart';
+import 'package:practice/features/admin/domain/admin_order.dart';
 import 'package:practice/shared/widgets/status_pill.dart';
 
 void main() {
@@ -54,7 +55,7 @@ void main() {
       }
     });
 
-    test('every status maps to a distinct foreground colour', () {
+    test('the four state colours are distinct', () {
       final light = OrderStateColors.light;
       final colours = {
         light.preparing,
@@ -62,7 +63,19 @@ void main() {
         light.served,
         light.overdue,
       };
-      expect(colours.length, OrderStatus.values.length);
+      // Four colours, not one per status: the API has seven states and several
+      // share a meaning — placed and preparing are both "in the kitchen",
+      // cancelled and rejected are both "not happening". What matters is that
+      // the four are told apart.
+      expect(colours.length, 4);
+    });
+
+    test('every status has a colour, including the unknown fallback', () {
+      // A status the app has never heard of must still draw, or one new backend
+      // value crashes every ticket on the screen.
+      for (final status in OrderStatus.values) {
+        expect(status.label, isNotEmpty, reason: '\$status needs a label');
+      }
     });
   });
 }

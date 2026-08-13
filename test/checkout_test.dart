@@ -1,0 +1,506 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:practice/core/network/api_failure.dart';
+import 'package:practice/core/theme/app_theme.dart';
+import 'package:practice/features/cart/cart_cubit.dart';
+import 'package:practice/features/checkout/presentation/checkout_cubit.dart';
+import 'package:practice/features/checkout/presentation/checkout_screen.dart';
+import 'package:practice/features/menu/domain/dish.dart';
+import 'package:practice/features/orders/domain/order_quote.dart';
+import 'package:practice/features/orders/domain/order_repository.dart';
+
+import 'support/auth_fixtures.dart';
+import 'support/fake_order_repository.dart';
+
+/// Pricing and placing an order.
+///
+/// The rules worth pinning come straight from the integration guide: render the
+/// server's totals, keep one idempotency key per checkout and reuse it on retry,
+/// and clear the basket only once the order exists.
+void main() {
+  late FakeOrderRepository repository;
+  late CartCubit cart;
+
+  const curry = Dish(
+    id: 'd1',
+    name: 'Chicken Kottu',
+    description: '',
+    pricePence: 895,
+  );
+
+  setUp(() {
+    repository = FakeOrderRepository();
+    cart = CartCubit()..addDish(curry, quantity: 2, notes: 'No coriander');
+
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+    view.physicalSize = const Size(390, 2400);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+  });
+
+  CheckoutCubit buildCubit() =>
+      CheckoutCubit(repository: repository, cart: cart);
+
+  Widget wrap({void Function(String)? onPlaced}) => MultiBlocProvider(
+    providers: [
+      BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
+      BlocProvider.value(value: cart),
+    ],
+    child: RepositoryProvider<OrderRepository>.value(
+      value: repository,
+      child: MaterialApp(
+        theme: AppTheme.light,
+        home: CheckoutScreen(onPlaceOrder: onPlaced),
+      ),
+    ),
+  );
+
+  Future<void> fillDelivery(WidgetTester tester) async {
+    await tester.enterText(
+      find.widgetWithText(TextField, '07700 900123'),
+      '07700 900123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, '12 Example Street'),
+      '12 Example Street',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Manchester'),
+      'Manchester',
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'M1 2AB'), 'M1 2AB');
+    await tester.pump();
+  }
+
+  group('quoting', () {
+    test('prices the basket when the checkout opens', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      expect(repository.quoteCalls, 1);
+      expect(cubit.state.stage, CheckoutStage.ready);
+      expect(cubit.state.quote?.totalPence, 2089);
+    });
+
+    test('re-prices when the fulfilment type changes', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      await cubit.setDelivery(false);
+
+      // The fee and the minimum both depend on it, so the old figures are wrong
+      // the instant it changes.
+      expect(repository.quoteCalls, 2);
+      expect(repository.lastQuoteDelivery, isFalse);
+    });
+
+    test('an empty basket is refused before any request', () async {
+      final cubit = CheckoutCubit(repository: repository, cart: CartCubit());
+      await cubit.quote();
+
+      expect(repository.quoteCalls, 0);
+      expect(cubit.state.stage, CheckoutStage.failed);
+    });
+
+    test('a failed quote keeps the failure to show', () async {
+      repository.quoteFailure = ApiFailure.offline;
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      expect(cubit.state.stage, CheckoutStage.failed);
+      expect(cubit.state.failure, ApiFailure.offline);
+    });
+  });
+
+  group('the minimum', () {
+    test('blocks placing, and the shortfall is exact', () async {
+      repository.quoteResult = const OrderQuote(
+        subtotalPence: 600,
+        deliveryFeePence: 299,
+        totalPence: 899,
+        minimumOrderPence: 1000,
+        meetsMinimum: false,
+      );
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      expect(cubit.state.canPlace, isFalse);
+      // £4.00 short — measured on the subtotal, because the delivery fee does not
+      // count towards the minimum.
+      expect(cubit.state.quote?.formattedShortfall, '£4.00');
+    });
+
+    testWidgets('says how much more is needed', (tester) async {
+      repository.quoteResult = const OrderQuote(
+        subtotalPence: 600,
+        deliveryFeePence: 299,
+        totalPence: 899,
+        minimumOrderPence: 1000,
+        meetsMinimum: false,
+      );
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      // "Minimum not met" would leave the customer to do the arithmetic.
+      expect(find.textContaining('Add £4.00 more'), findsOne);
+    });
+  });
+
+  group('placing', () {
+    test('sends only dish id, quantity and notes per line', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+
+      expect(repository.lastPlaced?['items'], [
+        {'dish_id': 'd1', 'quantity': 2, 'notes': 'No coriander'},
+      ]);
+      // No prices. Anything a client could set, a client could forge.
+      final items = repository.lastPlaced!['items']! as List;
+      expect((items.first as Map).containsKey('unit_price_pence'), isFalse);
+    });
+
+    test('clears the basket only after the server confirms', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      repository.placeFailure = ApiFailure.offline;
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+
+      // A basket emptied optimistically and a request that then failed leaves
+      // the customer with neither an order nor their choices.
+      expect(cart.state.isEmpty, isFalse);
+
+      repository.placeFailure = null;
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+      expect(cart.state.isEmpty, isTrue);
+    });
+
+    test('a retry reuses the same idempotency key', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      repository.placeFailure = ApiFailure.offline;
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+      repository.placeFailure = null;
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+
+      // A fresh key on retry is exactly how a customer ends up with two orders:
+      // the server cannot tell a second attempt from a second order.
+      expect(repository.idempotencyKeys, hasLength(2));
+      expect(repository.idempotencyKeys.first, repository.idempotencyKeys.last);
+    });
+
+    test('a genuinely different basket gets a new key', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+      final first = cubit.idempotencyKey;
+
+      cart.addDish(
+        const Dish(id: 'd2', name: 'Hoppers', description: '', pricePence: 450),
+      );
+      await cubit.quote();
+
+      // Otherwise the second order would be deduplicated against the first.
+      expect(cubit.idempotencyKey, isNot(first));
+    });
+
+    test('the key rotates after a successful order', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+      final used = cubit.idempotencyKey;
+
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+
+      expect(cubit.idempotencyKey, isNot(used));
+    });
+
+    test('a chosen slot is sent verbatim, with is_asap false', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      cubit.setSlot('2026-08-12T19:15:00Z');
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+
+      // Untouched: the API refuses a time with no offset, and the app must not
+      // rebuild the slot grid.
+      expect(repository.lastPlaced?['requested_for'], '2026-08-12T19:15:00Z');
+      expect(repository.lastPlaced?['is_asap'], isFalse);
+    });
+
+    test('ASAP sends no time at all', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
+
+      expect(repository.lastPlaced?['is_asap'], isTrue);
+      expect(repository.lastPlaced?['requested_for'], isNull);
+    });
+
+    test('changing the fulfilment type drops a chosen slot', () async {
+      final cubit = buildCubit();
+      await cubit.quote();
+      cubit.setSlot('2026-08-12T19:15:00Z');
+
+      await cubit.setDelivery(false);
+
+      // The two paths have different lead times, so a slot chosen for one is not
+      // necessarily offered for the other.
+      expect(cubit.state.requestedFor, isNull);
+    });
+
+    test('a 422 lands on the offending field', () async {
+      repository.placeFailure = const ApiFailure(
+        kind: ApiFailureKind.invalid,
+        message: 'Please check the highlighted fields and try again.',
+        code: 'VALIDATION_FAILED',
+        fieldErrors: {
+          'contact_phone': 'Enter a phone number we can reach you on.',
+        },
+      );
+      final cubit = buildCubit();
+      await cubit.quote();
+
+      await cubit.place(contactName: 'Ali', contactPhone: '1');
+
+      expect(
+        cubit.state.fieldErrors['contact_phone'],
+        'Enter a phone number we can reach you on.',
+      );
+      // Back to ready, so the details typed are still usable.
+      expect(cubit.state.stage, CheckoutStage.ready);
+    });
+  });
+
+  group('the screen', () {
+    testWidgets('renders the server total, never a local sum', (tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      // The basket's own arithmetic is 2 x £8.95 = £17.90; the server says
+      // £20.89 with the fee. The screen shows the server.
+      expect(find.textContaining('£20.89'), findsWidgets);
+    });
+
+    testWidgets('will not place a delivery order without an address', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.textContaining('Place order'));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Where are we delivering to?'), findsOne);
+      // Nothing left the device.
+      expect(repository.placeCalls, 0);
+    });
+
+    testWidgets('collection asks for no address at all', (tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.text('Collection'));
+      await tester.pump(const Duration(seconds: 2));
+
+      // The API ignores address fields for collection, so asking would be asking
+      // for something that goes nowhere.
+      expect(find.widgetWithText(TextField, '12 Example Street'), findsNothing);
+    });
+
+    testWidgets('a filled delivery order reaches the API', (tester) async {
+      String? placed;
+      await tester.pumpWidget(wrap(onPlaced: (number) => placed = number));
+      await tester.pump(const Duration(seconds: 2));
+
+      await fillDelivery(tester);
+      await tester.tap(find.textContaining('Place order'));
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(repository.placeCalls, 1);
+      expect(repository.lastPlaced?['postcode'], 'M1 2AB');
+      expect(repository.lastPlaced?['city'], 'Manchester');
+      expect(placed, 'AB12-CD34');
+    });
+
+    testWidgets('offers cash only, and says so', (tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      // The API answers `card` with CARD_PAYMENT_UNAVAILABLE, so a card option
+      // would be a button that always fails.
+      expect(find.textContaining('Pay with cash'), findsOne);
+      expect(find.text('Card'), findsNothing);
+    });
+
+    testWidgets('offers two timing choices rather than a wall of chips', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      // Sixteen chips in a Wrap is what this replaced.
+      expect(find.text('As soon as possible'), findsOne);
+      expect(find.text('Choose a time'), findsOne);
+    });
+
+    testWidgets('picking a time opens a list of them', (tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.text('Choose a time'));
+      await tester.pumpAndSettle();
+
+      // The quote offered two slots.
+      expect(find.text('Today'), findsNWidgets(2));
+    });
+  });
+
+  group('the kitchen decides the earliest time', () {
+    /// A basket whose slowest dish takes [minutes].
+    CartCubit cartTaking(int minutes) => CartCubit()
+      ..addDish(
+        Dish(
+          id: 'slow',
+          name: 'Slow dish',
+          description: '',
+          pricePence: 895,
+          prepMinMinutes: minutes - 5,
+          prepMaxMinutes: minutes,
+        ),
+      );
+
+    /// Slots at ten-minute steps from now, so the boundary is easy to name.
+    List<String> slotsFromNow(List<int> minutes) => [
+      for (final m in minutes)
+        DateTime.now().toUtc().add(Duration(minutes: m)).toIso8601String(),
+    ];
+
+    test('the basket takes the longest dish, not the sum', () {
+      final cart = CartCubit()
+        ..addDish(
+          const Dish(
+            id: 'a',
+            name: 'Curry',
+            description: '',
+            pricePence: 100,
+            prepMaxMinutes: 20,
+          ),
+        )
+        ..addDish(
+          const Dish(
+            id: 'b',
+            name: 'Side',
+            description: '',
+            pricePence: 100,
+            prepMaxMinutes: 5,
+          ),
+        );
+
+      // A kitchen cooks in parallel: twenty minutes, not twenty-five. Adding them
+      // up would push every multi-item order absurdly late.
+      expect(cart.state.longestPrepMinutes, 20);
+    });
+
+    test('a basket with no estimates narrows nothing', () {
+      final cart = CartCubit()
+        ..addDish(
+          const Dish(id: 'a', name: 'Curry', description: '', pricePence: 100),
+        );
+      expect(cart.state.longestPrepMinutes, isNull);
+    });
+
+    test('slots inside the cooking time are not offered', () async {
+      repository.quoteResult = OrderQuote(
+        totalPence: 895,
+        availableSlots: slotsFromNow([10, 20, 30, 40]),
+      );
+      final cubit = CheckoutCubit(repository: repository, cart: cartTaking(20));
+      await cubit.quote();
+
+      // A twenty-minute dish cannot be asked for in ten. Twenty is the boundary
+      // and a shade of clock drift makes it unreliable, so this checks the two
+      // that are unambiguous.
+      final offered = cubit.state.selectableSlots;
+      expect(offered, hasLength(lessThan(4)));
+      expect(offered.last, cubit.state.quote!.availableSlots.last);
+    });
+
+    test('a longer estimate offers fewer times', () async {
+      repository.quoteResult = OrderQuote(
+        totalPence: 895,
+        availableSlots: slotsFromNow([10, 20, 30, 40, 50]),
+      );
+
+      final quick = CheckoutCubit(repository: repository, cart: cartTaking(5));
+      await quick.quote();
+      final slow = CheckoutCubit(repository: repository, cart: cartTaking(45));
+      await slow.quote();
+
+      expect(
+        slow.state.selectableSlots.length,
+        lessThan(quick.state.selectableSlots.length),
+      );
+    });
+
+    test('every slot too soon is reported rather than left blank', () async {
+      repository.quoteResult = OrderQuote(
+        totalPence: 895,
+        availableSlots: slotsFromNow([5, 10]),
+      );
+      final cubit = CheckoutCubit(
+        repository: repository,
+        cart: cartTaking(120),
+      );
+      await cubit.quote();
+
+      expect(cubit.state.selectableSlots, isEmpty);
+      // The customer has done nothing wrong, and ASAP still works.
+      expect(cubit.state.everySlotTooSoon, isTrue);
+    });
+
+    test('a slot the kitchen cannot make is refused, not stored', () async {
+      repository.quoteResult = OrderQuote(
+        totalPence: 895,
+        availableSlots: slotsFromNow([5, 60]),
+      );
+      final cubit = CheckoutCubit(repository: repository, cart: cartTaking(30));
+      await cubit.quote();
+
+      final tooSoon = cubit.state.quote!.availableSlots.first;
+      cubit.setSlot(tooSoon);
+
+      // Only a stale screen could ask for it, and sending it would earn a
+      // TIME_TOO_SOON the customer cannot act on.
+      expect(cubit.state.requestedFor, isNull);
+    });
+
+    test('a slot the kitchen can make is accepted', () async {
+      repository.quoteResult = OrderQuote(
+        totalPence: 895,
+        availableSlots: slotsFromNow([5, 60]),
+      );
+      final cubit = CheckoutCubit(repository: repository, cart: cartTaking(30));
+      await cubit.quote();
+
+      final later = cubit.state.quote!.availableSlots.last;
+      cubit.setSlot(later);
+
+      expect(cubit.state.requestedFor, later);
+    });
+
+    testWidgets('says why earlier times are missing', (tester) async {
+      cart = cartTaking(25);
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      // An unexplained gap in the times reads as a bug.
+      expect(find.textContaining('takes about 25 minutes to cook'), findsOne);
+    });
+  });
+}

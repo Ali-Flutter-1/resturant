@@ -1,5 +1,7 @@
 import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/features/orders/domain/customer_order.dart';
+import 'package:practice/features/cart/cart_cubit.dart';
+import 'package:practice/features/orders/domain/order_quote.dart';
 import 'package:practice/features/orders/domain/order_repository.dart';
 
 /// An [OrderRepository] that answers from memory.
@@ -21,6 +23,87 @@ class FakeOrderRepository implements OrderRepository {
 
   int loadCount = 0;
   final cancelled = <String>[];
+
+  /// What a quote answers with. Set by a test that cares.
+  OrderQuote quoteResult = const OrderQuote(
+    subtotalPence: 1790,
+    deliveryFeePence: 299,
+    totalPence: 2089,
+    minimumOrderPence: 1000,
+    availableSlots: ['2026-08-12T19:00:00Z', '2026-08-12T19:15:00Z'],
+  );
+
+  /// Fails only the quote, so a test can price fine and be refused on placing.
+  ApiFailure? quoteFailure;
+  ApiFailure? placeFailure;
+
+  int quoteCalls = 0;
+  int placeCalls = 0;
+  bool? lastQuoteDelivery;
+
+  /// Every key a placement was attempted with, in order. The interesting
+  /// assertion is that a retry reuses the first one.
+  final idempotencyKeys = <String>[];
+  Map<String, Object?>? lastPlaced;
+
+  @override
+  Future<OrderQuote> quote({
+    required bool isDelivery,
+    required List<CartLine> lines,
+  }) async {
+    quoteCalls++;
+    lastQuoteDelivery = isDelivery;
+    final error = quoteFailure ?? failure;
+    if (error != null) throw error;
+    return quoteResult;
+  }
+
+  @override
+  Future<CustomerOrder> place({
+    required String idempotencyKey,
+    required bool isDelivery,
+    required List<CartLine> lines,
+    required String contactName,
+    required String contactPhone,
+    bool isAsap = true,
+    String? requestedFor,
+    String? addressLine1,
+    String? addressLine2,
+    String? city,
+    String? postcode,
+    String? deliveryNotes,
+    String? customerNote,
+  }) async {
+    placeCalls++;
+    idempotencyKeys.add(idempotencyKey);
+    lastPlaced = {
+      'is_delivery': isDelivery,
+      'items': [for (final line in lines) line.toJson()],
+      'contact_name': contactName,
+      'contact_phone': contactPhone,
+      'is_asap': isAsap,
+      'requested_for': requestedFor,
+      'address_line1': addressLine1,
+      'city': city,
+      'postcode': postcode,
+      'customer_note': customerNote,
+    };
+
+    final error = placeFailure ?? failure;
+    if (error != null) throw error;
+
+    final placed = CustomerOrder(
+      id: 'new-order',
+      reference: 'AB12-CD34',
+      status: CustomerOrderStatus.placed,
+      totalPence: quoteResult.totalPence,
+      placedAt: DateTime(2026, 8, 12, 18, 30),
+      isDelivery: isDelivery,
+      canCancel: true,
+    );
+    orders = [placed, ...orders];
+    return placed;
+  }
 
   @override
   Future<List<CustomerOrder>> myOrders() async {

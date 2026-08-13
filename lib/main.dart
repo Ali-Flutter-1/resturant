@@ -12,7 +12,9 @@ import 'core/network/token_store.dart';
 import 'features/auth/data/api_auth_repository.dart';
 import 'features/admin/data/api_admin_contact_repository.dart';
 import 'features/admin/data/api_admin_menu_repository.dart';
+import 'features/admin/data/api_admin_order_repository.dart';
 import 'features/admin/domain/admin_contact_repository.dart';
+import 'features/admin/domain/admin_order_repository.dart';
 import 'features/admin/domain/admin_menu_repository.dart';
 import 'features/contact/data/api_contact_repository.dart';
 import 'features/contact/domain/contact_repository.dart';
@@ -66,6 +68,7 @@ Future<void> main() async {
       adminMenu: ApiAdminMenuRepository(client: client),
       contact: ApiContactRepository(client: client),
       adminContact: ApiAdminContactRepository(client: client),
+      adminOrders: ApiAdminOrderRepository(client: client),
       orders: AppConfig.useDemoOrders
           ? DemoOrderRepository()
           : ApiOrderRepository(client: client),
@@ -81,6 +84,7 @@ class TsCafeApp extends StatelessWidget {
     required this.adminMenu,
     required this.contact,
     required this.adminContact,
+    required this.adminOrders,
     required this.orders,
   });
 
@@ -104,6 +108,10 @@ class TsCafeApp extends StatelessWidget {
   /// The inbox those messages land in.
   final AdminContactRepository adminContact;
 
+  /// The kitchen queue. Staff and admin share it — the API gives both roles the
+  /// same order permissions.
+  final AdminOrderRepository adminOrders;
+
   /// The signed-in customer's orders. Scoped to the bearer token, so it needs
   /// nothing from the session beyond the client it already shares.
   final OrderRepository orders;
@@ -116,6 +124,7 @@ class TsCafeApp extends StatelessWidget {
         RepositoryProvider<AdminMenuRepository>.value(value: adminMenu),
         RepositoryProvider<ContactRepository>.value(value: contact),
         RepositoryProvider<AdminContactRepository>.value(value: adminContact),
+        RepositoryProvider<AdminOrderRepository>.value(value: adminOrders),
         RepositoryProvider<OrderRepository>.value(value: orders),
       ],
       child: MultiBlocProvider(

@@ -139,34 +139,52 @@ class _Identity extends StatelessWidget {
 
     return Column(
       children: [
-        Container(
-          width: 88,
-          height: 88,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: context.surfaces.accentContainer,
-          ),
-          child: avatar == null || avatar.isEmpty
-              // Initials rather than a generic silhouette: it is the account's
-              // own mark, and it tells you at a glance you are signed in as who
-              // you think you are.
-              ? Center(
-                  child: Text(
-                    _initials(user),
-                    style: AppTypography.monogram(scheme.primary),
-                  ),
-                )
-              : Image.network(
-                  avatar,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, _, _) => Center(
-                    child: Text(
-                      _initials(user),
-                      style: AppTypography.monogram(scheme.primary),
-                    ),
-                  ),
+        // The photograph where there is one, otherwise a glyph for the role —
+        // and the role badge on top either way, so what an account *is* reads at
+        // a glance rather than having to be looked up in the label below.
+        SizedBox(
+          width: 96,
+          height: 96,
+          child: Stack(
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: context.surfaces.accentContainer,
                 ),
+                child: avatar == null || avatar.isEmpty
+                    ? Center(
+                        child: Icon(
+                          _avatarIcon(user.role),
+                          size: AppIconSize.hero + 4,
+                          color: scheme.primary,
+                        ),
+                      )
+                    : Image.network(
+                        avatar,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        errorBuilder: (context, _, _) => Center(
+                          child: Icon(
+                            _avatarIcon(user.role),
+                            size: AppIconSize.hero + 4,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ),
+              ),
+              if (user.role != UserRole.customer)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: _RoleMark(role: user.role),
+                ),
+            ],
+          ),
         ),
         const SizedBox(height: AppSpacing.x3),
         Text(
@@ -188,19 +206,52 @@ class _Identity extends StatelessWidget {
     );
   }
 
-  static String _initials(AuthUser user) {
-    final first = user.firstName.trim();
-    final last = user.lastName.trim();
-    if (first.isEmpty && last.isEmpty) {
-      return user.email.isEmpty
-          ? '?'
-          : user.email.characters.first.toUpperCase();
-    }
-    final letters = [
-      if (first.isNotEmpty) first.characters.first,
-      if (last.isNotEmpty) last.characters.first,
-    ].join();
-    return letters.toUpperCase();
+  /// The glyph standing in for a missing photograph.
+  ///
+  /// A customer is a person; staff are the service; an administrator holds the
+  /// keys. Initials used to sit here, which read as identity but said nothing
+  /// about what the account can do — and on the staff side that is the thing
+  /// worth knowing at a glance.
+  static IconData _avatarIcon(UserRole role) => switch (role) {
+    UserRole.customer => Icons.person,
+    UserRole.staff => Icons.room_service,
+    UserRole.admin => Icons.admin_panel_settings,
+  };
+}
+
+/// The small badge on the corner of a staff or admin avatar.
+///
+/// Customers get none: on a customer's own profile a badge saying "customer"
+/// would be decoration. It is the accounts with extra power that are worth
+/// marking.
+class _RoleMark extends StatelessWidget {
+  const _RoleMark({required this.role});
+
+  final UserRole role;
+
+  @override
+  Widget build(BuildContext context) {
+    final colours = context.orderColors;
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, background) = switch (role) {
+      UserRole.staff => (Icons.room_service, colours.preparing),
+      UserRole.admin => (Icons.shield, colours.ready),
+      UserRole.customer => (Icons.person, colours.served),
+    };
+
+    return Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: background,
+        shape: BoxShape.circle,
+        // A ring in the page's own colour, so the badge reads as sitting on top
+        // of the avatar rather than punched into it.
+        border: Border.all(color: scheme.surface, width: 2),
+      ),
+      child: Icon(icon, size: AppIconSize.sm, color: Colors.white),
+    );
   }
 }
 
@@ -290,14 +341,11 @@ class _DetailsCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.x2),
           _Field(label: 'First name', value: user.firstName),
           _Field(label: 'Last name', value: user.lastName),
-          // Shown but not editable, and said plainly: the API refuses to change
-          // an email here because it needs verification, so an editable field
-          // would be a dead end.
-          _Field(
-            label: 'Email',
-            value: user.email,
-            note: 'Contact us to change this',
-          ),
+          // Shown but not editable — the API refuses to change an email here
+          // because it needs verification. The absence of an edit control says
+          // that on its own; a line of instructions under every profile does not
+          // earn its place.
+          _Field(label: 'Email', value: user.email),
         ],
       ),
     );
@@ -305,11 +353,10 @@ class _DetailsCard extends StatelessWidget {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.value, this.note});
+  const _Field({required this.label, required this.value});
 
   final String label;
   final String value;
-  final String? note;
 
   @override
   Widget build(BuildContext context) {
@@ -329,21 +376,9 @@ class _Field extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.x3),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value.isEmpty ? '—' : value,
-                  style: context.texts.bodyLarge,
-                ),
-                if (note != null)
-                  Text(
-                    note!,
-                    style: context.texts.bodySmall?.copyWith(
-                      color: context.surfaces.inkSoft,
-                    ),
-                  ),
-              ],
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: context.texts.bodyLarge,
             ),
           ),
         ],
@@ -425,7 +460,10 @@ class _EditProfileFormState extends State<_EditProfileForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    // Scrollable for the same reason as the inbox sheet: the sheet bounds its
+    // child's height, so with the keyboard up an unscrollable column puts its
+    // own submit button out of reach.
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.gutter,
         0,

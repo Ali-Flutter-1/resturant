@@ -432,7 +432,11 @@ class _MessageDetailState extends State<_MessageDetail> {
         _seed(message);
         final busy = state.busyIds.contains(message.id);
 
-        return Padding(
+        // Scrollable. The sheet gives its child a bounded height, so with the
+        // keyboard up the content was squeezed and the save button went off the
+        // bottom with no way to reach it. The keyboard's own inset is added to
+        // the padding so the last field can always be scrolled clear of it.
+        return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.gutter,
             0,

@@ -1,4 +1,6 @@
+import '../../cart/cart_cubit.dart';
 import '../domain/customer_order.dart';
+import '../domain/order_quote.dart';
 import '../domain/order_repository.dart';
 
 /// Orders held in memory, for looking at the screen without a backend.
@@ -21,6 +23,86 @@ class DemoOrderRepository implements OrderRepository {
   final Duration delay;
 
   late List<CustomerOrder> _orders = _seed();
+
+  /// Prices from the basket's own cached prices, with the same delivery fee and
+  /// minimum the API defaults to.
+  ///
+  /// A demo quote is the one place local arithmetic is honest — there is no
+  /// server to disagree with.
+  @override
+  Future<OrderQuote> quote({
+    required bool isDelivery,
+    required List<CartLine> lines,
+  }) async {
+    await Future<void>.delayed(delay);
+    final subtotal = lines.fold(0, (sum, l) => sum + l.displayLinePence);
+    final fee = isDelivery ? 299 : 0;
+    final minimum = isDelivery ? 1000 : 0;
+    final earliest = DateTime.now().add(const Duration(minutes: 45));
+
+    return OrderQuote(
+      lines: [
+        for (final line in lines)
+          QuoteLine(
+            name: line.title,
+            quantity: line.quantity,
+            unitPricePence: line.displayPricePence,
+            linePence: line.displayLinePence,
+            notes: line.notes,
+          ),
+      ],
+      subtotalPence: subtotal,
+      deliveryFeePence: fee,
+      totalPence: subtotal + fee,
+      minimumOrderPence: minimum,
+      meetsMinimum: subtotal >= minimum,
+      earliestSlot: earliest,
+      availableSlots: [
+        for (var i = 0; i < 16; i++)
+          earliest.add(Duration(minutes: 15 * i)).toUtc().toIso8601String(),
+      ],
+    );
+  }
+
+  @override
+  Future<CustomerOrder> place({
+    required String idempotencyKey,
+    required bool isDelivery,
+    required List<CartLine> lines,
+    required String contactName,
+    required String contactPhone,
+    bool isAsap = true,
+    String? requestedFor,
+    String? addressLine1,
+    String? addressLine2,
+    String? city,
+    String? postcode,
+    String? deliveryNotes,
+    String? customerNote,
+  }) async {
+    await Future<void>.delayed(delay);
+    final subtotal = lines.fold(0, (sum, l) => sum + l.displayLinePence);
+    final placed = CustomerOrder(
+      id: 'demo-${_orders.length + 1}',
+      reference: '#01${_orders.length + 10}',
+      status: CustomerOrderStatus.placed,
+      totalPence: subtotal + (isDelivery ? 299 : 0),
+      placedAt: DateTime.now(),
+      isDelivery: isDelivery,
+      canCancel: true,
+      items: [
+        for (final line in lines)
+          CustomerOrderItem(
+            dishName: line.title,
+            quantity: line.quantity,
+            linePence: line.displayLinePence,
+            notes: line.notes,
+          ),
+      ],
+    );
+    _orders = [placed, ..._orders];
+    return placed;
+  }
 
   @override
   Future<List<CustomerOrder>> myOrders() async {
