@@ -17,6 +17,8 @@ import '../../../shared/widgets/dish_list_skeleton.dart';
 import '../domain/customer_order.dart';
 import '../domain/order_repository.dart';
 import 'order_status_palette.dart';
+import '../../../shared/widgets/cart_icon_button.dart';
+import '../../cart/cart_cubit.dart';
 import 'order_tracker.dart';
 import 'orders_cubit.dart';
 
@@ -27,26 +29,34 @@ import 'orders_cubit.dart';
 /// a list. Putting a live order into a uniform history list would bury the only
 /// row the user opened the app to see.
 class MyOrdersScreen extends StatelessWidget {
-  const MyOrdersScreen({super.key, this.onBrowseMenu});
+  const MyOrdersScreen({super.key, this.onBrowseMenu, this.onOpenCheckout});
 
   /// Offered from the empty state — a first-time customer has nothing to read
   /// here, so the screen's job is to send them somewhere useful.
   final VoidCallback? onBrowseMenu;
+
+  /// Opens checkout. A basket filled on the Menu tab was otherwise unreachable
+  /// from here: the customer had to go back to a dish to find the cart again.
+  final VoidCallback? onOpenCheckout;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) =>
           OrdersCubit(repository: context.read<OrderRepository>())..load(),
-      child: _MyOrdersView(onBrowseMenu: onBrowseMenu),
+      child: _MyOrdersView(
+        onBrowseMenu: onBrowseMenu,
+        onOpenCheckout: onOpenCheckout,
+      ),
     );
   }
 }
 
 class _MyOrdersView extends StatefulWidget {
-  const _MyOrdersView({this.onBrowseMenu});
+  const _MyOrdersView({this.onBrowseMenu, this.onOpenCheckout});
 
   final VoidCallback? onBrowseMenu;
+  final VoidCallback? onOpenCheckout;
 
   @override
   State<_MyOrdersView> createState() => _MyOrdersViewState();
@@ -86,7 +96,17 @@ class _MyOrdersViewState extends State<_MyOrdersView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Orders')),
+      appBar: AppBar(
+        title: const Text('My Orders'),
+        actions: [
+          // Only once there is something to check out. The badge is the whole
+          // signal here — an empty cart icon on the orders screen would lead to
+          // a screen that can only say the basket is empty.
+          if (widget.onOpenCheckout != null &&
+              context.select((CartCubit c) => !c.state.isEmpty))
+            CartIconButton(onTap: widget.onOpenCheckout),
+        ],
+      ),
       body: BlocConsumer<OrdersCubit, OrdersState>(
         listener: (context, state) => _stopPollingIfSettled(state),
         builder: (context, state) {

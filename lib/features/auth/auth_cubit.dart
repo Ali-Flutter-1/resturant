@@ -226,8 +226,18 @@ class AuthCubit extends Cubit<AuthState> {
     if (repository == null) return;
     try {
       emit(state.copyWith(user: await repository.currentUser()));
-    } on ApiFailure {
-      // Kept as-is deliberately.
+    } on ApiFailure catch (failure) {
+      // Quiet on a network failure — the session on screen is still usable, and
+      // an error banner for a refresh nobody asked for would be noise.
+      //
+      // Not quiet on a refusal. On `/auth/me` of all routes, a 401 that survived
+      // the token refresh or a 403 can only mean this account may no longer be
+      // used: deactivated or closed by an admin. Leaving the user in the app
+      // means every screen they open fails one at a time, which reads as the app
+      // being broken rather than as their access having been withdrawn.
+      if (failure.requiresSignIn || failure.kind == ApiFailureKind.forbidden) {
+        await forgetSession();
+      }
     }
   }
 

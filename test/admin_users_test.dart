@@ -206,6 +206,40 @@ void main() {
       await cubit.close();
     });
 
+    test('the filters are one choice, not several toggles', () async {
+      final cubit = AdminUsersCubit(repository: repository);
+      await cubit.load();
+
+      await cubit.setFilter(isActive: false);
+      expect(cubit.state.isActive, isFalse);
+      expect(cubit.state.role, isNull);
+
+      // Picking a role clears the state filter rather than combining with it —
+      // two chips lit at once gave no way to tell what was in force.
+      final before = repository.listCalls;
+      await cubit.setFilter(role: UserRole.staff);
+      expect(cubit.state.role, UserRole.staff);
+      expect(cubit.state.isActive, isNull);
+      // And one request per tap. Setting the two dimensions separately fired
+      // two, with a state in between that matched neither chip.
+      expect(repository.listCalls, before + 1);
+
+      await cubit.setFilter();
+      expect(cubit.state.hasFilters, isFalse);
+      await cubit.close();
+    });
+
+    test('re-picking the filter already in force asks for nothing', () async {
+      final cubit = AdminUsersCubit(repository: repository);
+      await cubit.load();
+      final before = repository.listCalls;
+
+      await cubit.setFilter(role: UserRole.staff);
+      await cubit.setFilter(role: UserRole.staff);
+      expect(repository.listCalls, before + 1);
+      await cubit.close();
+    });
+
     test('a failed extra page keeps the rows already shown', () async {
       repository = FakeAdminUserRepository(pageSize: 2);
       final cubit = AdminUsersCubit(repository: repository);

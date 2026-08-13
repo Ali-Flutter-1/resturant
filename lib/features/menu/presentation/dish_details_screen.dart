@@ -550,54 +550,59 @@ class _AddToCartBar extends StatelessWidget {
             const SizedBox(width: AppSpacing.x3),
             Expanded(
               flex: 6,
-              child: Material(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                child: InkWell(
-                  onTap: onAdd == null
-                      ? null
-                      : () {
-                          AppHaptics.commit();
-                          onAdd!();
-                        },
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.x4,
-                      vertical: AppSpacing.x3,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'ADD TO CART',
-                            maxLines: 2,
-                            style: context.texts.labelLarge?.copyWith(
-                              color: scheme.onPrimary,
+              // Height and radius follow the stepper beside it, so the two read
+              // as one control bar rather than two unrelated shapes.
+              child: SizedBox(
+                height: QuantityStepper.height,
+                child: Material(
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: InkWell(
+                    onTap: onAdd == null
+                        ? null
+                        : () {
+                            AppHaptics.commit();
+                            onAdd!();
+                          },
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.x4,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'ADD TO CART',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.texts.labelLarge?.copyWith(
+                                color: scheme.onPrimary,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.x2),
-                        Flexible(
-                          child: AnimatedSwitcher(
-                            duration: context.motion.fade(Motion.fast),
-                            child: FittedBox(
-                              key: ValueKey(total),
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '£${total.toStringAsFixed(2)}',
-                                maxLines: 1,
-                                style: AppTypography.money(
-                                  scheme.onPrimary,
-                                  size: MoneySize.medium,
+                          const SizedBox(width: AppSpacing.x2),
+                          Flexible(
+                            child: AnimatedSwitcher(
+                              duration: context.motion.fade(Motion.fast),
+                              child: FittedBox(
+                                key: ValueKey(total),
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  '£${total.toStringAsFixed(2)}',
+                                  maxLines: 1,
+                                  style: AppTypography.money(
+                                    scheme.onPrimary,
+                                    size: MoneySize.medium,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

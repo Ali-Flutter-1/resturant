@@ -84,15 +84,15 @@ void main() {
 
       expect(find.text('2'), findsOneWidget);
 
-      await tapAt(tester, find.byIcon(Icons.add));
+      await tapAt(tester, find.byIcon(Icons.add_rounded));
       expect(find.text('3'), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.remove));
-      await tapAt(tester, find.byIcon(Icons.remove));
+      await tester.tap(find.byIcon(Icons.remove_rounded));
+      await tapAt(tester, find.byIcon(Icons.remove_rounded));
       expect(find.text('1'), findsOneWidget);
 
       // Floor is one guest — a table for nobody is not a booking.
-      await tapAt(tester, find.byIcon(Icons.remove));
+      await tapAt(tester, find.byIcon(Icons.remove_rounded));
       expect(find.text('1'), findsOneWidget);
     });
 

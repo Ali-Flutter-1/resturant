@@ -236,23 +236,30 @@ class AdminUsersCubit extends Cubit<AdminUsersState> {
     });
   }
 
-  Future<void> filterByRole(UserRole? role) async {
+  /// Sets the role and active filters together.
+  ///
+  /// One call rather than two, because the two are one choice on screen: a strip
+  /// where picking "Admins" clears "Deactivated". Setting them separately meant
+  /// two requests for one tap and, in between, a state that matched neither
+  /// filter — which is what made several chips look selected at once.
+  Future<void> setFilter({UserRole? role, bool? isActive}) async {
+    if (role == state.role && isActive == state.isActive) return;
     emit(
-      role == null
-          ? state.copyWith(clearRole: true)
-          : state.copyWith(role: role),
+      state.copyWith(
+        role: role,
+        isActive: isActive,
+        clearRole: role == null,
+        clearActive: isActive == null,
+      ),
     );
     await load(silent: state.users.isNotEmpty);
   }
 
-  Future<void> filterByActive(bool? isActive) async {
-    emit(
-      isActive == null
-          ? state.copyWith(clearActive: true)
-          : state.copyWith(isActive: isActive),
-    );
-    await load(silent: state.users.isNotEmpty);
-  }
+  Future<void> filterByRole(UserRole? role) =>
+      setFilter(role: role, isActive: null);
+
+  Future<void> filterByActive(bool? isActive) =>
+      setFilter(role: null, isActive: isActive);
 
   Future<void> showClosed(bool include) async {
     emit(state.copyWith(includeDeleted: include));

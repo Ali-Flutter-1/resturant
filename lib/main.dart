@@ -227,11 +227,12 @@ class _SplashGateState extends State<SplashGate> {
         final waiting = !_elapsed || !state.hasRestored;
 
         final child = switch (waiting ? null : state.role) {
-          UserRole.customer => const CustomerShell(),
+          UserRole.customer => const SessionWatcher(child: CustomerShell()),
           // Staff share the admin shell. What they may do inside it is narrower
           // — see `UserRole.canManageVenue` — but the shape of their app is the
           // staff-facing one, not the customer's.
-          UserRole.staff || UserRole.admin => const AdminShell(),
+          UserRole.staff ||
+          UserRole.admin => const SessionWatcher(child: AdminShell()),
           null => waiting ? const WelcomeScreen() : const _SignedOutFlow(),
         };
 
@@ -248,6 +249,61 @@ class _SplashGateState extends State<SplashGate> {
       },
     );
   }
+}
+
+/// Re-reads `/auth/me` while a shell is on screen.
+///
+/// Roles and access change on the server, from a different device: an admin
+/// promotes somebody to staff, or deactivates an account. Nothing told this app
+/// about it. `ProfileScreen` has pull-to-refresh, so the change appeared there
+/// and nowhere else — the promoted user kept the customer tab bar until they
+/// happened to visit Profile and pull, and a deactivated user kept browsing
+/// until some unrelated screen's request failed and signed them out mid-tap.
+///
+/// So the session is re-read when the app comes back to the foreground, which is
+/// where a change made elsewhere is most likely to have happened, and once when a
+/// shell mounts. [AuthCubit.refreshUser] does the rest: adopting a new role makes
+/// [SplashGate] swap shells, and a refusal ends the session cleanly.
+///
+/// Deliberately not a poll. A timer would mean a request every N seconds for a
+/// change that happens a few times a year, and the app already discovers a dead
+/// session the moment any request 401s.
+class SessionWatcher extends StatefulWidget {
+  const SessionWatcher({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<SessionWatcher> createState() => _SessionWatcherState();
+}
+
+class _SessionWatcherState extends State<SessionWatcher> {
+  AppLifecycleListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    _listener = AppLifecycleListener(onResume: _revalidate);
+    // Once on mount: the shell has just been built from a restored session, and
+    // the role in it may already be stale.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revalidate());
+  }
+
+  void _revalidate() {
+    if (!mounted) return;
+    final auth = context.read<AuthCubit>();
+    if (!auth.state.isSignedIn) return;
+    auth.refreshUser();
+  }
+
+  @override
+  void dispose() {
+    _listener?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Sign-in on its own navigator, so Register can be pushed and popped without

@@ -91,16 +91,17 @@ class CustomerShell extends StatelessWidget {
         ShellTab(
           label: 'Book',
           sfSymbol: 'calendar',
-          icon: Icons.event_seat_outlined,
-          selectedIcon: Icons.event_seat,
+          icon: Icons.calendar_month_outlined,
+          selectedIcon: Icons.calendar_month,
           builder: (context) => const BookTableScreen(),
         ),
         ShellTab(
           label: 'Orders',
           sfSymbol: 'list.bullet.rectangle',
-          icon: Icons.receipt_long_outlined,
-          selectedIcon: Icons.receipt_long,
+          icon: Icons.list_alt_outlined,
+          selectedIcon: Icons.list_alt,
           builder: (context) => MyOrdersScreen(
+            onOpenCheckout: () => _openCheckout(context),
             // An empty history is a dead end otherwise. The menu is the
             // Discover tab's root, so this asks the shell to switch tabs
             // rather than pushing a second copy of it onto this one.

@@ -251,49 +251,63 @@ class _Filters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // One choice, not five toggles. Role and account state are separate query
+    // parameters, but on screen they are a single strip, and letting two chips
+    // light up at once made it read as multi-select — with no way to tell which
+    // combination was actually in force.
+    final options = <({String label, UserRole? role, bool? isActive})>[
+      (label: 'Everyone', role: null, isActive: null),
+      (label: 'Customers', role: UserRole.customer, isActive: null),
+      (label: 'Staff', role: UserRole.staff, isActive: null),
+      (label: 'Admins', role: UserRole.admin, isActive: null),
+      (label: 'Deactivated', role: null, isActive: false),
+    ];
+
     return SizedBox(
       height: 38,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
         children: [
-          SelectableChip(
-            label: 'Everyone',
-            selected: state.role == null && state.isActive == null,
-            onSelected: () {
-              cubit.filterByRole(null);
-              cubit.filterByActive(null);
-            },
-          ),
-          for (final role in UserRole.values) ...[
-            const SizedBox(width: AppSpacing.x2),
+          for (final (index, option) in options.indexed) ...[
+            if (index > 0) const SizedBox(width: AppSpacing.x2),
             SelectableChip(
-              label: switch (role) {
-                UserRole.customer => 'Customers',
-                UserRole.staff => 'Staff',
-                UserRole.admin => 'Admins',
-              },
-              selected: state.role == role,
-              onSelected: () =>
-                  cubit.filterByRole(state.role == role ? null : role),
+              label: option.label,
+              selected:
+                  state.role == option.role && state.isActive == option.isActive,
+              onSelected: () => cubit.setFilter(
+                role: option.role,
+                isActive: option.isActive,
+              ),
             ),
           ],
-          const SizedBox(width: AppSpacing.x2),
-          SelectableChip(
-            label: 'Deactivated',
-            selected: state.isActive == false,
-            onSelected: () =>
-                cubit.filterByActive(state.isActive == false ? null : false),
-          ),
-          const SizedBox(width: AppSpacing.x2),
-          // Closed accounts are hidden by default, because they are history
-          // rather than people to manage.
+          // Set apart, because this one genuinely is an independent toggle: it
+          // widens whichever filter is chosen rather than replacing it. Closed
+          // accounts are hidden by default — they are history rather than people
+          // to manage.
+          const SizedBox(width: AppSpacing.x4),
+          _StripDivider(),
+          const SizedBox(width: AppSpacing.x4),
           SelectableChip(
             label: 'Include closed',
             selected: state.includeDeleted,
             onSelected: () => cubit.showClosed(!state.includeDeleted),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Separates the mutually-exclusive filters from the independent toggle.
+class _StripDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SizedBox(
+        width: 1,
+        height: 20,
+        child: ColoredBox(color: context.surfaces.line),
       ),
     );
   }

@@ -219,6 +219,39 @@ void main() {
     },
   );
 
+  test('a refused refresh ends the session', () async {
+    // The deactivated-account case. On `/auth/me` of all routes, a 401 that
+    // survived the token refresh can only mean this account may no longer be
+    // used — so the app must not leave the person inside it, opening screens
+    // that each fail on their own.
+    final repo = FakeAuthRepository(user: customer);
+    final cubit = AuthCubit(repository: repo, initialUser: customer);
+
+    repo.failure = const ApiFailure(
+      kind: ApiFailureKind.unauthorised,
+      message: 'Your session has expired.',
+    );
+    await cubit.refreshUser();
+
+    expect(cubit.state.isSignedIn, isFalse);
+    expect(repo.forgetCalls, 1);
+  });
+
+  test('a 403 on /auth/me also ends the session', () async {
+    // Signing in again cannot help a withdrawn account, so this is not treated
+    // as a recoverable error either.
+    final repo = FakeAuthRepository(user: customer);
+    final cubit = AuthCubit(repository: repo, initialUser: customer);
+
+    repo.failure = const ApiFailure(
+      kind: ApiFailureKind.forbidden,
+      message: 'This account has been deactivated.',
+    );
+    await cubit.refreshUser();
+
+    expect(cubit.state.isSignedIn, isFalse);
+  });
+
   testWidgets('signing out is reachable from here', (tester) async {
     final built = build(customer);
     await tester.pumpWidget(built.widget);

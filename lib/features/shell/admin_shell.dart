@@ -34,15 +34,15 @@ class AdminShell extends StatelessWidget {
           ShellTab(
             label: 'Analytics',
             sfSymbol: 'chart.bar.fill',
-            icon: Icons.insights_outlined,
-            selectedIcon: Icons.insights,
+            icon: Icons.assessment_outlined,
+            selectedIcon: Icons.assessment,
             builder: (context) => const AdminDashboardScreen(),
           ),
         ShellTab(
           label: 'Orders',
           sfSymbol: 'list.bullet.rectangle.fill',
-          icon: Icons.receipt_long_outlined,
-          selectedIcon: Icons.receipt_long,
+          icon: Icons.list_alt_outlined,
+          selectedIcon: Icons.list_alt,
           builder: (context) => const AdminOrdersScreen(),
         ),
         // Managing the menu is `canManageVenue` work. A staff member reaching
@@ -63,8 +63,8 @@ class AdminShell extends StatelessWidget {
         ShellTab(
           label: 'Reservations',
           sfSymbol: 'chair.fill',
-          icon: Icons.event_seat_outlined,
-          selectedIcon: Icons.event_seat,
+          icon: Icons.chair_outlined,
+          selectedIcon: Icons.chair,
           builder: (context) => const AdminReservationsScreen(),
         ),
         ShellTab(

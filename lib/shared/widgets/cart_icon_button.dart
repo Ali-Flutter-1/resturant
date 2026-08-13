@@ -12,10 +12,14 @@ import '../../features/cart/cart_cubit.dart';
 /// Pass [targetKey] to whatever launches the flight so it can measure where
 /// this sits on screen. The icon pops when the count rises — the landing
 /// needs an impact, or the item appears to be absorbed by nothing.
+///
+/// [targetKey] is optional because not every place that shows the cart is a
+/// place something can fly to it from: the Orders screen offers it purely as a
+/// way through to checkout.
 class CartIconButton extends StatefulWidget {
-  const CartIconButton({super.key, required this.targetKey, this.onTap});
+  const CartIconButton({super.key, this.targetKey, this.onTap});
 
-  final GlobalKey targetKey;
+  final GlobalKey? targetKey;
   final VoidCallback? onTap;
 
   @override

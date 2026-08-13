@@ -129,7 +129,7 @@ void main() {
       await tester.pumpWidget(wrap(wrapDish()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.add));
+      await tester.tap(find.byIcon(Icons.add_rounded));
       await tester.pumpAndSettle();
 
       expect(find.text('2'), findsWidgets);
@@ -157,7 +157,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Coconut Roti'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.add));
+      await tester.tap(find.byIcon(Icons.add_rounded));
       await tester.pumpAndSettle();
 
       // (17.50 + 3.50) x 2
@@ -183,7 +183,7 @@ void main() {
       await tester.pumpWidget(wrap(wrapDish()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.remove));
+      await tester.tap(find.byIcon(Icons.remove_rounded));
       await tester.pumpAndSettle();
 
       // Ordering zero of something is not a thing the UI should allow.
