@@ -23,7 +23,12 @@ import 'auth_form_parts.dart';
 /// already in state from startup. A pull-to-refresh re-reads it, which is how a
 /// role changed in the admin panel reaches the device without a sign-out.
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key, this.onGetInTouch, this.onOpenMessages});
+  const ProfileScreen({
+    super.key,
+    this.onGetInTouch,
+    this.onOpenMessages,
+    this.onManageUsers,
+  });
 
   /// Opens the contact form. Optional, because the customer app has it on its
   /// own screen and the admin app does not.
@@ -35,6 +40,10 @@ class ProfileScreen extends StatelessWidget {
   /// well at, and an inbox is checked a few times a day rather than being one of
   /// the app's main places.
   final VoidCallback? onOpenMessages;
+
+  /// Opens account management. Passed only for an admin — staff have no route to
+  /// it, and the API refuses them anyway.
+  final VoidCallback? onManageUsers;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +93,18 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.x3),
                 ],
-                if (onGetInTouch != null || onOpenMessages != null)
+                if (onManageUsers != null) ...[
+                  _LinkTile(
+                    icon: Icons.people_outline,
+                    title: 'Manage users',
+                    subtitle: 'Roles, access and closing accounts',
+                    onTap: onManageUsers!,
+                  ),
+                  const SizedBox(height: AppSpacing.x3),
+                ],
+                if (onGetInTouch != null ||
+                    onOpenMessages != null ||
+                    onManageUsers != null)
                   const SizedBox(height: AppSpacing.x2),
                 const AccountPanel(),
               ].revealStaggered(),

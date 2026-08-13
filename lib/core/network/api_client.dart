@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import 'api_constants.dart';
 import 'api_failure.dart';
+import 'page_data.dart';
 import 'connectivity_service.dart';
 import 'token_store.dart';
 
@@ -264,6 +265,38 @@ class ApiClient {
     throw const ApiFailure(
       kind: ApiFailureKind.unknown,
       message: 'The server sent something unexpected. Please try again.',
+    );
+  }
+
+  /// [send] for a paginated endpoint, keeping the counts.
+  ///
+  /// The `{items, page, page_size, total, total_pages}` envelope, decoded whole —
+  /// [list] drops everything but the rows, which is enough until a screen needs
+  /// to know whether there is another page.
+  Future<PageData<Map<String, dynamic>>> page(
+    String path, {
+    Map<String, dynamic>? query,
+  }) async {
+    final data = await send(path, query: query);
+    if (data is! Map) {
+      throw const ApiFailure(
+        kind: ApiFailureKind.unknown,
+        message: 'The server sent something unexpected. Please try again.',
+      );
+    }
+
+    final rows = data['items'];
+    return PageData(
+      items: rows is List
+          ? rows
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList()
+          : const [],
+      page: (data['page'] as num?)?.toInt() ?? 1,
+      pageSize: (data['page_size'] as num?)?.toInt() ?? 20,
+      total: (data['total'] as num?)?.toInt() ?? 0,
+      totalPages: (data['total_pages'] as num?)?.toInt() ?? 0,
     );
   }
 

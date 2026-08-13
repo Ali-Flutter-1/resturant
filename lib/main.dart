@@ -13,9 +13,11 @@ import 'features/auth/data/api_auth_repository.dart';
 import 'features/admin/data/api_admin_contact_repository.dart';
 import 'features/admin/data/api_admin_menu_repository.dart';
 import 'features/admin/data/api_admin_order_repository.dart';
+import 'features/admin/data/api_admin_user_repository.dart';
 import 'features/admin/domain/admin_contact_repository.dart';
 import 'features/admin/domain/admin_order_repository.dart';
 import 'features/admin/domain/admin_menu_repository.dart';
+import 'features/admin/domain/admin_user_repository.dart';
 import 'features/contact/data/api_contact_repository.dart';
 import 'features/contact/domain/contact_repository.dart';
 import 'features/menu/data/api_menu_repository.dart';
@@ -69,6 +71,7 @@ Future<void> main() async {
       contact: ApiContactRepository(client: client),
       adminContact: ApiAdminContactRepository(client: client),
       adminOrders: ApiAdminOrderRepository(client: client),
+      adminUsers: ApiAdminUserRepository(client: client),
       orders: AppConfig.useDemoOrders
           ? DemoOrderRepository()
           : ApiOrderRepository(client: client),
@@ -85,6 +88,7 @@ class TsCafeApp extends StatelessWidget {
     required this.contact,
     required this.adminContact,
     required this.adminOrders,
+    required this.adminUsers,
     required this.orders,
   });
 
@@ -112,6 +116,10 @@ class TsCafeApp extends StatelessWidget {
   /// same order permissions.
   final AdminOrderRepository adminOrders;
 
+  /// Accounts. Admin-only at the API, and reached only from the admin profile —
+  /// but provided app-wide for the same reason as [adminMenu].
+  final AdminUserRepository adminUsers;
+
   /// The signed-in customer's orders. Scoped to the bearer token, so it needs
   /// nothing from the session beyond the client it already shares.
   final OrderRepository orders;
@@ -125,6 +133,7 @@ class TsCafeApp extends StatelessWidget {
         RepositoryProvider<ContactRepository>.value(value: contact),
         RepositoryProvider<AdminContactRepository>.value(value: adminContact),
         RepositoryProvider<AdminOrderRepository>.value(value: adminOrders),
+        RepositoryProvider<AdminUserRepository>.value(value: adminUsers),
         RepositoryProvider<OrderRepository>.value(value: orders),
       ],
       child: MultiBlocProvider(

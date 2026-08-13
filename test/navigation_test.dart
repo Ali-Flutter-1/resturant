@@ -17,7 +17,7 @@ import 'package:practice/features/orders/domain/order_repository.dart';
 import 'package:practice/features/menu/domain/menu_repository.dart';
 import 'package:practice/features/menu/presentation/menu_screen.dart';
 import 'package:practice/features/shell/admin_shell.dart';
-import 'package:practice/shared/widgets/flutter_glass_nav_bar.dart';
+import 'package:practice/shared/widgets/app_nav_bar.dart';
 
 import 'support/auth_fixtures.dart';
 import 'support/fake_admin_menu_repository.dart';
@@ -265,7 +265,7 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
 
       final fab = tester.getRect(find.byType(FloatingActionButton));
-      final bar = tester.getRect(find.byType(FlutterGlassNavBar));
+      final bar = tester.getRect(find.byType(AppNavBar));
 
       // The bar paints over the tab's content, so any overlap at all means the
       // button is invisible — and untappable — rather than merely cramped.
@@ -315,7 +315,7 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
 
       Finder tab(String label) => find.descendant(
-        of: find.byType(FlutterGlassNavBar),
+        of: find.byType(AppNavBar),
         matching: find.text(label),
       );
 
@@ -334,7 +334,7 @@ void main() {
       // `canManageVenue` work — a staff member could open every control on that
       // screen and be refused by the API on each one.
       Finder tab(String label) => find.descendant(
-        of: find.byType(FlutterGlassNavBar),
+        of: find.byType(AppNavBar),
         matching: find.text(label),
       );
 
@@ -348,7 +348,7 @@ void main() {
     });
 
     Finder barTab(String label) => find.descendant(
-      of: find.byType(FlutterGlassNavBar),
+      of: find.byType(AppNavBar),
       matching: find.text(label),
     );
 

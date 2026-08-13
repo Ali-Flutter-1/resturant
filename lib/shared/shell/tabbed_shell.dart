@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import '../../core/animations/motion.dart';
 import '../../core/animations/page_transitions.dart';
 import '../../core/haptics/app_haptics.dart';
-import '../widgets/flutter_glass_nav_bar.dart';
+import '../widgets/app_nav_bar.dart';
 
 /// One tab in a [TabbedShell].
 class ShellTab {
@@ -143,18 +143,24 @@ class _TabbedShellState extends State<TabbedShell> {
     await SystemNavigator.pop();
   }
 
+  /// UIKit's tab bar content height, for the native bar on iOS.
+  ///
+  /// The Material bar is taller — M3 specifies 64 of content against UIKit's 50 —
+  /// so the two can no longer share one number. Reporting the Material height on
+  /// iOS would leave 14pt of dead space under every screen.
+  static const double _nativeBarHeight = 50;
+
   /// Height the bar occupies, so screens inside a tab can clear it.
   ///
-  /// Both bars are now the same 50pt content height — UIKit's — so the only
-  /// difference left is what they do without a home indicator: the Flutter bar
-  /// adds its own small pad, the native one is already inset.
+  /// The remaining difference is what each does without a home indicator: the
+  /// Material bar adds M3's own bottom padding, the native one is already inset.
   double _barExtent(double bottomInset) =>
-      FlutterGlassNavBar.barHeight +
+      (_useNativeBar ? _nativeBarHeight : AppNavBar.barHeight) +
       (bottomInset > 0
           ? bottomInset
           : (_useNativeBar
                 ? 0.0
-                : FlutterGlassNavBar.bottomPaddingWithoutInset));
+                : AppNavBar.bottomPaddingWithoutInset));
 
   Widget _tabNavigator(int index, double barExtent) {
     return Navigator(
@@ -250,13 +256,13 @@ class _TabbedShellState extends State<TabbedShell> {
       );
     }
 
-    return FlutterGlassNavBar(
+    return AppNavBar(
       currentIndex: _currentIndex,
       onTap: _onTabSelected,
       tint: tint,
       items: [
         for (final tab in widget.tabs)
-          FlutterGlassNavItem(
+          AppNavItem(
             label: tab.label,
             icon: tab.icon,
             selectedIcon: tab.selectedIcon,

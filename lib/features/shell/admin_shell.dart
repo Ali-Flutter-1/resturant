@@ -9,6 +9,7 @@ import '../admin/presentation/admin_menu_management_screen.dart';
 import '../admin/presentation/admin_orders_screen.dart';
 import '../admin/presentation/admin_reservations_screen.dart';
 import '../admin/presentation/admin_contact_screen.dart';
+import '../admin/presentation/admin_users_screen.dart';
 import '../auth/auth_cubit.dart';
 import '../auth/presentation/profile_screen.dart';
 
@@ -79,6 +80,15 @@ class AdminShell extends StatelessWidget {
                 ? () => Navigator.of(context).push(
                     AppPageRoute<void>(
                       builder: (_) => const AdminContactScreen(),
+                    ),
+                  )
+                : null,
+            // Also admin only: `/admin/users` is denied to staff, so offering
+            // the row to them would be a door onto a 403.
+            onManageUsers: canManageVenue
+                ? () => Navigator.of(context).push(
+                    AppPageRoute<void>(
+                      builder: (_) => const AdminUsersScreen(),
                     ),
                   )
                 : null,

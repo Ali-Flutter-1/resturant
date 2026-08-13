@@ -2,24 +2,25 @@ import 'dart:ui' show ImageFilter, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:practice/core/theme/app_colors.dart';
 import 'package:practice/core/theme/app_theme.dart';
-import 'package:practice/shared/widgets/flutter_glass_nav_bar.dart';
+import 'package:practice/shared/widgets/app_nav_bar.dart';
 
 /// The Flutter tab bar's visual contract.
 ///
-/// This is the bar on Android and web, and its whole purpose is to pass for
-/// UIKit's. The assertions below are the specific things that made it read as a
-/// Material `NavigationBar` — a floating card, a shadow, a pill behind the
-/// selected icon, an ink ripple. Each one is easy to reintroduce by accident
-/// while changing something else, and none of them is visible in a diff.
+/// This is the bar on Android and web; iOS gets the real `UITabBar`. It follows
+/// Material 3's `NavigationBar` metrics, and what is asserted here is the set of
+/// things easy to break while changing something else and invisible in a diff:
+/// the 64×32 active indicator, one icon size, the outlined-to-filled swap, an
+/// edge-to-edge bar with no shadow, and the system inset sitting inside it.
 void main() {
   const items = [
-    FlutterGlassNavItem(
+    AppNavItem(
       label: 'Menu',
       icon: Icons.restaurant_outlined,
       selectedIcon: Icons.restaurant,
     ),
-    FlutterGlassNavItem(
+    AppNavItem(
       label: 'Orders',
       icon: Icons.receipt_long_outlined,
       selectedIcon: Icons.receipt_long,
@@ -38,7 +39,7 @@ void main() {
         data: MediaQueryData(padding: EdgeInsets.only(bottom: bottomInset)),
         child: Align(
           alignment: Alignment.bottomCenter,
-          child: FlutterGlassNavBar(
+          child: AppNavBar(
             items: items,
             currentIndex: currentIndex,
             onTap: onTap ?? (_) {},
@@ -54,13 +55,13 @@ void main() {
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
-    final bar = tester.getRect(find.byType(FlutterGlassNavBar));
+    final bar = tester.getRect(find.byType(AppNavBar));
     final screen = tester.getRect(find.byType(MaterialApp));
 
     expect(bar.left, screen.left);
     expect(bar.right, screen.right);
-    // Flush to the bottom edge: the home indicator sits inside the bar rather
-    // than below a hovering pill.
+    // Flush to the bottom edge: M3 anchors the bar to the screen, with the
+    // gesture inset inside it rather than below a hovering pill.
     expect(bar.bottom, screen.bottom);
   });
 
@@ -71,7 +72,7 @@ void main() {
     final decorations = tester
         .widgetList<DecoratedBox>(
           find.descendant(
-            of: find.byType(FlutterGlassNavBar),
+            of: find.byType(AppNavBar),
             matching: find.byType(DecoratedBox),
           ),
         )
@@ -80,11 +81,10 @@ void main() {
 
     expect(decorations, isNotEmpty);
     for (final decoration in decorations) {
-      // Depth comes from translucency. A drop shadow under an edge-to-edge bar
-      // is what makes it look like a card that happens to touch the bottom.
+      // A hairline stands in for M3's elevation. A drop shadow under an
+      // edge-to-edge bar makes it look like a card that touches the bottom.
       expect(decoration.boxShadow, anyOf(isNull, isEmpty));
 
-      // A hairline along the top only — never a box around the whole bar.
       final border = decoration.border;
       if (border != null) {
         expect(border, isA<Border>());
@@ -97,28 +97,42 @@ void main() {
     }
   });
 
-  testWidgets('the selected tab is a tint, not a filled container', (
+  testWidgets('the selected tab gets M3\'s active indicator and the tint', (
     tester,
   ) async {
     await tester.pumpWidget(wrap(currentIndex: 1));
     await tester.pumpAndSettle();
 
-    // No painted ground anywhere behind an icon: the pill was the single most
-    // Android thing about the old bar.
-    final grounds = tester
-        .widgetList<AnimatedContainer>(
+    // Both indicators are built; the inactive one is scaled down and
+    // transparent, so selection can animate rather than pop in.
+    final opacities = tester
+        .widgetList<AnimatedOpacity>(
           find.descendant(
-            of: find.byType(FlutterGlassNavBar),
-            matching: find.byType(AnimatedContainer),
+            of: find.byType(AppNavBar),
+            matching: find.byType(AnimatedOpacity),
           ),
         )
+        .map((widget) => widget.opacity)
         .toList();
-    expect(grounds, isEmpty);
+    expect(opacities, containsAll(<double>[1, 0]));
+
+    // Tinted with the app's own accent container, not M3's secondaryContainer:
+    // selection should read as the brand crimson.
+    final pill = tester
+        .widgetList<DecoratedBox>(
+          find.descendant(
+            of: find.byType(AnimatedOpacity),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>()
+        .first;
+    expect(pill.color, AppSurfaces.light.accentContainer);
 
     final accent = AppTheme.light.colorScheme.primary;
     final selected = tester.widget<Icon>(find.byIcon(Icons.receipt_long).first);
     expect(selected.color, accent);
-
     // ...and the unselected glyph is the outline variant in muted ink.
     final unselected = tester.widget<Icon>(
       find.byIcon(Icons.restaurant_outlined).first,
@@ -126,46 +140,44 @@ void main() {
     expect(unselected.color, isNot(accent));
   });
 
-  testWidgets('press feedback dims rather than rippling', (tester) async {
+  testWidgets('the indicator is M3\'s 64 by 32 and icons are one size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(currentIndex: 1));
+    await tester.pumpAndSettle();
+
+    for (final indicator in find.byType(AnimatedOpacity).evaluate()) {
+      expect(tester.getSize(find.byWidget(indicator.widget)), const Size(64, 32));
+    }
+
+    // One icon size across every tab. A 24 beside a 25 reads as a mistake
+    // without ever looking obviously wrong.
+    final sizes = tester
+        .widgetList<Icon>(
+          find.descendant(
+            of: find.byType(AppNavBar),
+            matching: find.byType(Icon),
+          ),
+        )
+        .map((icon) => icon.size);
+    expect(sizes, everyElement(24.0));
+  });
+
+  testWidgets('the whole cell is the touch target', (tester) async {
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
-    // An InkWell's splash is unmistakably Material, whatever colour it is.
-    expect(
-      find.descendant(
-        of: find.byType(FlutterGlassNavBar),
-        matching: find.byType(InkWell),
-      ),
-      findsNothing,
-    );
+    final cell = tester.getSize(find.byType(InkResponse).first);
+    // Well past the 48pt minimum in both directions.
+    expect(cell.height, greaterThanOrEqualTo(48));
+    expect(cell.width, greaterThanOrEqualTo(48));
 
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.text('Orders')),
-    );
-    await tester.pump(const Duration(milliseconds: 150));
-
-    final dimmed = tester
-        .widgetList<AnimatedOpacity>(
-          find.descendant(
-            of: find.byType(FlutterGlassNavBar),
-            matching: find.byType(AnimatedOpacity),
-          ),
-        )
-        .map((widget) => widget.opacity);
-    expect(dimmed, contains(lessThan(1.0)));
-
-    await gesture.up();
-    await tester.pumpAndSettle();
-
-    final restored = tester
-        .widgetList<AnimatedOpacity>(
-          find.descendant(
-            of: find.byType(FlutterGlassNavBar),
-            matching: find.byType(AnimatedOpacity),
-          ),
-        )
-        .map((widget) => widget.opacity);
-    expect(restored, everyElement(1.0));
+    // A tap near the cell's edge — not on the glyph — still registers.
+    final taps = <int>[];
+    await tester.pumpWidget(wrap(onTap: taps.add));
+    final rect = tester.getRect(find.byType(InkResponse).last);
+    await tester.tapAt(Offset(rect.left + 4, rect.center.dy));
+    expect(taps, [1]);
   });
 
   testWidgets('blurs what is behind it', (tester) async {
@@ -175,7 +187,7 @@ void main() {
     final backdrop = tester.widget<BackdropFilter>(
       find
           .descendant(
-            of: find.byType(FlutterGlassNavBar),
+            of: find.byType(AppNavBar),
             matching: find.byType(BackdropFilter),
           )
           .first,
@@ -183,28 +195,58 @@ void main() {
     expect(backdrop.filter, isA<ImageFilter>());
   });
 
-  testWidgets('the home indicator is inset inside the bar, not overlapped', (
+  testWidgets('the system inset is inside the bar, not overlapped', (
     tester,
   ) async {
     await tester.pumpWidget(wrap(bottomInset: 34));
     await tester.pumpAndSettle();
 
-    final bar = tester.getRect(find.byType(FlutterGlassNavBar));
+    final bar = tester.getRect(find.byType(AppNavBar));
     final label = tester.getRect(find.text('Menu'));
 
-    // Content sits above the indicator area; the bar itself extends behind it.
+    // Content sits above the gesture area; the bar itself extends behind it.
     expect(bar.bottom - label.bottom, greaterThanOrEqualTo(34));
-    expect(bar.height, FlutterGlassNavBar.barHeight + 34);
+    expect(bar.height, AppNavBar.barHeight + 34);
   });
 
-  testWidgets('pads itself where there is no home indicator', (tester) async {
+  testWidgets('pads itself where there is no system inset', (tester) async {
     await tester.pumpWidget(wrap(bottomInset: 0));
     await tester.pumpAndSettle();
 
+    // 64 + 16 — M3's 80pt bar, reached the other way round.
     expect(
-      tester.getRect(find.byType(FlutterGlassNavBar)).height,
-      FlutterGlassNavBar.barHeight +
-          FlutterGlassNavBar.bottomPaddingWithoutInset,
+      tester.getRect(find.byType(AppNavBar)).height,
+      AppNavBar.barHeight + AppNavBar.bottomPaddingWithoutInset,
+    );
+    expect(
+      AppNavBar.barHeight + AppNavBar.bottomPaddingWithoutInset,
+      80,
+    );
+  });
+
+  testWidgets('a large text scale does not break the fixed height', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2.4)),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: AppNavBar(items: items, currentIndex: 0, onTap: (_) {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Clamped rather than allowed to overflow: the bar's height is fixed, so an
+    // unbounded label would push the indicator out of it.
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getRect(find.byType(AppNavBar)).height,
+      AppNavBar.barHeight + AppNavBar.bottomPaddingWithoutInset,
     );
   });
 
@@ -218,7 +260,8 @@ void main() {
     await tester.tap(find.text('Orders'));
     expect(taps, [1]);
 
-    // Selection must reach assistive tech; a tint alone is invisible to it.
+    // Selection must reach assistive tech; a tint and a pill are both invisible
+    // to it.
     final semantics = tester.getSemantics(find.text('Menu'));
     expect(semantics.flagsCollection.isSelected, Tristate.isTrue);
   });
