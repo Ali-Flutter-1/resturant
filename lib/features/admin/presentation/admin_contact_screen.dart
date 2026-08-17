@@ -14,6 +14,7 @@ import '../../../shared/widgets/skeleton.dart';
 import '../domain/admin_contact_repository.dart';
 import '../domain/contact_message.dart';
 import 'admin_contact_cubit.dart';
+import '../../auth/session_refresh.dart';
 
 /// The inbox behind the customers' Contact Us form.
 ///
@@ -77,7 +78,10 @@ class _InboxView extends StatelessWidget {
               else
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: () => cubit.load(silent: true),
+                    onRefresh: () => refreshWithSession(
+                      context,
+                      () => cubit.load(silent: true),
+                    ),
                     child: state.visible.isEmpty
                         ? _EmptyInbox(
                             filtered: state.filter != null,

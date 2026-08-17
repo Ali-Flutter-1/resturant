@@ -288,4 +288,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Enter a price, like 12.50.'), findsOne);
   });
+
+  group('a section\'s logo', () {
+    test('uploading returns the server\'s own image_url', () async {
+      final repository = FakeAdminMenuRepository();
+      final categories = await repository.categories();
+      final target = categories.first;
+
+      final updated = await repository.setCategoryLogo(target.id, '/tmp/a.jpg');
+
+      expect(repository.logoChanges.last, {
+        'id': target.id,
+        'path': '/tmp/a.jpg',
+      });
+      // Displayed as sent. The guide is explicit that the app must never build
+      // a Cloudinary URL of its own.
+      expect(updated.imageUrl, isNotNull);
+      expect(updated.imageUrl, startsWith('https://'));
+      expect(updated.id, target.id);
+      expect(updated.name, target.name);
+    });
+
+    test('removing clears the picture and keeps the section', () async {
+      final repository = FakeAdminMenuRepository();
+      final target = (await repository.categories()).first;
+      await repository.setCategoryLogo(target.id, '/tmp/a.jpg');
+
+      final cleared = await repository.removeCategoryLogo(target.id);
+
+      expect(cleared.imageUrl, isNull);
+      expect(cleared.name, target.name);
+      // The whole category comes back, not a bare acknowledgement, so the
+      // caller re-renders from one source.
+      expect((await repository.categories()).first.imageUrl, isNull);
+    });
+  });
 }

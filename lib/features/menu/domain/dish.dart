@@ -87,6 +87,7 @@ class Dish extends Equatable {
     this.isGlutenFree = false,
     this.allergens = const [],
     this.isAvailable = true,
+    this.hasSpiceLevels = false,
     this.createdAt,
   });
 
@@ -133,6 +134,9 @@ class Dish extends Equatable {
       // explicit that it comes back with this false so the app can grey it out
       // rather than hide it.
       isAvailable: json['is_available'] != false,
+      // Absent means no choice offered. Defaulting the other way would put a
+      // spice selector on every dish the moment an older deployment answered.
+      hasSpiceLevels: json['has_spice_levels'] == true,
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'].toString())?.toLocal(),
@@ -167,6 +171,12 @@ class Dish extends Equatable {
   /// orderable — the API is explicit about that so the menu doesn't appear to
   /// shrink through the evening.
   final bool isAvailable;
+
+  /// Whether the kitchen offers Low/Mid/High for this dish.
+  ///
+  /// False means no selector at all — sending a level for such a dish earns a
+  /// `SPICE_LEVEL_NOT_OFFERED`, so the control must not be there to tap.
+  final bool hasSpiceLevels;
 
   /// When the dish was added, for showing the newest first.
   final DateTime? createdAt;
@@ -221,6 +231,7 @@ class Dish extends Equatable {
     isGlutenFree,
     allergens,
     isAvailable,
+    hasSpiceLevels,
     createdAt,
   ];
 }

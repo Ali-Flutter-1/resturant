@@ -155,6 +155,36 @@ abstract final class ApiConstants {
   static String adminOrder(String id) => '/admin/orders/$id';
   static String adminOrderStatus(String id) => '/admin/orders/$id/status';
 
+  // ----------------------------------------------------------- working hours
+
+  /// Public. Somebody deciding whether to walk over does not have an account.
+  static const String workingHours = '/working-hours';
+
+  /// Admin only — staff cannot edit the week.
+  static const String adminWorkingHours = '/admin/working-hours';
+  static String adminWorkingHoursDay(int weekday) =>
+      '/admin/working-hours/$weekday';
+
+  /// A category's logo. Admin only, multipart on the way up.
+  static String adminCategoryLogo(String categoryId) =>
+      '/admin/categories/$categoryId/logo';
+
+  // ------------------------------------------------------------ notifications
+
+  /// Registering this installation for push. The response never echoes the FCM
+  /// token back, and neither should anything here.
+  static const String notificationDevices = '/notifications/devices';
+  static String notificationDevice(String installationId) =>
+      '/notifications/devices/$installationId';
+
+  /// The durable in-app inbox — the reliable record when a push is delayed,
+  /// dismissed or never delivered.
+  static const String notifications = '/notifications';
+  static const String notificationsUnreadCount =
+      '/notifications/unread-count';
+  static String notificationRead(String id) => '/notifications/$id/read';
+  static const String notificationsReadAll = '/notifications/read-all';
+
   // ------------------------------------------------- reservations (customer)
 
   /// `?date=YYYY-MM-DD&guests=N`. Returns unavailable sittings too, each with

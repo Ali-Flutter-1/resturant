@@ -10,6 +10,8 @@ import '../admin/presentation/admin_orders_screen.dart';
 import '../admin/presentation/admin_reservations_screen.dart';
 import '../admin/presentation/admin_contact_screen.dart';
 import '../admin/presentation/admin_users_screen.dart';
+import '../booking/presentation/admin_venue_screen.dart';
+import '../hours/presentation/admin_working_hours_screen.dart';
 import '../auth/auth_cubit.dart';
 import '../auth/presentation/profile_screen.dart';
 
@@ -89,6 +91,23 @@ class AdminShell extends StatelessWidget {
                 ? () => Navigator.of(context).push(
                     AppPageRoute<void>(
                       builder: (_) => const AdminUsersScreen(),
+                    ),
+                  )
+                : null,
+            // Admin only: creating tables and generating sittings are both
+            // denied to staff.
+            onManageVenue: canManageVenue
+                ? () => Navigator.of(context).push(
+                    AppPageRoute<void>(
+                      builder: (_) => const AdminVenueScreen(),
+                    ),
+                  )
+                : null,
+            // Admin only: the working-hours PUT is denied to staff.
+            onOpeningHours: canManageVenue
+                ? () => Navigator.of(context).push(
+                    AppPageRoute<void>(
+                      builder: (_) => const AdminWorkingHoursScreen(),
                     ),
                   )
                 : null,

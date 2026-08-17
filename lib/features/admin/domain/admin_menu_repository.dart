@@ -17,6 +17,16 @@ abstract interface class AdminMenuRepository {
   /// default and one fewer thing for an admin to decide.
   Future<MenuCategory> createCategory(String name);
 
+  /// Uploads a section's logo, replacing any previous one.
+  ///
+  /// Returns the whole category back, so the caller shows the `image_url` the
+  /// server produced rather than building a Cloudinary URL of its own — the
+  /// guide is explicit that the app must never construct one.
+  Future<MenuCategory> setCategoryLogo(String categoryId, String filePath);
+
+  /// Removes it. Safe on a category that never had one.
+  Future<MenuCategory> removeCategoryLogo(String categoryId);
+
   /// Every dish, optionally narrowed to one category.
   Future<List<Dish>> dishes({String? categoryId});
 

@@ -25,13 +25,25 @@ class FakeOrderRepository implements OrderRepository {
   final cancelled = <String>[];
 
   /// What a quote answers with. Set by a test that cares.
-  OrderQuote quoteResult = const OrderQuote(
+  ///
+  /// The slots are relative to now, not fixed dates. They used to be pinned to
+  /// 2026-08-12, which meant the screen labelled them "Today" only while the
+  /// calendar agreed — the timing tests passed on the day they were written and
+  /// silently started failing afterwards.
+  OrderQuote quoteResult = OrderQuote(
     subtotalPence: 1790,
     deliveryFeePence: 299,
     totalPence: 2089,
     minimumOrderPence: 1000,
-    availableSlots: ['2026-08-12T19:00:00Z', '2026-08-12T19:15:00Z'],
+    availableSlots: [
+      slotIn(const Duration(hours: 2)),
+      slotIn(const Duration(hours: 2, minutes: 15)),
+    ],
   );
+
+  /// An ISO slot [ahead] from now, with an offset, exactly as the API sends it.
+  static String slotIn(Duration ahead) =>
+      DateTime.now().toUtc().add(ahead).toIso8601String();
 
   /// Fails only the quote, so a test can price fine and be refused on placing.
   ApiFailure? quoteFailure;
@@ -146,11 +158,15 @@ abstract final class OrderFixtures {
     ],
     bool isDelivery = true,
     bool canCancel = false,
+    bool wasRejected = false,
+    String? cancellationReason,
   }) => CustomerOrder(
     id: id,
     reference: reference,
     status: status,
     totalPence: totalPence,
+    wasRejected: wasRejected,
+    cancellationReason: cancellationReason,
     // Fixed rather than `DateTime.now()`: a test that formats a date should not
     // change its answer at midnight.
     placedAt: placedAt ?? DateTime(2026, 8, 1, 19, 30),

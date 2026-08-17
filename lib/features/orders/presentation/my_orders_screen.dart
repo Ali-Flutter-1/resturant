@@ -21,6 +21,7 @@ import '../../../shared/widgets/cart_icon_button.dart';
 import '../../cart/cart_cubit.dart';
 import 'order_tracker.dart';
 import 'orders_cubit.dart';
+import '../../auth/session_refresh.dart';
 
 /// The customer's orders: what is happening now, and what happened before.
 ///
@@ -133,7 +134,8 @@ class _MyOrdersViewState extends State<_MyOrdersView> {
           final past = state.past;
 
           return RefreshIndicator(
-            onRefresh: () => cubit.load(silent: true),
+            onRefresh: () =>
+                refreshWithSession(context, () => cubit.load(silent: true)),
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.gutter,
@@ -489,6 +491,15 @@ void _showReceipt(BuildContext context, CustomerOrder order) {
             ),
             const SizedBox(height: AppSpacing.x4),
 
+            // Why, in the restaurant's own words. The API makes the note
+            // mandatory when staff cancel or reject, so on those orders there is
+            // always something here — and a customer whose order was refused
+            // with no explanation has to ring up to find out why.
+            if (order.cancellationReason != null) ...[
+              _ReasonNotice(order: order),
+              const SizedBox(height: AppSpacing.x4),
+            ],
+
             if (order.items.isEmpty)
               // Only reached when the detail fetch failed, since the API always
               // sends lines on a single order. Saying so beats an empty gap that
@@ -519,9 +530,16 @@ void _showReceipt(BuildContext context, CustomerOrder order) {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(item.dishName, style: context.texts.bodyLarge),
-                            if (item.notes != null)
+                            // Read from the order, not the dish: an admin can
+                            // turn spice choices off later and this receipt must
+                            // still say what was ordered.
+                            if (item.spiceLevel != null || item.notes != null)
                               Text(
-                                item.notes!,
+                                [
+                                  if (item.spiceLevel != null)
+                                    '${item.spiceLevel!.label} spice',
+                                  if (item.notes != null) item.notes!,
+                                ].join(' · '),
                                 style: context.texts.bodySmall?.copyWith(
                                   color: context.surfaces.inkSoft,
                                 ),
@@ -555,6 +573,69 @@ void _showReceipt(BuildContext context, CustomerOrder order) {
       ),
     ),
   );
+}
+
+/// Why the restaurant cancelled or rejected an order.
+class _ReasonNotice extends StatelessWidget {
+  const _ReasonNotice({required this.order});
+
+  final CustomerOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final colours = context.orderColors;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.x3),
+      decoration: BoxDecoration(
+        color: colours.overdueContainer,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            order.wasRejected
+                ? Icons.do_not_disturb_on_outlined
+                : Icons.info_outline,
+            size: AppIconSize.md,
+            color: colours.overdue,
+          ),
+          const SizedBox(width: AppSpacing.x2),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  order.wasRejected
+                      ? 'The restaurant declined this order'
+                      : 'This order was cancelled',
+                  style: context.texts.titleSmall?.copyWith(
+                    color: colours.overdue,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  order.cancellationReason!,
+                  style: context.texts.bodyMedium,
+                ),
+                if (order.cancelledAt != null) ...[
+                  const SizedBox(height: AppSpacing.x1),
+                  Text(
+                    _date(order.cancelledAt!),
+                    style: context.texts.bodySmall?.copyWith(
+                      color: context.surfaces.inkSoft,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Nothing ordered yet.

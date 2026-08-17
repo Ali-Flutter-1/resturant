@@ -11,11 +11,12 @@ import '../../../shared/widgets/api_error_view.dart';
 import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/dish_list_skeleton.dart';
 import '../../../shared/widgets/dish_image.dart';
-import '../../../shared/widgets/notifications_sheet.dart';
+import '../../notifications/presentation/notifications_screen.dart';
 import '../../../shared/widgets/pressable.dart';
 import '../domain/dish.dart';
 import '../domain/menu_repository.dart';
 import 'menu_cubit.dart';
+import '../../auth/session_refresh.dart';
 
 /// The full menu — a filterable list of large photographic cards.
 ///
@@ -84,12 +85,7 @@ class _MenuViewState extends State<_MenuView> {
         // escapable only by the Android system gesture.
         title: const Text("T's Cafe"),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            color: Theme.of(context).colorScheme.primary,
-            onPressed: () => showNotificationsSheet(context),
-            tooltip: 'Notifications',
-          ),
+          NotificationBell(onOpen: () => openNotifications(context)),
         ],
       ),
       body: BlocBuilder<MenuCubit, MenuState>(
@@ -185,7 +181,10 @@ class _Body extends StatelessWidget {
 
         return RefreshIndicator(
           // Silent, so pulling to refresh doesn't blank a menu being read.
-          onRefresh: () => context.read<MenuCubit>().load(silent: true),
+          onRefresh: () => refreshWithSession(
+            context,
+            () => context.read<MenuCubit>().load(silent: true),
+          ),
           child: ListView.separated(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.gutter,

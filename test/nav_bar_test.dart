@@ -147,7 +147,10 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final indicator in find.byType(AnimatedOpacity).evaluate()) {
-      expect(tester.getSize(find.byWidget(indicator.widget)), const Size(64, 32));
+      expect(
+        tester.getSize(find.byWidget(indicator.widget)),
+        const Size(64, 32),
+      );
     }
 
     // One icon size across every tab. A 24 beside a 25 reads as a mistake
@@ -218,10 +221,7 @@ void main() {
       tester.getRect(find.byType(AppNavBar)).height,
       AppNavBar.barHeight + AppNavBar.bottomPaddingWithoutInset,
     );
-    expect(
-      AppNavBar.barHeight + AppNavBar.bottomPaddingWithoutInset,
-      80,
-    );
+    expect(AppNavBar.barHeight + AppNavBar.bottomPaddingWithoutInset, 80);
   });
 
   testWidgets('a large text scale does not break the fixed height', (

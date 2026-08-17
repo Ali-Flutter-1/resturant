@@ -104,6 +104,30 @@ class AuthCubit extends Cubit<AuthState> {
   /// starts from [initialUser] and never calls the network.
   final AuthRepository? _repository;
 
+  /// Run once a session exists — after sign-in, sign-up or a restore.
+  ///
+  /// Used to register this installation for push. Deliberately a callback rather
+  /// than a dependency: the session has no business knowing what notifications
+  /// are, and a failure here must never keep somebody out of the app.
+  Future<void> Function()? onSignedIn;
+
+  /// Run **before** the logout request, while the access token still works.
+  ///
+  /// Used to remove this device's push registration. The order matters: after
+  /// logout the token is gone, and the next person to sign in on this phone
+  /// would keep receiving the previous user's alerts.
+  Future<void> Function()? onSigningOut;
+
+  /// Fires [onSignedIn] without letting it block or break anything.
+  void _announceSignIn() {
+    final hook = onSignedIn;
+    if (hook == null) return;
+    hook().catchError((Object _) {
+      // Swallowed on purpose. Registration retries on the next launch, and a
+      // notification problem is not a sign-in problem.
+    });
+  }
+
   /// Restores a stored session, if there is one.
   ///
   /// Called once at startup. A failure here is not worth showing: being signed
@@ -123,6 +147,7 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       final user = await repository.currentUser();
       emit(AuthState(user: user, hasRestored: true));
+      _announceSignIn();
     } on ApiFailure {
       emit(const AuthState(hasRestored: true));
     }
@@ -173,6 +198,7 @@ class AuthCubit extends Cubit<AuthState> {
     emit(state.copyWith(isSubmitting: true, clearError: true));
     try {
       emit(AuthState(user: await action(), hasRestored: true));
+      _announceSignIn();
     } on ApiFailure catch (failure) {
       emit(
         state.copyWith(
@@ -191,7 +217,21 @@ class AuthCubit extends Cubit<AuthState> {
   /// user asked to leave, and making them watch a spinner to do it — or leaving
   /// them signed in because the request failed — would both be wrong.
   Future<void> signOut() async {
+    // The screen changes first — the user asked to leave and should not watch a
+    // spinner to do it.
     emit(const AuthState(hasRestored: true));
+
+    // Then the device is de-registered, and only then the logout call. The
+    // order is what matters: it is `logout` that invalidates the access token,
+    // and removing this installation needs a valid one. Skip it and the next
+    // person to sign in on this phone receives the previous user's alerts.
+    try {
+      await onSigningOut?.call();
+    } on Object {
+      // Never blocks signing out. Leaving somebody signed in for the sake of
+      // tidy bookkeeping is the worse failure, and the removal is idempotent —
+      // the next sign-in on this device transfers the registration anyway.
+    }
     await _repository?.logout();
   }
 

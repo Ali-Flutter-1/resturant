@@ -536,6 +536,77 @@ void main() {
     });
   });
 
+  group('a cancelled or declined order', () {
+    test('keeps the reason and tells the two states apart', () {
+      final rejected = CustomerOrder.fromJson(const {
+        'id': 'o1',
+        'order_number': 'AB12-CD34',
+        'status': 'rejected',
+        'total_pence': 2089,
+        'cancellation_reason': 'The requested dish is unavailable.',
+        'cancelled_at': '2026-08-14T15:30:00Z',
+      });
+
+      // One state to a tracker, two to the person reading it.
+      expect(rejected.status, CustomerOrderStatus.cancelled);
+      expect(rejected.wasRejected, isTrue);
+      expect(rejected.statusLabel, 'Declined');
+      expect(
+        rejected.cancellationReason,
+        'The requested dish is unavailable.',
+      );
+      expect(rejected.cancelledAt, isNotNull);
+
+      final cancelled = CustomerOrder.fromJson(const {
+        'id': 'o2',
+        'status': 'cancelled',
+        'cancellation_reason': 'Restaurant closed early.',
+      });
+      expect(cancelled.wasRejected, isFalse);
+      expect(cancelled.statusLabel, 'Cancelled');
+    });
+
+    test('a blank reason is no reason', () {
+      // Rendering an empty notice box would read as a rendering fault.
+      final order = CustomerOrder.fromJson(const {
+        'id': 'o3',
+        'status': 'cancelled',
+        'cancellation_reason': '   ',
+      });
+      expect(order.cancellationReason, isNull);
+    });
+
+    testWidgets('the receipt shows why, in the restaurant\'s own words', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrapOrders(
+          FakeOrderRepository(
+            orders: [
+              OrderFixtures.order(
+                id: '1',
+                reference: '#0044',
+                status: CustomerOrderStatus.cancelled,
+                wasRejected: true,
+                cancellationReason: 'The requested dish is unavailable.',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.text('#0044'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('declined this order'), findsOneWidget);
+      expect(
+        find.text('The requested dish is unavailable.'),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('the receipt sheet', () {
     testWidgets('is padded and scrolls', (tester) async {
       await tester.pumpWidget(

@@ -16,8 +16,10 @@ import '../../../shared/widgets/dish_image.dart';
 import '../../../shared/widgets/dish_list_skeleton.dart';
 import '../../menu/domain/dish.dart';
 import '../domain/admin_menu_repository.dart';
+import 'category_logo_sheet.dart';
 import 'admin_menu_cubit.dart';
 import 'dish_editor_sheet.dart';
+import '../../auth/session_refresh.dart';
 
 /// What's on and what's off tonight.
 ///
@@ -184,6 +186,7 @@ class _AdminMenuViewState extends State<_AdminMenuView> {
               ).reveal(),
               const SizedBox(height: AppSpacing.x4),
               _CategoryStrip(
+                onLogoChanged: () => cubit.load(silent: true),
                 categories: state.categories,
                 selectedId: state.categoryId,
                 onSelected: cubit.selectCategory,
@@ -226,7 +229,10 @@ class _AdminMenuViewState extends State<_AdminMenuView> {
               else
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: () => cubit.load(silent: true),
+                    onRefresh: () => refreshWithSession(
+                      context,
+                      () => cubit.load(silent: true),
+                    ),
                     child: visible.isEmpty
                         ? _EmptyMenu(filtered: state.isFilteredEmpty)
                         : ListView.separated(
@@ -334,11 +340,16 @@ class _CategoryStrip extends StatelessWidget {
     required this.categories,
     required this.selectedId,
     required this.onSelected,
+    this.onLogoChanged,
   });
 
   final List<MenuCategory> categories;
   final String? selectedId;
   final ValueChanged<String?> onSelected;
+
+  /// Re-reads the menu after a section's picture changed, so the strip and the
+  /// customer's home screen agree.
+  final VoidCallback? onLogoChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -358,13 +369,24 @@ class _CategoryStrip extends StatelessWidget {
             );
           }
           final category = categories[index - 1];
-          return SelectableChip(
-            label: category.name,
-            selected: selectedId == category.id,
-            // Tapping the selected section clears it, which is the same gesture
-            // as tapping "All" and is what a chip row is expected to do.
-            onSelected: () =>
-                onSelected(selectedId == category.id ? null : category.id),
+          return GestureDetector(
+            // Long press opens the section's picture. A second tap target on a
+            // 38pt chip would be unhittable, and filtering is what a chip row is
+            // for — managing the logo is the rarer job.
+            onLongPress: () async {
+              AppHaptics.toggle();
+              final updated = await showCategoryLogoSheet(context, category);
+              if (updated != null && context.mounted) onLogoChanged?.call();
+            },
+            child: SelectableChip(
+              label: category.name,
+              selected: selectedId == category.id,
+              // Tapping the selected section clears it, which is the same
+              // gesture as tapping "All" and is what a chip row is expected to
+              // do.
+              onSelected: () =>
+                  onSelected(selectedId == category.id ? null : category.id),
+            ),
           );
         },
       ),

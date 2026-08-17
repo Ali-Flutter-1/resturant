@@ -301,6 +301,16 @@ class _CheckoutViewState extends State<_CheckoutView> {
                       quote: quote,
                       isDelivery: state.isDelivery,
                       loading: state.stage == CheckoutStage.quoting,
+                      // Editable: the basket was a one-way street once checkout
+                      // opened, so a customer who changed their mind about one
+                      // item had to go back and find the dish again to remove it.
+                      onChangeQuantity: (line, quantity) {
+                        context.read<CartCubit>().setQuantity(line, quantity);
+                        // Re-priced by the server, not adjusted locally. Removing
+                        // a line can drop the basket under the delivery minimum
+                        // or change the fee, and only the quote knows that.
+                        context.read<CheckoutCubit>().quote();
+                      },
                     ),
 
                     const SizedBox(height: AppSpacing.x5),
@@ -682,23 +692,48 @@ class _TimeOption extends StatelessWidget {
   }
 }
 
-/// The server's arithmetic.
+/// The server's arithmetic, over the basket's own lines.
+///
+/// The rows come from the cart because that is what can be edited; the money on
+/// each row comes from the quote, because the app never prices anything. Where
+/// the two disagree — a quote in flight after an edit — the row shows the cached
+/// price and the totals below stay on the last figure the server gave.
 class _QuotePanel extends StatelessWidget {
   const _QuotePanel({
     required this.quote,
     required this.isDelivery,
     required this.loading,
+    required this.onChangeQuantity,
   });
 
   final OrderQuote? quote;
   final bool isDelivery;
   final bool loading;
 
+  /// Zero removes the line — which is what "minus" on a single item means.
+  final void Function(CartLine line, int quantity) onChangeQuantity;
+
+  /// The priced line for a basket line, matched on what the API echoes back.
+  ///
+  /// `dish_id` plus the note and spice level, because the same dish can appear
+  /// twice with different instructions and those are genuinely separate lines.
+  QuoteLine? _pricedFor(CartLine line) {
+    for (final priced in quote?.lines ?? const <QuoteLine>[]) {
+      if (priced.dishId == line.dishId &&
+          priced.notes == line.notes &&
+          priced.spiceLevel == line.spiceLevel) {
+        return priced;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final lines = context.watch<CartCubit>().state.lines;
 
-    if (quote == null) {
+    if (quote == null && lines.isEmpty) {
       return _Panel(
         title: 'Your order',
         child: Text(
@@ -710,94 +745,253 @@ class _QuotePanel extends StatelessWidget {
       );
     }
 
-    final priced = quote!;
+    final priced = quote;
     return _Panel(
       title: 'Your order',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final line in priced.lines) ...[
+          for (final line in lines) ...[
+            _BasketRow(
+              line: line,
+              pricePence: _pricedFor(line)?.linePence ?? line.displayLinePence,
+              busy: loading,
+              onChangeQuantity: (quantity) => onChangeQuantity(line, quantity),
+            ),
+            const SizedBox(height: AppSpacing.x3),
+          ],
+          if (lines.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+              child: Text(
+                'Your basket is empty.',
+                style: context.texts.bodyMedium?.copyWith(
+                  color: context.surfaces.inkSoft,
+                ),
+              ),
+            ),
+          if (priced != null) ...[
+            Divider(color: context.surfaces.line),
+            _SummaryLine(label: 'Subtotal', value: priced.formattedSubtotal),
+            if (isDelivery)
+              _SummaryLine(label: 'Delivery', value: priced.formattedFee),
+            const SizedBox(height: AppSpacing.x2),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 28,
+                Expanded(child: Text('Total', style: context.texts.titleLarge)),
+                // Dimmed rather than replaced while a new quote is in flight: a
+                // total that vanishes on every tap of "plus" is worse than one
+                // that is briefly a moment behind.
+                AnimatedOpacity(
+                  opacity: loading ? 0.4 : 1,
+                  duration: context.motion.fade(Motion.fast),
                   child: Text(
-                    '${line.quantity}×',
-                    style: context.texts.titleMedium,
+                    priced.formattedTotal,
+                    style: AppTypography.money(scheme.onSurface),
                   ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(line.name, style: context.texts.bodyLarge),
-                      if (line.notes != null)
-                        Text(
-                          line.notes!,
-                          style: context.texts.bodySmall?.copyWith(
-                            color: context.surfaces.inkSoft,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.x2),
-                Text(
-                  OrderQuote.formatPence(line.linePence),
-                  style: context.texts.bodyLarge,
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.x3),
-          ],
-          Divider(color: context.surfaces.line),
-          _SummaryLine(label: 'Subtotal', value: priced.formattedSubtotal),
-          if (isDelivery)
-            _SummaryLine(label: 'Delivery', value: priced.formattedFee),
-          const SizedBox(height: AppSpacing.x2),
-          Row(
-            children: [
-              Expanded(child: Text('Total', style: context.texts.titleLarge)),
-              Text(
-                priced.formattedTotal,
-                style: AppTypography.money(scheme.onSurface),
-              ),
-            ],
-          ),
-          if (!priced.meetsMinimum) ...[
-            const SizedBox(height: AppSpacing.x3),
-            // The exact shortfall, because "minimum not met" leaves the customer
-            // to do the arithmetic. The delivery fee does not count towards it.
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.x3),
-              decoration: BoxDecoration(
-                color: context.orderColors.overdueContainer,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: AppIconSize.md,
-                    color: context.orderColors.overdue,
-                  ),
-                  const SizedBox(width: AppSpacing.x2),
-                  Expanded(
-                    child: Text(
-                      'Add ${priced.formattedShortfall} more to reach the '
-                      '${OrderQuote.formatPence(priced.minimumOrderPence)} '
-                      'delivery minimum.',
-                      style: context.texts.bodySmall?.copyWith(
-                        color: context.orderColors.overdue,
+            if (!priced.meetsMinimum) ...[
+              const SizedBox(height: AppSpacing.x3),
+              // The exact shortfall, because "minimum not met" leaves the
+              // customer to do the arithmetic. The delivery fee does not count.
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.x3),
+                decoration: BoxDecoration(
+                  color: context.orderColors.overdueContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: AppIconSize.md,
+                      color: context.orderColors.overdue,
+                    ),
+                    const SizedBox(width: AppSpacing.x2),
+                    Expanded(
+                      child: Text(
+                        'Add ${priced.formattedShortfall} more to reach the '
+                        '${OrderQuote.formatPence(priced.minimumOrderPence)} '
+                        'delivery minimum.',
+                        style: context.texts.bodySmall?.copyWith(
+                          color: context.orderColors.overdue,
+                        ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One editable basket line.
+class _BasketRow extends StatelessWidget {
+  const _BasketRow({
+    required this.line,
+    required this.pricePence,
+    required this.busy,
+    required this.onChangeQuantity,
+  });
+
+  final CartLine line;
+  final int pricePence;
+  final bool busy;
+  final ValueChanged<int> onChangeQuantity;
+
+  Future<void> _confirmRemove(BuildContext context) async {
+    // Only the last one is confirmed. Stepping 3 down to 2 is routine and
+    // reversible with the next tap; stepping 1 down to 0 makes the line
+    // disappear, and an accidental tap there loses the note with it.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${line.title}?'),
+        content: const Text('It will be taken out of your basket.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: context.orderColors.overdue,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      AppHaptics.commit();
+      onChangeQuantity(0);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Spice level and the kitchen note read as one line of small print: both are
+    // instructions attached to this item, and stacking them separately made a
+    // two-item basket four lines tall.
+    final detail = [
+      if (line.spiceLevel != null) '${line.spiceLevel!.label} spice',
+      if (line.notes != null) line.notes!,
+    ].join(' · ');
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(line.title, style: context.texts.bodyLarge),
+              if (detail.isNotEmpty)
+                Text(
+                  detail,
+                  style: context.texts.bodySmall?.copyWith(
+                    color: context.surfaces.inkSoft,
+                  ),
+                ),
+              const SizedBox(height: AppSpacing.x2),
+              Row(
+                children: [
+                  _StepIcon(
+                    // One item shows a bin rather than a minus, so it is clear
+                    // that the next tap removes the line rather than reducing it.
+                    icon: line.quantity > 1
+                        ? Icons.remove_rounded
+                        : Icons.delete_outline_rounded,
+                    semanticLabel: line.quantity > 1
+                        ? 'One fewer ${line.title}'
+                        : 'Remove ${line.title}',
+                    onPressed: busy
+                        ? null
+                        : () => line.quantity > 1
+                              ? onChangeQuantity(line.quantity - 1)
+                              : _confirmRemove(context),
+                  ),
+                  SizedBox(
+                    width: 34,
+                    child: Text(
+                      '${line.quantity}',
+                      textAlign: TextAlign.center,
+                      style: context.texts.titleMedium,
+                    ),
+                  ),
+                  _StepIcon(
+                    icon: Icons.add_rounded,
+                    semanticLabel: 'One more ${line.title}',
+                    onPressed: busy || line.quantity >= CartState.maxQuantity
+                        ? null
+                        : () => onChangeQuantity(line.quantity + 1),
                   ),
                 ],
               ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.x2),
+        Text(
+          OrderQuote.formatPence(pricePence),
+          style: context.texts.bodyLarge,
+        ),
+      ],
+    );
+  }
+}
+
+class _StepIcon extends StatelessWidget {
+  const _StepIcon({
+    required this.icon,
+    required this.semanticLabel,
+    this.onPressed,
+  });
+
+  final IconData icon;
+  final String semanticLabel;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: semanticLabel,
+      child: Material(
+        color: context.surfaces.ground,
+        shape: CircleBorder(
+          side: BorderSide(color: context.surfaces.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: enabled
+              ? () {
+                  AppHaptics.selection();
+                  onPressed!();
+                }
+              : null,
+          customBorder: const CircleBorder(),
+          child: SizedBox.square(
+            dimension: 34,
+            child: Icon(
+              icon,
+              size: AppIconSize.md,
+              color: enabled
+                  ? Theme.of(context).colorScheme.primary
+                  : context.surfaces.inkSoft,
             ),
-          ],
-        ],
+          ),
+        ),
       ),
     );
   }

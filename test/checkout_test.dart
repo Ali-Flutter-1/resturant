@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
+import 'package:practice/features/menu/domain/spice_level.dart';
 import 'package:practice/features/checkout/presentation/checkout_cubit.dart';
 import 'package:practice/features/checkout/presentation/checkout_screen.dart';
 import 'package:practice/features/menu/domain/dish.dart';
@@ -223,12 +224,15 @@ void main() {
       final cubit = buildCubit();
       await cubit.quote();
 
-      cubit.setSlot('2026-08-12T19:15:00Z');
+      // Whatever the quote actually offered, rather than a date typed in here —
+      // a pinned date stops being selectable the day after it is written.
+      final slot = repository.quoteResult.availableSlots.last;
+      cubit.setSlot(slot);
       await cubit.place(contactName: 'Ali', contactPhone: '07700 900123');
 
       // Untouched: the API refuses a time with no offset, and the app must not
       // rebuild the slot grid.
-      expect(repository.lastPlaced?['requested_for'], '2026-08-12T19:15:00Z');
+      expect(repository.lastPlaced?['requested_for'], slot);
       expect(repository.lastPlaced?['is_asap'], isFalse);
     });
 
@@ -326,6 +330,63 @@ void main() {
       expect(repository.lastPlaced?['postcode'], 'M1 2AB');
       expect(repository.lastPlaced?['city'], 'Manchester');
       expect(placed, 'AB12-CD34');
+    });
+
+    testWidgets('a basket line can be stepped down and removed', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+      final quotesAfterLoad = repository.quoteCalls;
+
+      // Two of one dish, so the first tap reduces rather than removes.
+      expect(cart.state.lines.single.quantity, 2);
+      await tester.tap(find.byIcon(Icons.remove_rounded));
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(cart.state.lines.single.quantity, 1);
+      // Re-priced by the server, never adjusted locally: removing an item can
+      // drop the basket under the delivery minimum or change the fee.
+      expect(repository.quoteCalls, quotesAfterLoad + 1);
+
+      // At one, the control becomes a bin and asks before emptying the line.
+      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Keep it'), findsOneWidget);
+      await tester.tap(find.text('Keep it'));
+      await tester.pumpAndSettle();
+      // Backed out, so nothing was lost.
+      expect(cart.state.lines, hasLength(1));
+
+      await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove'));
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(cart.state.lines, isEmpty);
+    });
+
+    testWidgets('a line shows its spice level and note', (tester) async {
+      cart = CartCubit()
+        ..addDish(
+          const Dish(
+            id: 'd1',
+            name: 'Chicken Kottu',
+            description: '',
+            pricePence: 895,
+            hasSpiceLevels: true,
+          ),
+          notes: 'No coriander',
+          spiceLevel: SpiceLevel.high,
+        );
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      // One line of small print, not two: both are instructions on this item,
+      // and stacking them made a two-item basket four lines tall.
+      expect(find.text('High spice · No coriander'), findsOneWidget);
     });
 
     testWidgets('offers cash only, and says so', (tester) async {

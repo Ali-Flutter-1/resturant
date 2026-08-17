@@ -18,6 +18,15 @@ import 'features/admin/domain/admin_contact_repository.dart';
 import 'features/admin/domain/admin_order_repository.dart';
 import 'features/admin/domain/admin_menu_repository.dart';
 import 'features/admin/domain/admin_user_repository.dart';
+import 'features/booking/data/api_reservation_repository.dart';
+import 'features/booking/data/api_venue_repository.dart';
+import 'features/booking/domain/reservation_repository.dart';
+import 'features/notifications/data/api_notification_repository.dart';
+import 'features/notifications/data/push_coordinator.dart';
+import 'features/notifications/domain/notification_repository.dart';
+import 'features/notifications/domain/push_service.dart';
+import 'features/hours/data/api_working_hours_repository.dart';
+import 'features/hours/domain/working_hours_repository.dart';
 import 'features/contact/data/api_contact_repository.dart';
 import 'features/contact/domain/contact_repository.dart';
 import 'features/menu/data/api_menu_repository.dart';
@@ -52,6 +61,25 @@ Future<void> main() async {
     repository: ApiAuthRepository(client: client, tokens: tokens),
   );
 
+  // Notifications. The in-app inbox is real and works today; the push half is
+  // behind [PushService] until the Firebase configuration files are added — see
+  // that file for exactly what to do when they arrive.
+  final notifications = ApiNotificationRepository(client: client);
+  final pushes = PushCoordinator(
+    repository: notifications,
+    push: const NoPushService(),
+  );
+  await pushes.start();
+
+  // Registration runs after a session exists, and never blocks anything: a
+  // failed registration is retried next launch rather than kept anyone out.
+  auth.onSignedIn = pushes.register;
+
+  // The device association is removed **before** the logout request, while the
+  // access token still works. Skip that and the next person to sign in on this
+  // phone receives the previous user's alerts.
+  auth.onSigningOut = pushes.unregister;
+
   // Closes the loop: when a refresh finally fails, the app returns to sign-in
   // instead of leaving the user on a screen that will never load again.
   client.onSessionExpired = auth.signOut;
@@ -72,6 +100,10 @@ Future<void> main() async {
       adminContact: ApiAdminContactRepository(client: client),
       adminOrders: ApiAdminOrderRepository(client: client),
       adminUsers: ApiAdminUserRepository(client: client),
+      reservations: ApiReservationRepository(client: client),
+      venue: ApiVenueRepository(client: client),
+      notifications: notifications,
+      workingHours: ApiWorkingHoursRepository(client: client),
       orders: AppConfig.useDemoOrders
           ? DemoOrderRepository()
           : ApiOrderRepository(client: client),
@@ -89,6 +121,10 @@ class TsCafeApp extends StatelessWidget {
     required this.adminContact,
     required this.adminOrders,
     required this.adminUsers,
+    required this.reservations,
+    required this.venue,
+    required this.notifications,
+    required this.workingHours,
     required this.orders,
   });
 
@@ -120,6 +156,22 @@ class TsCafeApp extends StatelessWidget {
   /// but provided app-wide for the same reason as [adminMenu].
   final AdminUserRepository adminUsers;
 
+  /// Table bookings. One repository for both sides — the customer routes and
+  /// the staff sheet share their models, and the backend decides from the token
+  /// which of them a caller may actually use.
+  final ReservationRepository reservations;
+
+  /// The room and the sitting timetable. Admin only at the API — staff work
+  /// reservations but do not change the schedule.
+  final VenueRepository venue;
+
+  /// The notification inbox and this installation's push registration.
+  final NotificationRepository notifications;
+
+  /// Opening hours. The read is public — somebody deciding whether to walk over
+  /// does not have an account — and only an admin may edit the week.
+  final WorkingHoursRepository workingHours;
+
   /// The signed-in customer's orders. Scoped to the bearer token, so it needs
   /// nothing from the session beyond the client it already shares.
   final OrderRepository orders;
@@ -134,6 +186,10 @@ class TsCafeApp extends StatelessWidget {
         RepositoryProvider<AdminContactRepository>.value(value: adminContact),
         RepositoryProvider<AdminOrderRepository>.value(value: adminOrders),
         RepositoryProvider<AdminUserRepository>.value(value: adminUsers),
+        RepositoryProvider<ReservationRepository>.value(value: reservations),
+        RepositoryProvider<VenueRepository>.value(value: venue),
+        RepositoryProvider<NotificationRepository>.value(value: notifications),
+        RepositoryProvider<WorkingHoursRepository>.value(value: workingHours),
         RepositoryProvider<OrderRepository>.value(value: orders),
       ],
       child: MultiBlocProvider(

@@ -24,6 +24,8 @@ import 'support/fake_admin_menu_repository.dart';
 import 'support/fake_admin_order_repository.dart';
 import 'support/fake_order_repository.dart';
 import 'support/fake_menu_repository.dart';
+import 'package:practice/features/booking/domain/reservation_repository.dart';
+import 'support/fake_reservation_repository.dart';
 
 /// Every screen needs a way out, and no screen may advertise one it doesn't
 /// have. These tests pin both halves of that, because both have been wrong:
@@ -48,6 +50,9 @@ Widget _host(Widget home, {TargetPlatform? platform}) {
         ),
         RepositoryProvider<AdminOrderRepository>(
           create: (_) => FakeAdminOrderRepository(),
+        ),
+        RepositoryProvider<ReservationRepository>(
+          create: (_) => FakeReservationRepository(),
         ),
         RepositoryProvider<OrderRepository>(
           create: (_) => FakeOrderRepository(),
@@ -251,6 +256,9 @@ void main() {
               RepositoryProvider<AdminOrderRepository>(
                 create: (_) => FakeAdminOrderRepository(),
               ),
+              RepositoryProvider<ReservationRepository>(
+                create: (_) => FakeReservationRepository(),
+              ),
               RepositoryProvider<OrderRepository>(
                 create: (_) => FakeOrderRepository(),
               ),
@@ -302,6 +310,9 @@ void main() {
           RepositoryProvider<AdminOrderRepository>(
             create: (_) => FakeAdminOrderRepository(),
           ),
+          RepositoryProvider<ReservationRepository>(
+            create: (_) => FakeReservationRepository(),
+          ),
           RepositoryProvider<OrderRepository>(
             create: (_) => FakeOrderRepository(),
           ),
@@ -347,10 +358,8 @@ void main() {
       expect(tab('Profile'), findsOneWidget);
     });
 
-    Finder barTab(String label) => find.descendant(
-      of: find.byType(AppNavBar),
-      matching: find.text(label),
-    );
+    Finder barTab(String label) =>
+        find.descendant(of: find.byType(AppNavBar), matching: find.text(label));
 
     testWidgets('an admin is offered the contact inbox', (tester) async {
       await tester.pumpWidget(shellFor(AuthFixtures.admin));

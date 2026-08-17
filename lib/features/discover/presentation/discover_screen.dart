@@ -12,12 +12,13 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/dish_image.dart';
 import '../../../shared/widgets/api_error_view.dart';
 import '../../../shared/widgets/app_chip.dart';
-import '../../../shared/widgets/notifications_sheet.dart';
+import '../../notifications/presentation/notifications_screen.dart';
 import '../../../shared/widgets/pressable.dart';
 import '../../../shared/widgets/section_header.dart';
 import '../../menu/domain/dish.dart';
 import '../../menu/domain/menu_repository.dart';
 import 'discover_cubit.dart';
+import '../../auth/session_refresh.dart';
 
 /// The customer home: greeting, search, categories, a featured dish, and
 /// what's selling today.
@@ -57,7 +58,8 @@ class DiscoverScreen extends StatelessWidget {
               final cubit = context.read<DiscoverCubit>();
 
               return RefreshIndicator(
-                onRefresh: () => cubit.load(silent: true),
+                onRefresh: () =>
+                    refreshWithSession(context, () => cubit.load(silent: true)),
                 child: ListView(
                   padding: EdgeInsets.fromLTRB(
                     AppSpacing.gutter,
@@ -276,10 +278,10 @@ class _DishStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      // Tall enough for the photograph, two lines of description and the price
-      // row. At 244 the description was squeezed to one line and ellipsised
-      // after a couple of words.
-      height: 268,
+      // The square photograph plus the two caption lines under it. The card no
+      // longer carries a description, so it is a good deal shorter than the 268
+      // the old panel needed.
+      height: _PopularCard.imageSize + 62,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         // Bleeds to the screen edges, so a card can sit half-off it. The list's
@@ -289,7 +291,8 @@ class _DishStrip extends StatelessWidget {
         itemCount: dishes.length,
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.x3),
         itemBuilder: (context, index) => SizedBox(
-          width: 168,
+          // Square photograph, so the card is as wide as the image is tall.
+          width: _PopularCard.imageSize,
           child: _PopularCard(
             dish: dishes[index],
             onTap: onOpenDish,
@@ -416,7 +419,6 @@ class _Greeting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -436,15 +438,8 @@ class _Greeting extends StatelessWidget {
             ],
           ),
         ),
-        IconButton(
-          onPressed: () => showNotificationsSheet(context),
-          tooltip: 'Notifications',
-          icon: Badge(
-            backgroundColor: scheme.primary,
-            smallSize: 8,
-            child: const Icon(Icons.notifications_outlined),
-          ),
-        ),
+        // The real unread count, rather than a dot that was always there.
+        NotificationBell(onOpen: () => openNotifications(context)),
       ],
     ).reveal();
   }
@@ -809,45 +804,44 @@ class _FeaturedCard extends StatelessWidget {
   }
 }
 
+/// A dish in the horizontal strip.
+///
+/// The delivery-app card: a big rounded photograph with a round add button
+/// sitting on its corner, then the name and the price underneath. No surface, no
+/// shadow, no description — the picture is the card, and everything else is a
+/// caption. The old version was a shadowed panel with two lines of description,
+/// which made four dishes look like four documents.
 class _PopularCard extends StatelessWidget {
   const _PopularCard({required this.dish, this.onTap});
 
   final Dish dish;
   final ValueChanged<Dish>? onTap;
 
+  /// Square, like the strip's width. The photograph is the whole card, so it
+  /// gets a stated size rather than an aspect ratio — a ratio makes the block's
+  /// height depend on the width it happens to be given, which is what used to
+  /// make a card with a photo and one without disagree.
+  static const double imageSize = 152;
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final enabled = onTap != null && dish.isAvailable;
 
     return Pressable(
-      onTap: onTap == null || !dish.isAvailable ? null : () => onTap!(dish),
-      child: Material(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            boxShadow: context.surfaces.cardShadow,
-          ),
-          child: Column(
-            // Stretch, so the picture spans the card's full width whether it is
-            // a photograph or the tinted placeholder. Under `start` the image
-            // block was only as wide as it chose to be, so a card with a photo
-            // and a card without one did not match.
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
+      onTap: enabled ? () => onTap!(dish) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // `clipBehavior: none` so the add button can sit over the photo's
+          // edge without being cut in half.
+          Stack(
+            clipBehavior: Clip.none,
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppRadius.lg),
-                ),
-                // A fixed height rather than an aspect ratio. The ratio made the
-                // image block's size depend on the width it happened to be
-                // given, which is what let the two cases differ; a box of a
-                // stated height is identical either way, and `cover` crops the
-                // photograph into it.
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 child: SizedBox(
-                  height: 116,
+                  height: imageSize,
                   width: double.infinity,
                   child: DishImage(
                     name: dish.name,
@@ -856,78 +850,76 @@ class _PopularCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Expanded so the text area absorbs whatever height is left after
-              // the photograph, rather than the card demanding its natural
-              // height and overflowing a fixed-height strip. At a large text
-              // scale the description gives up lines first, which is the right
-              // thing to lose.
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.x3),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        dish.name,
-                        style: context.texts.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: AppSpacing.x1),
-                      Flexible(
-                        child: Text(
-                          dish.description,
-                          style: context.texts.bodySmall,
-                          // Two lines, and the card is now tall enough for
-                          // both. It was being squeezed to one and ellipsised
-                          // after a couple of words.
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const Spacer(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              dish.formattedPrice,
-                              style: AppTypography.money(
-                                scheme.primary,
-                                size: MoneySize.small,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.x2),
-                          Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: context.surfaces.accentContainer,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              // A sold-out dish is not addable, and the glyph
-                              // says which it is rather than the tap silently
-                              // doing nothing.
-                              dish.isAvailable ? Icons.add : Icons.block,
-                              size: AppIconSize.md,
-                              color: dish.isAvailable
-                                  ? scheme.primary
-                                  : context.surfaces.inkSoft,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+              Positioned(
+                right: AppSpacing.x2,
+                bottom: AppSpacing.x2,
+                child: _AddBadge(available: dish.isAvailable),
+              ),
+              // Said, not implied. A greyed-out button on a photograph reads as
+              // a loading state; the word is what makes it a sold-out dish.
+              if (!dish.isAvailable)
+                Positioned(
+                  left: AppSpacing.x2,
+                  top: AppSpacing.x2,
+                  child: AppChip.status(
+                    label: 'Not available',
+                    foreground: context.orderColors.overdue,
+                    background: Theme.of(context).colorScheme.surface,
                   ),
                 ),
-              ),
             ],
           ),
-        ),
+          const SizedBox(height: AppSpacing.x2 + 2),
+          Text(
+            dish.name,
+            style: context.texts.titleMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            dish.formattedPrice,
+            style: AppTypography.money(
+              context.surfaces.inkMuted,
+              size: MoneySize.small,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The round add button on the photograph's corner.
+///
+/// Not separately tappable: the whole card opens the dish, which is where the
+/// quantity and any extras are chosen. A second target that did something
+/// slightly different in the same 30 points would be a trap.
+class _AddBadge extends StatelessWidget {
+  const _AddBadge({required this.available});
+
+  final bool available;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        shape: BoxShape.circle,
+        boxShadow: context.surfaces.cardShadow,
+      ),
+      child: Icon(
+        // A sold-out dish is not addable, and the glyph says which it is rather
+        // than the tap silently doing nothing.
+        available ? Icons.add_rounded : Icons.block,
+        size: AppIconSize.xl,
+        color: available ? scheme.primary : context.surfaces.inkSoft,
       ),
     );
   }

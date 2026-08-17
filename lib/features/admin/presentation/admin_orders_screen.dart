@@ -19,6 +19,7 @@ import '../../../shared/widgets/status_pill.dart';
 import '../domain/admin_order.dart';
 import '../domain/admin_order_repository.dart';
 import 'admin_orders_cubit.dart';
+import '../../auth/session_refresh.dart';
 
 /// The kitchen queue.
 ///
@@ -134,7 +135,10 @@ class _QueueViewState extends State<_QueueView> {
               else
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: () => cubit.load(silent: true),
+                    onRefresh: () => refreshWithSession(
+                      context,
+                      () => cubit.load(silent: true),
+                    ),
                     child: state.visible.isEmpty
                         ? _EmptyQueue(
                             searched: state.isSearchEmpty,

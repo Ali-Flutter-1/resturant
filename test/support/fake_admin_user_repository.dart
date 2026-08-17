@@ -169,11 +169,7 @@ class FakeAdminUserRepository implements AdminUserRepository {
   }
 
   @override
-  Future<AdminUser> update(
-    String id, {
-    UserRole? role,
-    bool? isActive,
-  }) async {
+  Future<AdminUser> update(String id, {UserRole? role, bool? isActive}) async {
     await _wait();
     final error = writeFailure ?? failure;
     if (error != null) throw error;
@@ -218,23 +214,20 @@ class FakeAdminUserRepository implements AdminUserRepository {
     return updated;
   }
 
-  static AdminUser _copy(
-    AdminUser from, {
-    UserRole? role,
-    bool? isActive,
-  }) => AdminUser(
-    id: from.id,
-    firstName: from.firstName,
-    lastName: from.lastName,
-    email: from.email,
-    role: role ?? from.role,
-    isActive: isActive ?? from.isActive,
-    isDeleted: from.isDeleted,
-    avatarUrl: from.avatarUrl,
-    isEmailVerified: from.isEmailVerified,
-    hasPassword: from.hasPassword,
-    hasGoogle: from.hasGoogle,
-    lastLoginAt: from.lastLoginAt,
-    createdAt: from.createdAt,
-  );
+  static AdminUser _copy(AdminUser from, {UserRole? role, bool? isActive}) =>
+      AdminUser(
+        id: from.id,
+        firstName: from.firstName,
+        lastName: from.lastName,
+        email: from.email,
+        role: role ?? from.role,
+        isActive: isActive ?? from.isActive,
+        isDeleted: from.isDeleted,
+        avatarUrl: from.avatarUrl,
+        isEmailVerified: from.isEmailVerified,
+        hasPassword: from.hasPassword,
+        hasGoogle: from.hasGoogle,
+        lastLoginAt: from.lastLoginAt,
+        createdAt: from.createdAt,
+      );
 }

@@ -28,7 +28,7 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
   );
   static const defaultCategories = [curries, vegan];
 
-  final List<MenuCategory> _categories;
+  List<MenuCategory> _categories;
   final List<Dish> _dishes = [];
 
   ApiFailure? failure;
@@ -200,4 +200,46 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
   /// Seeds a dish without going through [createDish], for tests about the list
   /// rather than about saving.
   void seed(Dish dish) => _dishes.add(dish);
+
+  final List<Map<String, String?>> logoChanges = [];
+
+  @override
+  Future<MenuCategory> setCategoryLogo(
+    String categoryId,
+    String filePath,
+  ) async {
+    logoChanges.add({'id': categoryId, 'path': filePath});
+    final existing = _categories.firstWhere((c) => c.id == categoryId);
+    final updated = MenuCategory(
+      id: existing.id,
+      slug: existing.slug,
+      name: existing.name,
+      description: existing.description,
+      imageUrl: 'https://res.cloudinary.com/demo/$categoryId.jpg',
+      sortOrder: existing.sortOrder,
+    );
+    _categories = [
+      for (final c in _categories)
+        if (c.id == categoryId) updated else c,
+    ];
+    return updated;
+  }
+
+  @override
+  Future<MenuCategory> removeCategoryLogo(String categoryId) async {
+    logoChanges.add({'id': categoryId, 'path': null});
+    final existing = _categories.firstWhere((c) => c.id == categoryId);
+    final updated = MenuCategory(
+      id: existing.id,
+      slug: existing.slug,
+      name: existing.name,
+      description: existing.description,
+      sortOrder: existing.sortOrder,
+    );
+    _categories = [
+      for (final c in _categories)
+        if (c.id == categoryId) updated else c,
+    ];
+    return updated;
+  }
 }

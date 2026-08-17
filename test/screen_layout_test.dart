@@ -25,6 +25,8 @@ import 'support/fake_admin_menu_repository.dart';
 import 'support/fake_admin_order_repository.dart';
 import 'support/fake_order_repository.dart';
 import 'support/fake_menu_repository.dart';
+import 'package:practice/features/booking/domain/reservation_repository.dart';
+import 'support/fake_reservation_repository.dart';
 
 /// Every screen, laid out in both themes at two viewport sizes.
 ///
@@ -92,6 +94,9 @@ void main() {
                     ),
                     RepositoryProvider<AdminOrderRepository>(
                       create: (_) => FakeAdminOrderRepository(),
+                    ),
+                    RepositoryProvider<ReservationRepository>(
+                      create: (_) => FakeReservationRepository(),
                     ),
                     RepositoryProvider<OrderRepository>(
                       create: (_) => FakeOrderRepository(),

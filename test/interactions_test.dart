@@ -33,7 +33,7 @@ void main() {
       BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
       BlocProvider(create: (_) => CartCubit()),
     ],
-    child: RepositoryProvider<MenuRepository>(
+    child:    RepositoryProvider<MenuRepository>(
       create: (_) => FakeMenuRepository(),
       child: MaterialApp(theme: AppTheme.light, home: home),
     ),

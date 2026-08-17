@@ -303,9 +303,11 @@ class ApiClient {
   /// [send] for endpoints returning a JSON array.
   Future<List<Map<String, dynamic>>> list(
     String path, {
+    String method = 'GET',
+    Object? body,
     Map<String, dynamic>? query,
   }) async {
-    final data = await send(path, query: query);
+    final data = await send(path, method: method, body: body, query: query);
     // Paginated endpoints wrap the rows in `items`; plain ones return a bare
     // array. Callers shouldn't have to care which.
     final rows = data is Map && data['items'] is List ? data['items'] : data;

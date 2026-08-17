@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../../core/animations/page_transitions.dart';
 
 import '../menu/domain/dish.dart';
+import '../notifications/domain/app_notification.dart';
 import '../../shared/shell/tabbed_shell.dart';
 import '../about/presentation/about_contact_screen.dart';
 import '../auth/presentation/profile_screen.dart';
 import '../booking/presentation/book_table_screen.dart';
+import '../booking/presentation/my_bookings_screen.dart';
 import '../checkout/presentation/checkout_screen.dart';
 import '../discover/presentation/discover_screen.dart';
 import '../menu/presentation/dish_details_screen.dart';
@@ -47,6 +49,44 @@ class CustomerShell extends StatelessWidget {
           initialQuery: query,
           initialCategorySlug: categorySlug,
           onOpenDish: (dish) => _openDish(context, dish),
+        ),
+      ),
+    );
+  }
+
+  /// What a tapped notification does.
+  ///
+  /// A push carries an id, not state — so each of these lands on a screen that
+  /// fetches the record itself. The shell is where this lives because it owns
+  /// the tabs; the inbox only validates the payload and hands it over.
+  static void followNotification(
+    BuildContext context,
+    NotificationPayload payload,
+  ) {
+    switch (payload.target) {
+      case NotificationTarget.customerOrder:
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        TabbedShell.selectTab(context, 2);
+      case NotificationTarget.customerBooking:
+        _openMyBookings(context);
+      // A customer has no admin screens, and a staff notification reaching this
+      // shell means a role changed under them. The inbox is the honest place to
+      // leave them rather than a screen the API would refuse.
+      case NotificationTarget.adminOrder:
+      case NotificationTarget.adminBooking:
+      case NotificationTarget.inbox:
+        break;
+    }
+  }
+
+  static void _openMyBookings(BuildContext context) {
+    Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (context) => MyBookingsScreen(
+          onBack: () => Navigator.of(context).pop(),
+          // From the empty state: popping lands back on the Book tab's root,
+          // which is the form itself.
+          onBookTable: () => Navigator.of(context).pop(),
         ),
       ),
     );
@@ -93,7 +133,9 @@ class CustomerShell extends StatelessWidget {
           sfSymbol: 'calendar',
           icon: Icons.calendar_month_outlined,
           selectedIcon: Icons.calendar_month,
-          builder: (context) => const BookTableScreen(),
+          builder: (context) => BookTableScreen(
+            onSeeBookings: () => _openMyBookings(context),
+          ),
         ),
         ShellTab(
           label: 'Orders',

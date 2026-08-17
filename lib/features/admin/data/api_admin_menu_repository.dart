@@ -2,6 +2,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_constants.dart';
 import '../../menu/domain/dish.dart';
 import '../domain/admin_menu_repository.dart';
+import '../../../core/network/api_failure.dart';
 
 class ApiAdminMenuRepository implements AdminMenuRepository {
   ApiAdminMenuRepository({required ApiClient client}) : _client = client;
@@ -112,4 +113,33 @@ class ApiAdminMenuRepository implements AdminMenuRepository {
   @override
   Future<void> deleteDish(String id) async =>
       _client.send(ApiConstants.adminDish(id), method: 'DELETE');
+
+  @override
+  Future<MenuCategory> setCategoryLogo(
+    String categoryId,
+    String filePath,
+  ) async {
+    final data = await _client.upload(
+      ApiConstants.adminCategoryLogo(categoryId),
+      // The API's field name. Anything else is a 422 that reads as "no file".
+      field: 'file',
+      filePaths: [filePath],
+    );
+    if (data is! Map) {
+      throw const ApiFailure(
+        kind: ApiFailureKind.unknown,
+        message: 'The server sent something unexpected. Please try again.',
+      );
+    }
+    return MenuCategory.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  @override
+  Future<MenuCategory> removeCategoryLogo(String categoryId) async {
+    final data = await _client.object(
+      ApiConstants.adminCategoryLogo(categoryId),
+      method: 'DELETE',
+    );
+    return MenuCategory.fromJson(data);
+  }
 }

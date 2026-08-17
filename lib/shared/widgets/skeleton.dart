@@ -38,9 +38,13 @@ abstract final class Skeleton {
     required Widget Function(BuildContext, int) itemBuilder,
     double spacing = AppSpacing.x3,
     EdgeInsetsGeometry? padding,
+    /// Set when the placeholder sits inside another scrollable, which would
+    /// otherwise give this list unbounded height and fail to lay out.
+    bool shrinkWrap = false,
   }) => Shimmer(
     child: ListView.separated(
       physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: shrinkWrap,
       padding:
           padding ?? const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
       itemCount: count,
@@ -77,14 +81,18 @@ class _Block extends StatelessWidget {
 /// Placeholder rows shaped like a message in the contact inbox: a status dot, a
 /// name and status, a subject, and two lines of the message.
 class MessageListSkeleton extends StatelessWidget {
-  const MessageListSkeleton({super.key, this.rows = 5});
+  const MessageListSkeleton({super.key, this.rows = 5, this.shrinkWrap = false});
 
   final int rows;
+
+  /// True where this sits inside another scrollable.
+  final bool shrinkWrap;
 
   @override
   Widget build(BuildContext context) {
     return Skeleton.list(
       count: rows,
+      shrinkWrap: shrinkWrap,
       itemBuilder: (context, _) => Container(
         padding: const EdgeInsets.all(AppSpacing.x4),
         decoration: BoxDecoration(
@@ -189,14 +197,18 @@ class ProfileSkeleton extends StatelessWidget {
 /// Placeholder rows shaped like an order ticket: a number and status, a detail
 /// line, and the advance button.
 class OrderListSkeleton extends StatelessWidget {
-  const OrderListSkeleton({super.key, this.rows = 4});
+  const OrderListSkeleton({super.key, this.rows = 4, this.shrinkWrap = false});
 
   final int rows;
+
+  /// True where this sits inside another scrollable.
+  final bool shrinkWrap;
 
   @override
   Widget build(BuildContext context) {
     return Skeleton.list(
       count: rows,
+      shrinkWrap: shrinkWrap,
       itemBuilder: (context, _) => Container(
         padding: const EdgeInsets.all(AppSpacing.x4),
         decoration: BoxDecoration(

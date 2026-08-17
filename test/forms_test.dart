@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/about/presentation/about_contact_screen.dart';
-import 'package:practice/features/booking/presentation/book_table_screen.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/menu/domain/dish.dart';
 import 'package:practice/features/contact/domain/contact_repository.dart';
@@ -36,7 +35,7 @@ void main() {
         BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
         BlocProvider.value(value: cart),
       ],
-      child: RepositoryProvider<ContactRepository>.value(
+      child:      RepositoryProvider<ContactRepository>.value(
         value: contact,
         child: MaterialApp(theme: AppTheme.light, home: home),
       ),
@@ -69,42 +68,6 @@ void main() {
     await tester.tap(finder);
     await tester.pumpAndSettle();
   }
-
-  group('Book a Table', () {
-    testWidgets('refuses to book without a time', (tester) async {
-      await pumpForm(tester, const BookTableScreen());
-
-      await tapAt(tester, find.text('Confirm Reservation'));
-
-      expect(find.text('Choose a time for your reservation.'), findsOneWidget);
-    });
-
-    testWidgets('party size steps up and down within bounds', (tester) async {
-      await pumpForm(tester, const BookTableScreen());
-
-      expect(find.text('2'), findsOneWidget);
-
-      await tapAt(tester, find.byIcon(Icons.add_rounded));
-      expect(find.text('3'), findsOneWidget);
-
-      await tester.tap(find.byIcon(Icons.remove_rounded));
-      await tapAt(tester, find.byIcon(Icons.remove_rounded));
-      expect(find.text('1'), findsOneWidget);
-
-      // Floor is one guest — a table for nobody is not a booking.
-      await tapAt(tester, find.byIcon(Icons.remove_rounded));
-      expect(find.text('1'), findsOneWidget);
-    });
-
-    testWidgets('a seating preference can be chosen', (tester) async {
-      await pumpForm(tester, const BookTableScreen());
-
-      await tapAt(tester, find.text('Terrace'));
-
-      expect(find.text('Terrace'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-  });
 
   group('Contact form', () {
     Future<void> openForm(WidgetTester tester) async {

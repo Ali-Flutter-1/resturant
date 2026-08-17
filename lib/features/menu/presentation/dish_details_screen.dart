@@ -10,6 +10,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../features/cart/cart_cubit.dart';
 import '../../../shared/preview/sample_content.dart';
 import '../domain/dish.dart';
+import '../domain/spice_level.dart';
 import '../../../shared/animations/fly_to_cart.dart';
 import '../../../shared/widgets/cart_icon_button.dart';
 import '../../../shared/widgets/dish_image.dart';
@@ -46,7 +47,7 @@ class DishDetailsScreen extends StatefulWidget {
 }
 
 class _DishDetailsScreenState extends State<DishDetailsScreen> {
-  int _spiceLevel = 0;
+  SpiceLevel? _spice;
   final _selectedAddOns = <int>{};
   int _quantity = 1;
 
@@ -74,14 +75,15 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
       ),
       onArrive: () {
         if (!mounted) return;
-        // The spice level and any add-ons go into the line's `notes`, which is
-        // the only free field the API offers on an order line. They are
-        // therefore *instructions*, not priced extras — the server prices from
-        // `dish_id` alone, so a paid modifier would have to be its own dish.
+        // Spice level is a real API field. Add-ons are not — they go into the
+        // line's `notes`, the only free field the API offers on an order line,
+        // and are therefore *instructions* rather than priced extras. The server
+        // prices from `dish_id` alone, so a paid modifier would be its own dish.
         context.read<CartCubit>().addDish(
           _dish,
           quantity: _quantity,
           notes: _notes(),
+          spiceLevel: _spice,
         );
         AppHaptics.success();
         widget.onAddToCart?.call();
@@ -107,15 +109,15 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
 
   /// What the kitchen is told about this line.
   ///
-  /// The chosen spice level, then any add-ons, in one string of at most 200
-  /// characters — the API's limit. Truncated rather than refused: losing the tail
-  /// of a long note is better than refusing to add the dish.
+  /// The chosen add-ons, in one string of at most 200 characters — the API's
+  /// limit. Truncated rather than refused: losing the tail of a long note is
+  /// better than refusing to add the dish.
   ///
-  /// They are *instructions*, not priced extras. The server prices from
-  /// `dish_id` alone, so anything that should cost money has to be its own dish.
+  /// Spice level is no longer in here. It has its own API field now, and putting
+  /// it in free text meant the kitchen ticket carried it but no report could
+  /// count it.
   String? _notes() {
     final parts = <String>[
-      SampleContent.spiceLevels[_spiceLevel],
       for (final i in _selectedAddOns) SampleContent.addOns[i].name,
     ];
     final text = parts.join(', ');
@@ -191,27 +193,37 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
                   const Divider(),
                   const SizedBox(height: AppSpacing.x5),
 
-                  _ChoiceSection(
-                    title: 'Spice Level',
-                    badge: 'Required',
-                    badgeIsRequired: true,
-                    child: Row(
-                      children: [
-                        for (final (i, level)
-                            in SampleContent.spiceLevels.indexed) ...[
-                          if (i > 0) const SizedBox(width: AppSpacing.x3),
-                          Expanded(
-                            child: _SpiceOption(
-                              label: level,
-                              selected: i == _spiceLevel,
-                              onTap: () => setState(() => _spiceLevel = i),
+                  // Only where the kitchen offers it. Sending a level for a dish
+                  // with `has_spice_levels` false is a SPICE_LEVEL_NOT_OFFERED,
+                  // so the control must not be there to tap.
+                  if (_dish.hasSpiceLevels) ...[
+                    _ChoiceSection(
+                      // Optional, not required: the API accepts no choice, and
+                      // forcing one on somebody who does not care is a decision
+                      // the backend never asked for.
+                      title: 'Spice Level',
+                      badge: 'Optional',
+                      child: Row(
+                        children: [
+                          for (final (i, level) in SpiceLevel.values.indexed) ...[
+                            if (i > 0) const SizedBox(width: AppSpacing.x3),
+                            Expanded(
+                              child: _SpiceOption(
+                                label: level.label,
+                                selected: level == _spice,
+                                // Re-tapping clears it, which is the only way
+                                // back to "no preference" once one is chosen.
+                                onTap: () => setState(
+                                  () => _spice = _spice == level ? null : level,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.x6),
+                    const SizedBox(height: AppSpacing.x6),
+                  ],
 
                   _ChoiceSection(
                     title: 'Add-ons',
@@ -345,13 +357,11 @@ class _ChoiceSection extends StatelessWidget {
     required this.title,
     required this.badge,
     required this.child,
-    this.badgeIsRequired = false,
   });
 
   final String title;
   final String badge;
   final Widget child;
-  final bool badgeIsRequired;
 
   @override
   Widget build(BuildContext context) {
@@ -364,18 +374,9 @@ class _ChoiceSection extends StatelessWidget {
           children: [
             Expanded(child: Text(title, style: context.texts.headlineLarge)),
             const SizedBox(width: AppSpacing.x2),
-            if (badgeIsRequired)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: context.surfaces.ground,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(color: context.surfaces.line),
-                ),
-                child: Text(badge, style: context.texts.labelSmall),
-              )
-            else
-              Text(badge, style: context.texts.bodySmall),
+            // Every section is optional now that spice level is — so the badge
+            // is a quiet note rather than the boxed "Required" it used to be.
+            Text(badge, style: context.texts.bodySmall),
           ],
         ),
         const SizedBox(height: AppSpacing.x3),

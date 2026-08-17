@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../contact/domain/contact_repository.dart';
+import '../../hours/presentation/opening_hours_card.dart';
 import '../../auth/presentation/auth_form_parts.dart';
 import '../../auth/auth_cubit.dart';
 import '../../../core/network/api_failure.dart';
@@ -33,13 +34,6 @@ class AboutContactScreen extends StatelessWidget {
   const AboutContactScreen({super.key, this.onBack});
 
   final VoidCallback? onBack;
-
-  static const _hours = [
-    (day: 'Monday', hours: 'Closed'),
-    (day: 'Tuesday — Thursday', hours: '17:00 — 22:30'),
-    (day: 'Friday — Saturday', hours: '12:00 — 23:00'),
-    (day: 'Sunday', hours: '12:00 — 21:00'),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -90,10 +84,12 @@ class AboutContactScreen extends StatelessWidget {
                 const _BentoGrid(),
                 const SizedBox(height: AppSpacing.x8),
 
-                Text('Opening Hours', style: context.texts.headlineLarge),
-                const SizedBox(height: AppSpacing.x3),
-                _HoursTable(hours: _hours),
-                const SizedBox(height: AppSpacing.x8),
+                // The real week from `/working-hours`, in place of four
+                // hardcoded rows that said the restaurant shut at 22:30 on a
+                // Thursday whatever the admin had actually set. Draws nothing
+                // at all when no hours are configured, so the heading goes with
+                // it rather than standing over an empty box.
+                const OpeningHoursSection(),
 
                 Text('Find Us', style: context.texts.headlineLarge),
                 const SizedBox(height: AppSpacing.x3),
@@ -322,60 +318,6 @@ class _BentoImageCard extends StatelessWidget {
   }
 }
 
-class _HoursTable extends StatelessWidget {
-  const _HoursTable({required this.hours});
-
-  final List<({String day, String hours})> hours;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return AppSurface.row(
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          for (final (index, entry) in hours.indexed) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.x4,
-                vertical: AppSpacing.x3,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // The day gives way first: losing a letter of "Wednesday"
-                  // costs less than losing the opening time beside it.
-                  Expanded(
-                    child: Text(
-                      entry.day,
-                      style: context.texts.bodyLarge,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.x2),
-                  Text(
-                    entry.hours,
-                    style: context.texts.titleMedium?.copyWith(
-                      color: entry.hours == 'Closed'
-                          ? context.surfaces.inkSoft
-                          : scheme.onSurface,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (index != hours.length - 1) const Divider(),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Stands in for the map. No mapping SDK is in the project and none should be
-/// chosen without knowing which provider the business already pays for.
 class _MapPanel extends StatelessWidget {
   const _MapPanel();
 

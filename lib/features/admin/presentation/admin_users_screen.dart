@@ -16,6 +16,7 @@ import '../../auth/auth_cubit.dart';
 import '../domain/admin_user.dart';
 import '../domain/admin_user_repository.dart';
 import 'admin_users_cubit.dart';
+import '../../auth/session_refresh.dart';
 
 /// Accounts, for an administrator.
 ///
@@ -93,7 +94,10 @@ class _UsersViewState extends State<_UsersView> {
               else
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: () => cubit.load(silent: true),
+                    onRefresh: () => refreshWithSession(
+                      context,
+                      () => cubit.load(silent: true),
+                    ),
                     child: state.users.isEmpty
                         ? _NoUsers(filtered: state.hasFilters)
                         : ListView.separated(
@@ -118,8 +122,11 @@ class _UsersViewState extends State<_UsersView> {
                                 user: user,
                                 isSelf: user.id == me,
                                 busy: state.busyIds.contains(user.id),
-                                onOpen: () =>
-                                    _showUser(context, user, isSelf: user.id == me),
+                                onOpen: () => _showUser(
+                                  context,
+                                  user,
+                                  isSelf: user.id == me,
+                                ),
                               ).revealItem(index, duration: Motion.fast);
                             },
                           ),
@@ -274,11 +281,10 @@ class _Filters extends StatelessWidget {
             SelectableChip(
               label: option.label,
               selected:
-                  state.role == option.role && state.isActive == option.isActive,
-              onSelected: () => cubit.setFilter(
-                role: option.role,
-                isActive: option.isActive,
-              ),
+                  state.role == option.role &&
+                  state.isActive == option.isActive,
+              onSelected: () =>
+                  cubit.setFilter(role: option.role, isActive: option.isActive),
             ),
           ],
           // Set apart, because this one genuinely is an independent toggle: it
@@ -436,9 +442,8 @@ class _Avatar extends StatelessWidget {
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              errorBuilder: (context, _, _) => Center(
-                child: Icon(Icons.person, color: scheme.primary),
-              ),
+              errorBuilder: (context, _, _) =>
+                  Center(child: Icon(Icons.person, color: scheme.primary)),
             ),
     );
   }
@@ -549,7 +554,11 @@ class _UserDetail extends StatelessWidget {
   final String id;
   final bool isSelf;
 
-  Future<void> _setRole(BuildContext context, AdminUser user, UserRole role) async {
+  Future<void> _setRole(
+    BuildContext context,
+    AdminUser user,
+    UserRole role,
+  ) async {
     // Granting or removing administrator access is confirmed. The rest are a
     // tap: promoting somebody to staff is routine and reversible.
     final touchesAdmin = role == UserRole.admin || user.role == UserRole.admin;
@@ -585,7 +594,8 @@ class _UserDetail extends StatelessWidget {
       final confirmed = await _confirm(
         context,
         title: 'Deactivate ${user.displayName}?',
-        body: 'They are signed out everywhere and cannot sign in again until '
+        body:
+            'They are signed out everywhere and cannot sign in again until '
             'you reactivate them. Their orders and bookings are untouched.',
         action: 'Deactivate',
       );
@@ -604,7 +614,8 @@ class _UserDetail extends StatelessWidget {
     final confirmed = await _confirm(
       context,
       title: 'Close this account permanently?',
-      body: 'Personal details are removed, every session is signed out, and '
+      body:
+          'Personal details are removed, every session is signed out, and '
           'this cannot be reversed here. Past orders and bookings stay, '
           'anonymised, for the accounts.',
       action: 'Close account',
@@ -675,7 +686,10 @@ class _UserDetail extends StatelessWidget {
                 value: user.isEmailVerified ? 'Verified' : 'Not verified',
               ),
               if (user.lastLoginAt != null)
-                _Detail(label: 'Last signed in', value: _date(user.lastLoginAt!)),
+                _Detail(
+                  label: 'Last signed in',
+                  value: _date(user.lastLoginAt!),
+                ),
               if (user.createdAt != null)
                 _Detail(label: 'Joined', value: _date(user.createdAt!)),
 

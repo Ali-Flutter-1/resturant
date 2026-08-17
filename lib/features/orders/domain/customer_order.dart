@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../menu/domain/spice_level.dart';
+
 /// Where an order has got to, as the customer needs to understand it.
 ///
 /// Deliberately separate from the `OrderStatus` the staff screens use. That one
@@ -82,6 +84,7 @@ class CustomerOrderItem extends Equatable {
     required this.dishName,
     required this.quantity,
     required this.linePence,
+    this.spiceLevel,
     this.notes,
   });
 
@@ -101,6 +104,9 @@ class CustomerOrderItem extends Equatable {
       dishName: json['name']?.toString() ?? 'Item',
       quantity: quantity,
       linePence: line?.toInt() ?? ((unit?.toInt() ?? 0) * quantity),
+      // Read from the order, never from the dish. An admin can turn spice
+      // choices off later, and a receipt must keep saying what was ordered.
+      spiceLevel: SpiceLevel.tryParse(json['spice_level']),
       notes: (json['notes']?.toString().trim().isEmpty ?? true)
           ? null
           : json['notes'].toString().trim(),
@@ -110,10 +116,17 @@ class CustomerOrderItem extends Equatable {
   final String dishName;
   final int quantity;
   final int linePence;
+  final SpiceLevel? spiceLevel;
   final String? notes;
 
   @override
-  List<Object?> get props => [dishName, quantity, linePence, notes];
+  List<Object?> get props => [
+    dishName,
+    quantity,
+    linePence,
+    spiceLevel,
+    notes,
+  ];
 }
 
 /// An order as the customer's own history shows it.
@@ -128,6 +141,9 @@ class CustomerOrder extends Equatable {
     this.isDelivery = true,
     this.estimatedReadyAt,
     this.canCancel = false,
+    this.wasRejected = false,
+    this.cancellationReason,
+    this.cancelledAt,
     this.itemCountFallback,
   });
 
@@ -136,6 +152,7 @@ class CustomerOrder extends Equatable {
     final id = json['id']?.toString() ?? '';
     final status = CustomerOrderStatus.fromApi(json['status']?.toString());
     final fulfilment = json['fulfilment_type']?.toString().toLowerCase();
+    final raw = json['status']?.toString().trim().toLowerCase();
 
     return CustomerOrder(
       id: id,
@@ -173,6 +190,15 @@ class CustomerOrder extends Equatable {
       canCancel: json['can_cancel'] is bool
           ? json['can_cancel'] as bool
           : status == CustomerOrderStatus.placed,
+      // `rejected` and `cancelled` are one state to a tracker, but not to the
+      // person reading it: one is "we could not take this", the other is
+      // "you or we called it off". The wording differs, so the raw value is
+      // kept even though [status] folds the two together.
+      wasRejected: raw == 'rejected' || raw == 'declined',
+      // Set by staff when they cancel or reject — the API makes the note
+      // mandatory for exactly those two, so there is always something to show.
+      cancellationReason: _text(json['cancellation_reason']),
+      cancelledAt: _date(json['cancelled_at']),
     );
   }
 
@@ -185,6 +211,11 @@ class CustomerOrder extends Equatable {
 
   static DateTime? _date(Object? raw) =>
       raw == null ? null : DateTime.tryParse(raw.toString())?.toLocal();
+
+  static String? _text(Object? raw) {
+    final value = raw?.toString().trim();
+    return value == null || value.isEmpty ? null : value;
+  }
 
   final String id;
   final String reference;
@@ -204,6 +235,18 @@ class CustomerOrder extends Equatable {
   final DateTime? estimatedReadyAt;
 
   final bool canCancel;
+
+  /// Whether the restaurant refused the order, as opposed to it being cancelled.
+  final bool wasRejected;
+
+  /// Why the restaurant cancelled or rejected it, in their own words.
+  ///
+  /// Only ever present on a cancelled or rejected order, and only from the
+  /// *detail* endpoint — the paginated list sends a summary with no reason, so a
+  /// row has to be opened before this can be shown.
+  final String? cancellationReason;
+
+  final DateTime? cancelledAt;
 
   /// `item_count` from the list endpoint, which sends no lines at all. Null on a
   /// fetched order, where [items] is authoritative.
@@ -226,15 +269,21 @@ class CustomerOrder extends Equatable {
   ///
   /// The shared enum can't know the fulfilment method, and "On its way" for an
   /// order the customer is walking in to collect is simply wrong.
-  String get statusLabel =>
-      !isDelivery && status == CustomerOrderStatus.outForDelivery
-      ? 'Ready to collect'
-      : status.label;
+  String get statusLabel {
+    if (wasRejected) return 'Declined';
+    return !isDelivery && status == CustomerOrderStatus.outForDelivery
+        ? 'Ready to collect'
+        : status.label;
+  }
 
-  String get statusExplanation =>
-      !isDelivery && status == CustomerOrderStatus.ready
-      ? 'Your order is ready to collect from the counter.'
-      : status.explanation;
+  String get statusExplanation {
+    if (wasRejected) {
+      return 'The restaurant could not take this order.';
+    }
+    return !isDelivery && status == CustomerOrderStatus.ready
+        ? 'Your order is ready to collect from the counter.'
+        : status.explanation;
+  }
 
   @override
   List<Object?> get props => [
@@ -247,6 +296,9 @@ class CustomerOrder extends Equatable {
     isDelivery,
     estimatedReadyAt,
     canCancel,
+    wasRejected,
+    cancellationReason,
+    cancelledAt,
     itemCountFallback,
   ];
 }

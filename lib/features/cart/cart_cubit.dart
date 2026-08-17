@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../menu/domain/dish.dart';
+import '../menu/domain/spice_level.dart';
 
 /// One line in the basket.
 ///
@@ -17,16 +18,25 @@ class CartLine extends Equatable {
     required this.displayPricePence,
     required this.quantity,
     this.notes,
+    this.spiceLevel,
     this.prepMaxMinutes,
   });
 
-  factory CartLine.fromDish(Dish dish, {int quantity = 1, String? notes}) =>
-      CartLine(
+  factory CartLine.fromDish(
+    Dish dish, {
+    int quantity = 1,
+    String? notes,
+    SpiceLevel? spiceLevel,
+  }) => CartLine(
         dishId: dish.id,
         title: dish.name,
         displayPricePence: dish.pricePence,
         quantity: quantity,
         notes: (notes?.trim().isEmpty ?? true) ? null : notes!.trim(),
+        // Dropped for a dish that does not offer the choice, rather than sent
+        // and refused with SPICE_LEVEL_NOT_OFFERED. A stale selection is the
+        // app's problem to discard, not the customer's to see an error for.
+        spiceLevel: dish.hasSpiceLevels ? spiceLevel : null,
         // Carried so the checkout can refuse a slot the kitchen cannot make.
         prepMaxMinutes: dish.prepMaxMinutes,
       );
@@ -39,6 +49,10 @@ class CartLine extends Equatable {
   /// Up to 200 characters, per the API. What the kitchen reads on the ticket.
   final String? notes;
 
+  /// Low, Mid or High, where the dish offers it. Null is a real answer — the
+  /// choice is optional even when the selector is shown.
+  final SpiceLevel? spiceLevel;
+
   /// The longest the kitchen says this dish takes, in minutes. Null when the API
   /// sent no estimate for it.
   final int? prepMaxMinutes;
@@ -46,10 +60,12 @@ class CartLine extends Equatable {
   /// Display only. The server recalculates every total when the order is placed.
   int get displayLinePence => displayPricePence * quantity;
 
-  /// Exactly the three fields the API accepts on a line.
+  /// Exactly the fields the API accepts on a line. No prices: the server looks
+  /// those up from `dish_id`.
   Map<String, dynamic> toJson() => {
     'dish_id': dishId,
     'quantity': quantity,
+    'spice_level': ?spiceLevel?.apiValue,
     'notes': ?notes,
   };
 
@@ -59,6 +75,7 @@ class CartLine extends Equatable {
     displayPricePence: displayPricePence,
     quantity: quantity ?? this.quantity,
     notes: notes ?? this.notes,
+    spiceLevel: spiceLevel,
     prepMaxMinutes: prepMaxMinutes,
   );
 
@@ -69,6 +86,7 @@ class CartLine extends Equatable {
     displayPricePence,
     quantity,
     notes,
+    spiceLevel,
   ];
 }
 
@@ -126,10 +144,21 @@ class CartCubit extends Cubit<CartState> {
   /// Merging matters: two taps of "add" should read as one line of two, not two
   /// lines of one. A *different* note makes it a genuinely different instruction
   /// to the kitchen, so that stays separate.
-  void addDish(Dish dish, {int quantity = 1, String? notes}) {
+  /// A different spice level is as much a different instruction as a different
+  /// note, so it keeps its own line too.
+  void addDish(
+    Dish dish, {
+    int quantity = 1,
+    String? notes,
+    SpiceLevel? spiceLevel,
+  }) {
     final tidied = (notes?.trim().isEmpty ?? true) ? null : notes!.trim();
+    final heat = dish.hasSpiceLevels ? spiceLevel : null;
     final existing = state.lines.indexWhere(
-      (line) => line.dishId == dish.id && line.notes == tidied,
+      (line) =>
+          line.dishId == dish.id &&
+          line.notes == tidied &&
+          line.spiceLevel == heat,
     );
 
     if (existing >= 0) {
@@ -159,6 +188,7 @@ class CartCubit extends Cubit<CartState> {
             dish,
             quantity: quantity.clamp(1, CartState.maxQuantity),
             notes: tidied,
+            spiceLevel: heat,
           ),
         ],
       ),

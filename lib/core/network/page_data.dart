@@ -23,6 +23,16 @@ class PageData<T> {
   /// this is false there rather than inviting a request for page 1 of nothing.
   bool get hasMore => page < totalPages;
 
+  /// Decodes each row, keeping the counts. Saves every repository rebuilding a
+  /// page just to change the item type.
+  PageData<R> map<R>(R Function(T item) decode) => PageData(
+    items: [for (final item in items) decode(item)],
+    page: page,
+    pageSize: pageSize,
+    total: total,
+    totalPages: totalPages,
+  );
+
   PageData<T> append(PageData<T> next) => PageData(
     items: [...items, ...next.items],
     page: next.page,

@@ -28,6 +28,8 @@ class ProfileScreen extends StatelessWidget {
     this.onGetInTouch,
     this.onOpenMessages,
     this.onManageUsers,
+    this.onOpeningHours,
+    this.onManageVenue,
   });
 
   /// Opens the contact form. Optional, because the customer app has it on its
@@ -44,6 +46,13 @@ class ProfileScreen extends StatelessWidget {
   /// Opens account management. Passed only for an admin — staff have no route to
   /// it, and the API refuses them anyway.
   final VoidCallback? onManageUsers;
+
+  /// Opens the weekly opening hours. Admin only — staff cannot edit them, and
+  /// the API refuses them.
+  final VoidCallback? onOpeningHours;
+
+  /// Opens tables and sittings. Admin only — the API denies staff both.
+  final VoidCallback? onManageVenue;
 
   @override
   Widget build(BuildContext context) {
@@ -102,9 +111,29 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.x3),
                 ],
+                if (onOpeningHours != null) ...[
+                  _LinkTile(
+                    icon: Icons.schedule_outlined,
+                    title: 'Opening hours',
+                    subtitle: 'What customers see on the About screen',
+                    onTap: onOpeningHours!,
+                  ),
+                  const SizedBox(height: AppSpacing.x3),
+                ],
+                if (onManageVenue != null) ...[
+                  _LinkTile(
+                    icon: Icons.table_restaurant_outlined,
+                    title: 'Tables & sittings',
+                    subtitle: 'The room, and when it can be booked',
+                    onTap: onManageVenue!,
+                  ),
+                  const SizedBox(height: AppSpacing.x3),
+                ],
                 if (onGetInTouch != null ||
                     onOpenMessages != null ||
-                    onManageUsers != null)
+                    onManageUsers != null ||
+                    onOpeningHours != null ||
+                    onManageVenue != null)
                   const SizedBox(height: AppSpacing.x2),
                 const AccountPanel(),
               ].revealStaggered(),

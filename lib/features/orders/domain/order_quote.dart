@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../menu/domain/spice_level.dart';
+
 /// One priced line in a quote.
 class QuoteLine extends Equatable {
   const QuoteLine({
@@ -7,25 +9,43 @@ class QuoteLine extends Equatable {
     required this.quantity,
     required this.unitPricePence,
     required this.linePence,
+    this.dishId,
+    this.spiceLevel,
     this.notes,
   });
 
   factory QuoteLine.fromJson(Map<String, dynamic> json) => QuoteLine(
     name: json['name']?.toString() ?? 'Item',
+    dishId: json['dish_id']?.toString(),
     quantity: (json['quantity'] as num?)?.toInt() ?? 1,
     unitPricePence: (json['unit_price_pence'] as num?)?.toInt() ?? 0,
     linePence: (json['line_total_pence'] as num?)?.toInt() ?? 0,
+    spiceLevel: SpiceLevel.tryParse(json['spice_level']),
     notes: json['notes']?.toString(),
   );
 
   final String name;
+
+  /// Echoed back by the API, which is what lets the checkout pair a priced line
+  /// with the basket line it can edit.
+  final String? dishId;
+
   final int quantity;
   final int unitPricePence;
   final int linePence;
+  final SpiceLevel? spiceLevel;
   final String? notes;
 
   @override
-  List<Object?> get props => [name, quantity, unitPricePence, linePence, notes];
+  List<Object?> get props => [
+    name,
+    dishId,
+    quantity,
+    unitPricePence,
+    linePence,
+    spiceLevel,
+    notes,
+  ];
 }
 
 /// The server's price for a basket.

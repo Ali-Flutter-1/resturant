@@ -6,6 +6,7 @@ import 'package:practice/core/theme/app_theme.dart';
 import 'package:practice/features/cart/cart_cubit.dart';
 import 'package:practice/features/menu/presentation/dish_details_screen.dart';
 import 'package:practice/features/menu/domain/dish.dart';
+import 'package:practice/features/menu/domain/spice_level.dart';
 import 'package:practice/shared/preview/sample_content.dart';
 
 /// The dish these price tests are about.
@@ -20,7 +21,16 @@ const _priced = Dish(
   pricePence: 1750,
 );
 
-Widget wrapDish() => const DishDetailsScreen(dish: _priced);
+/// The same dish, with the kitchen offering a heat choice.
+const _spiced = Dish(
+  id: 'd1',
+  name: 'Black Pork Curry',
+  description: 'Dark roasted heritage classic.',
+  pricePence: 1750,
+  hasSpiceLevels: true,
+);
+
+Widget wrapDish({Dish dish = _priced}) => DishDetailsScreen(dish: dish);
 
 void main() {
   group('CartCubit', () {
@@ -241,20 +251,84 @@ void main() {
       expect(find.text('No description yet.'), findsOneWidget);
     });
 
-    testWidgets('spice level is single-select', (tester) async {
+    testWidgets('no spice selector unless the dish offers one', (tester) async {
       await tester.pumpWidget(wrap(wrapDish()));
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('Hot'), 200);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Hot'));
+      // Sending a level for a dish with `has_spice_levels` false earns a
+      // SPICE_LEVEL_NOT_OFFERED, so the control must not be there to tap.
+      expect(find.text('Spice Level'), findsNothing);
+    });
+
+    testWidgets('spice level is single-select and clearable', (tester) async {
+      await tester.pumpWidget(wrap(wrapDish(dish: _spiced)));
       await tester.pumpAndSettle();
 
-      // All three remain on screen; only the styling differs, so the check
-      // is that selecting one does not remove the others.
-      expect(find.text('Mild'), findsOneWidget);
-      expect(find.text('Medium'), findsOneWidget);
-      expect(find.text('Hot'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('High'), 200);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('High'));
+      await tester.pumpAndSettle();
+
+      // All three remain on screen; only the styling differs, so the check is
+      // that selecting one does not remove the others.
+      expect(find.text('Low'), findsOneWidget);
+      expect(find.text('Mid'), findsOneWidget);
+      expect(find.text('High'), findsOneWidget);
+    });
+
+    testWidgets('the chosen level reaches the basket as its own field', (
+      tester,
+    ) async {
+      final cart = CartCubit();
+      await tester.pumpWidget(
+        MultiBlocProvider(
+          providers: [BlocProvider.value(value: cart)],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: wrapDish(dish: _spiced),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(find.text('Mid'), 200);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mid'));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(find.text('ADD TO CART'), -200);
+      await tester.tap(find.text('ADD TO CART'));
+      await tester.pumpAndSettle();
+
+      final line = cart.state.lines.single;
+      expect(line.spiceLevel, SpiceLevel.mid);
+      // Its own field, not smuggled into the free-text note — a note the
+      // kitchen reads is not something a report can count.
+      expect(line.toJson()['spice_level'], 'mid');
+      expect(line.notes ?? '', isNot(contains('Mid')));
+    });
+
+    test('a level is dropped for a dish that does not offer one', () {
+      final cart = CartCubit();
+      cart.addDish(_priced, spiceLevel: SpiceLevel.high);
+      // Discarded here rather than sent and refused: a stale selection is the
+      // app's problem, not an error for the customer to read.
+      expect(cart.state.lines.single.spiceLevel, isNull);
+      expect(
+        cart.state.lines.single.toJson().containsKey('spice_level'),
+        false,
+      );
+    });
+
+    test('different heat is a different line', () {
+      final cart = CartCubit()
+        ..addDish(_spiced, spiceLevel: SpiceLevel.low)
+        ..addDish(_spiced, spiceLevel: SpiceLevel.high);
+      expect(cart.state.lines.length, 2);
+
+      cart.addDish(_spiced, spiceLevel: SpiceLevel.low);
+      expect(cart.state.lines.length, 2);
+      expect(cart.state.lines.first.quantity, 2);
     });
   });
 
