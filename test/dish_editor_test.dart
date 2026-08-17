@@ -323,4 +323,67 @@ void main() {
       expect((await repository.categories()).first.imageUrl, isNull);
     });
   });
+
+  group('spice levels on a dish', () {
+    testWidgets('off by default, and sent as chosen', (tester) async {
+      await open(tester);
+
+      await tester.ensureVisible(find.text('Offer a spice level'));
+      await tester.pumpAndSettle();
+
+      // Off unless asked for: most dishes are not adjustable, and a selector on
+      // every one would ask a question the kitchen cannot answer.
+      final before = tester.widget<SwitchListTile>(
+        find.widgetWithText(SwitchListTile, 'Offer a spice level'),
+      );
+      expect(before.value, isFalse);
+
+      await tester.tap(find.text('Offer a spice level'));
+      await tester.pumpAndSettle();
+
+      final after = tester.widget<SwitchListTile>(
+        find.widgetWithText(SwitchListTile, 'Offer a spice level'),
+      );
+      expect(after.value, isTrue);
+    });
+
+    testWidgets('an existing dish shows what it already offers', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        dish: const Dish(
+          id: 'd1',
+          name: 'Devilled Chicken',
+          description: 'Hot.',
+          pricePence: 1250,
+          hasSpiceLevels: true,
+        ),
+      );
+
+      await tester.ensureVisible(find.text('Offer a spice level'));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<SwitchListTile>(
+        find.widgetWithText(SwitchListTile, 'Offer a spice level'),
+      );
+      expect(tile.value, isTrue);
+    });
+
+    testWidgets('a new section can carry a logo', (tester) async {
+      await open(tester);
+
+      await tester.ensureVisible(find.byTooltip('Add category'));
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Add another category'),
+        'Street Food',
+      );
+      await tester.tap(find.byTooltip('Add category'));
+      await tester.pumpAndSettle();
+
+      // The picture and the category are one job rather than two screens.
+      expect(find.text('No picture yet'), findsOneWidget);
+      expect(find.text('Add logo'), findsOneWidget);
+    });
+  });
 }

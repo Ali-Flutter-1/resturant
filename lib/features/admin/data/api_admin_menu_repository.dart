@@ -59,6 +59,7 @@ class ApiAdminMenuRepository implements AdminMenuRepository {
     int? prepMinMinutes,
     int? prepMaxMinutes,
     bool isAvailable = true,
+    bool hasSpiceLevels = false,
   }) async {
     final data = await _client.object(
       ApiConstants.adminDishes,
@@ -73,6 +74,9 @@ class ApiAdminMenuRepository implements AdminMenuRepository {
         'preparation_time_min_minutes': ?prepMinMinutes,
         'preparation_time_max_minutes': ?prepMaxMinutes,
         'is_available': isAvailable,
+        // Whether the customer is offered Low/Mid/High. False means no selector
+        // at all, and sending a level for such a dish is refused.
+        'has_spice_levels': hasSpiceLevels,
       },
     );
     return Dish.fromJson(data);
@@ -89,6 +93,7 @@ class ApiAdminMenuRepository implements AdminMenuRepository {
     int? prepMinMinutes,
     int? prepMaxMinutes,
     bool? isAvailable,
+    bool? hasSpiceLevels,
   }) async {
     // Only what was passed. A PATCH that sent every field would turn "make this
     // one sold out" into "overwrite this dish with whatever the screen last
@@ -105,6 +110,7 @@ class ApiAdminMenuRepository implements AdminMenuRepository {
         'preparation_time_min_minutes': ?prepMinMinutes,
         'preparation_time_max_minutes': ?prepMaxMinutes,
         'is_available': ?isAvailable,
+        'has_spice_levels': ?hasSpiceLevels,
       },
     );
     return Dish.fromJson(data);

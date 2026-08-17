@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -21,7 +23,9 @@ import 'features/admin/domain/admin_user_repository.dart';
 import 'features/booking/data/api_reservation_repository.dart';
 import 'features/booking/data/api_venue_repository.dart';
 import 'features/booking/domain/reservation_repository.dart';
+import 'firebase_options.dart';
 import 'features/notifications/data/api_notification_repository.dart';
+import 'features/notifications/data/firebase_push_service.dart';
 import 'features/notifications/data/push_coordinator.dart';
 import 'features/notifications/domain/notification_repository.dart';
 import 'features/notifications/domain/push_service.dart';
@@ -61,15 +65,37 @@ Future<void> main() async {
     repository: ApiAuthRepository(client: client, tokens: tokens),
   );
 
-  // Notifications. The in-app inbox is real and works today; the push half is
-  // behind [PushService] until the Firebase configuration files are added — see
-  // that file for exactly what to do when they arrive.
+  // Notifications. The inbox works with or without push; push is what makes the
+  // phone light up.
   final notifications = ApiNotificationRepository(client: client);
-  final pushes = PushCoordinator(
-    repository: notifications,
-    push: const NoPushService(),
-  );
+
+  // Firebase is only configured for Android so far — iOS still needs its plist
+  // and an APNs key. Startup must survive that rather than refusing to run, so a
+  // platform with no configuration falls back to the no-op service and the app
+  // works minus the OS alerts.
+  PushService push = const NoPushService();
+  FirebasePushService? firebase;
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    // Registered before `runApp`, and top-level — see the handler's own note.
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    firebase = FirebasePushService();
+    await firebase.initialise();
+    push = firebase;
+  } on Object catch (error) {
+    debugPrint('Push is unavailable on this platform: $error');
+  }
+
+  final pushes = PushCoordinator(repository: notifications, push: push);
   await pushes.start();
+
+  // A notification that launched a terminated app. Held rather than acted on:
+  // there is no session and no navigator yet, and the coordinator hands it over
+  // once there is.
+  final launch = await firebase?.initialMessage();
+  if (launch != null) pushes.holdPending(launch);
 
   // Registration runs after a session exists, and never blocks anything: a
   // failed registration is retried next launch rather than kept anyone out.

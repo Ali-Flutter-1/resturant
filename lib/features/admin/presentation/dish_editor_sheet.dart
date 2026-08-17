@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -92,6 +94,16 @@ class _DishEditorState extends State<_DishEditor> {
   /// creating one per keystroke would litter the menu with categories from
   /// abandoned edits.
   final List<String> _pendingCategories = [];
+
+  /// A logo picked for a category that does not exist yet, by name.
+  ///
+  /// Uploaded after the category is created on save, because the endpoint needs
+  /// the category's id — which is exactly why the picture has to be held here
+  /// rather than sent when it was chosen.
+  final Map<String, String> _pendingCategoryLogos = {};
+
+  /// Whether this dish offers Low/Mid/High to the customer.
+  late bool _hasSpiceLevels = widget.dish?.hasSpiceLevels ?? false;
 
   /// Photographs already on the dish, kept so an edit that doesn't touch the
   /// picture doesn't drop it.
@@ -237,8 +249,26 @@ class _DishEditorState extends State<_DishEditor> {
       for (final name in _pendingCategories) {
         final created = await widget.repository.createCategory(name);
         categoryIds.add(created.id);
+
+        // The logo, now that there is an id to attach it to. A failure here is
+        // swallowed on purpose: the category exists and the dish is about to be
+        // saved, and losing both because a picture would not upload would be a
+        // far worse outcome than a section with no badge.
+        final logo = _pendingCategoryLogos[name];
+        var withLogo = created;
+        if (logo != null) {
+          try {
+            withLogo = await widget.repository.setCategoryLogo(
+              created.id,
+              logo,
+            );
+          } on ApiFailure {
+            // Left without a picture; it can be set from menu management.
+          }
+        }
+
         if (mounted) {
-          setState(() => _categories = [..._categories, created]);
+          setState(() => _categories = [..._categories, withLogo]);
         }
       }
 
@@ -263,6 +293,7 @@ class _DishEditorState extends State<_DishEditor> {
               images: images,
               prepMinMinutes: prepMin,
               prepMaxMinutes: prepMax,
+              hasSpiceLevels: _hasSpiceLevels,
             )
           : await widget.repository.updateDish(
               dish.id,
@@ -273,6 +304,7 @@ class _DishEditorState extends State<_DishEditor> {
               images: images,
               prepMinMinutes: prepMin,
               prepMaxMinutes: prepMax,
+              hasSpiceLevels: _hasSpiceLevels,
             );
 
       if (!mounted) return;
@@ -488,6 +520,40 @@ class _DishEditorState extends State<_DishEditor> {
               ],
             ),
 
+            // A picture for each new section, chosen here so the whole thing is
+            // one job. Customers see it on the home screen in place of a glyph,
+            // and an existing section's logo is changed from menu management.
+            if (_pendingCategories.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.x3),
+              for (final pending in _pendingCategories)
+                _CategoryLogoPicker(
+                  name: pending,
+                  path: _pendingCategoryLogos[pending],
+                  enabled: !_saving,
+                  onPicked: (path) => setState(() {
+                    path == null
+                        ? _pendingCategoryLogos.remove(pending)
+                        : _pendingCategoryLogos[pending] = path;
+                  }),
+                ),
+            ],
+
+            const SizedBox(height: AppSpacing.x4),
+            // Off by default: most dishes are not adjustable, and a selector on
+            // every one of them would ask a question nobody in the kitchen can
+            // answer.
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _hasSpiceLevels,
+              onChanged: _saving
+                  ? null
+                  : (on) => setState(() => _hasSpiceLevels = on),
+              title: const Text('Offer a spice level'),
+              subtitle: const Text(
+                'Customers can choose Low, Mid or High for this dish.',
+              ),
+            ),
+
             if (_error != null) ...[
               const SizedBox(height: AppSpacing.x4),
               Row(
@@ -637,6 +703,105 @@ class _PhotographPicker extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+
+/// A logo for a category that does not exist yet.
+///
+/// The picture is only *chosen* here; it is uploaded once the category has been
+/// created and has an id. Optional — a section with no picture falls back to a
+/// glyph on the customer's home screen, which is a perfectly good look.
+class _CategoryLogoPicker extends StatelessWidget {
+  const _CategoryLogoPicker({
+    required this.name,
+    required this.path,
+    required this.enabled,
+    required this.onPicked,
+  });
+
+  final String name;
+  final String? path;
+  final bool enabled;
+  final ValueChanged<String?> onPicked;
+
+  Future<void> _pick(BuildContext context) async {
+    final XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        // Smaller than a dish photograph: this is drawn as a 56pt circle.
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+    } on Object {
+      if (context.mounted) {
+        showAppSnack(context, 'Could not open your photos.', isError: true);
+      }
+      return;
+    }
+    if (file != null) onPicked(file.path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final picked = path;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.x2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: ClipOval(
+              child: picked == null
+                  ? ColoredBox(
+                      color: context.surfaces.accentContainer,
+                      child: Icon(
+                        Icons.local_dining,
+                        size: AppIconSize.lg,
+                        color: scheme.primary,
+                      ),
+                    )
+                  : Image.file(
+                      File(picked),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.x3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: context.texts.titleSmall),
+                Text(
+                  picked == null ? 'No picture yet' : 'Picture chosen',
+                  style: context.texts.bodySmall?.copyWith(
+                    color: context.surfaces.inkSoft,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (picked != null)
+            IconButton(
+              onPressed: enabled ? () => onPicked(null) : null,
+              icon: const Icon(Icons.close, size: AppIconSize.lg),
+              tooltip: 'Remove picture',
+            ),
+          TextButton(
+            onPressed: enabled ? () => _pick(context) : null,
+            child: Text(picked == null ? 'Add logo' : 'Change'),
+          ),
+        ],
+      ),
     );
   }
 }

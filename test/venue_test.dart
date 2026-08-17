@@ -411,4 +411,38 @@ void main() {
       expect(find.textContaining('latest sitting to *start*'), findsOneWidget);
     });
   });
+
+  group('the room is not bookable until sittings exist', () {
+    Widget wrapEmpty() => BlocProvider(
+      create: (_) => AuthFixtures.cubit(AuthFixtures.admin),
+      child: RepositoryProvider<VenueRepository>.value(
+        value: repository,
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: const AdminVenueScreen(),
+        ),
+      ),
+    );
+
+    testWidgets('says so, and offers the generator', (tester) async {
+      // Tables but no timetable: the state an admin lands in after adding their
+      // first table and wondering why nobody can book.
+      repository = FakeVenueRepository(slots: []);
+      await tester.pumpWidget(wrapEmpty());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing can be booked yet'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Generate sittings'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the banner goes once sittings exist', (tester) async {
+      await tester.pumpWidget(wrapEmpty());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing can be booked yet'), findsNothing);
+    });
+  });
 }

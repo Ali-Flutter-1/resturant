@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "352098370622",
+    "project_id": "resturant-19b77",
+    "storage_bucket": "resturant-19b77.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:352098370622:android:b013bda2e86f5fcf4a7d6f",
+        "android_client_info": {
+          "package_name": "com.tscafe.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBiKdFIagWDT0S72PtPkOX3jpVajhQ9E7o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

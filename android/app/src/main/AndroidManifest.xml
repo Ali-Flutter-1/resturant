@@ -16,6 +16,9 @@
          no permission: image_picker goes through the system photo picker, which
          hands back one file the user chose rather than granting library access. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Android 13+ requires this at runtime before any notification is shown.
+         Without it the OS silently drops every alert. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="T’s Cafe"

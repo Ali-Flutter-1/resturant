@@ -49,5 +49,10 @@
 	<string>Take a photograph of a dish to show on the menu.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a dish photograph from your photos to show on the menu.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

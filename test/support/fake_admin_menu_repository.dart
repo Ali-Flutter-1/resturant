@@ -100,6 +100,7 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
     int? prepMinMinutes,
     int? prepMaxMinutes,
     bool isAvailable = true,
+    bool hasSpiceLevels = false,
   }) async {
     _check();
     lastCreate = {
@@ -111,6 +112,7 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
       'prep_min': prepMinMinutes,
       'prep_max': prepMaxMinutes,
       'is_available': isAvailable,
+      'has_spice_levels': hasSpiceLevels,
     };
     final dish = Dish(
       id: 'dish-${_nextId++}',
@@ -127,6 +129,7 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
       images: images,
       prepMinMinutes: prepMinMinutes,
       prepMaxMinutes: prepMaxMinutes,
+      hasSpiceLevels: hasSpiceLevels,
       isAvailable: isAvailable,
     );
     _dishes.add(dish);
@@ -144,6 +147,7 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
     int? prepMinMinutes,
     int? prepMaxMinutes,
     bool? isAvailable,
+    bool? hasSpiceLevels,
   }) async {
     _check();
     lastUpdate = {

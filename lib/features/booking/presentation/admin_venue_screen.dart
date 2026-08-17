@@ -122,6 +122,13 @@ class _TablesTab extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.x4),
+              // The state an admin lands in after adding their first table and
+              // wondering why nobody can book: the room exists, the timetable
+              // does not. Said here rather than left to be discovered.
+              if (state.liveTables.isNotEmpty && state.slots.isEmpty) ...[
+                _NothingBookable(),
+                const SizedBox(height: AppSpacing.x4),
+              ],
               if (state.tables.isEmpty)
                 _Empty(
                   icon: Icons.table_restaurant_outlined,
@@ -142,6 +149,74 @@ class _TablesTab extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Tables with no sittings cannot be booked, and nothing else says so.
+class _NothingBookable extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colours = context.orderColors;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.x3),
+      decoration: BoxDecoration(
+        color: colours.preparingContainer,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                size: AppIconSize.md,
+                color: colours.preparing,
+              ),
+              const SizedBox(width: AppSpacing.x2),
+              Expanded(
+                child: Text(
+                  'Nothing can be booked yet',
+                  style: context.texts.titleSmall?.copyWith(
+                    color: colours.preparing,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Customers pick a sitting, not a table. Generate some and the room '
+            'becomes bookable.',
+            style: context.texts.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.x2),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton(
+              onPressed: () => _openGenerator(context),
+              child: const Text('Generate sittings'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Switches to the Sittings tab and opens the generator.
+///
+/// Reached from the Tables tab too, because that is where an admin is standing
+/// when they discover the room is not bookable.
+void _openGenerator(BuildContext context) {
+  final controller = DefaultTabController.of(context);
+  controller.animateTo(1);
+  final cubit = context.read<VenueCubit>();
+  // After the tab settles, so the sheet does not open over a moving page.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (context.mounted) _generate(context, cubit.state);
+  });
 }
 
 class _TableCard extends StatelessWidget {

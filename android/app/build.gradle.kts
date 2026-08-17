@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -13,6 +14,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications uses java.time, which needs desugaring to
+        // run on the API levels below 26 that minSdk still covers.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -20,7 +24,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Must match the package_name in google-services.json, or Firebase
+        // issues tokens this project cannot deliver to.
         applicationId = "com.tscafe.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -41,4 +46,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Required by the desugaring switch above.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

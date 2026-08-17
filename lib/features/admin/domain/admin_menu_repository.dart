@@ -51,6 +51,7 @@ abstract interface class AdminMenuRepository {
     int? prepMinMinutes,
     int? prepMaxMinutes,
     bool isAvailable = true,
+    bool hasSpiceLevels = false,
   });
 
   /// Changes only what is passed.
@@ -67,6 +68,7 @@ abstract interface class AdminMenuRepository {
     int? prepMinMinutes,
     int? prepMaxMinutes,
     bool? isAvailable,
+    bool? hasSpiceLevels,
   });
 
   /// Removes a dish from the menu.
