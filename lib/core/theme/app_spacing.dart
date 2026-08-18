@@ -49,4 +49,25 @@ abstract final class AppIconSize {
 abstract final class AppLayout {
   static const double designWidth = 390;
   static const double designHeight = 844;
+
+  /// Where the layout should stop behaving like a phone.
+  ///
+  /// One number rather than a device list: what matters is how wide the column
+  /// is, not what the hardware calls itself. A phone in landscape and a small
+  /// tablet in portrait are the same problem.
+  static const double wide = 600;
+
+  /// The widest a single column of text or form fields should ever get.
+  ///
+  /// Past roughly this, a line becomes tiring to read and a form turns into a
+  /// row of far-apart labels and fields. Beyond it the column is centred and the
+  /// extra width becomes margin — which is the difference between adapting to a
+  /// tablet and merely stretching to fill one.
+  static const double readable = 640;
+
+  /// The gutter for the width on offer. Wider screens get more air.
+  static double gutterFor(double width) =>
+      width >= wide ? AppSpacing.x8 : AppSpacing.gutter;
+
+  static bool isWide(double width) => width >= wide;
 }

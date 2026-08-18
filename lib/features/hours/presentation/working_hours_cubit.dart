@@ -39,8 +39,10 @@ class WorkingHoursState extends Equatable {
   }
 
   /// Days that are open but missing a time, which the API refuses.
-  List<DayHours> get incomplete =>
-      [for (final day in draft) if (!day.isClosed && !day.isComplete) day];
+  List<DayHours> get incomplete => [
+    for (final day in draft)
+      if (!day.isClosed && !day.isComplete) day,
+  ];
 
   /// Days whose closing time is not after their opening time.
   ///
@@ -86,10 +88,12 @@ class WorkingHoursState extends Equatable {
 /// restaurant advertising a half-finished schedule. One "Save the week" sends
 /// all seven days together.
 class WorkingHoursCubit extends Cubit<WorkingHoursState> {
-  WorkingHoursCubit({required WorkingHoursRepository repository, bool admin = false})
-    : _repository = repository,
-      _admin = admin,
-      super(const WorkingHoursState());
+  WorkingHoursCubit({
+    required WorkingHoursRepository repository,
+    bool admin = false,
+  }) : _repository = repository,
+       _admin = admin,
+       super(const WorkingHoursState());
 
   final WorkingHoursRepository _repository;
 
@@ -127,10 +131,8 @@ class WorkingHoursCubit extends Cubit<WorkingHoursState> {
     }
   }
 
-  void setClosed(int weekday, bool closed) => _edit(
-    weekday,
-    (day) => day.copyWith(isClosed: closed),
-  );
+  void setClosed(int weekday, bool closed) =>
+      _edit(weekday, (day) => day.copyWith(isClosed: closed));
 
   void setOpensAt(int weekday, String time) =>
       _edit(weekday, (day) => day.copyWith(opensAt: time, isClosed: false));

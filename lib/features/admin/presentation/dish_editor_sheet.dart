@@ -707,7 +707,6 @@ class _PhotographPicker extends StatelessWidget {
   }
 }
 
-
 /// A logo for a category that does not exist yet.
 ///
 /// The picture is only *chosen* here; it is uploaded once the category has been

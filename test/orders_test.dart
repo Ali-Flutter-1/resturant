@@ -667,6 +667,52 @@ void main() {
       expect(find.text('Total'), findsOne);
     });
   });
+
+  group('polling costs battery, so it stops when nobody is looking', () {
+    testWidgets('the tracker stops polling while backgrounded', (tester) async {
+      final repository = FakeOrderRepository(
+        orders: [OrderFixtures.order(status: CustomerOrderStatus.preparing)],
+      );
+      await tester.pumpWidget(_wrapOrders(repository));
+      await tester.pump(const Duration(seconds: 2));
+
+      final afterLoad = repository.loadCount;
+
+      // Two poll intervals while foregrounded: the tracker keeps up.
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pump(const Duration(seconds: 31));
+      final whileVisible = repository.loadCount;
+      expect(whileVisible, greaterThan(afterLoad));
+
+      // Backgrounded. A suspended app making a request every thirty seconds on
+      // mobile data is a battery and data cost for a screen nobody can see.
+      // The full sequence a real device produces — resumed, inactive, hidden,
+      // paused. `AppLifecycleListener` asserts on any other order.
+      for (final state in const [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pump(const Duration(seconds: 31));
+      expect(repository.loadCount, whileVisible);
+
+      // Resuming reads once immediately, so the screen is not stale.
+      for (final state in const [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(repository.loadCount, greaterThan(whileVisible));
+    });
+  });
 }
 
 /// The orders screen with a repository in scope.

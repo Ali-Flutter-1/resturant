@@ -17,6 +17,7 @@ import '../../auth/session_refresh.dart';
 import '../domain/app_notification.dart';
 import '../domain/notification_repository.dart';
 import 'notifications_cubit.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// Opens the inbox.
 ///
@@ -32,9 +33,7 @@ void openNotifications(
   void Function(NotificationPayload payload)? onFollow,
 }) {
   Navigator.of(context).push(
-    AppPageRoute<void>(
-      builder: (_) => NotificationsScreen(onOpen: onFollow),
-    ),
+    AppPageRoute<void>(builder: (_) => NotificationsScreen(onOpen: onFollow)),
   );
 }
 
@@ -113,15 +112,13 @@ class _NotificationsView extends StatelessWidget {
             onRefresh: () =>
                 refreshWithSession(context, () => cubit.load(silent: true)),
             child: ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.x4,
-                AppSpacing.gutter,
-                AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+              padding: pagePadding(
+                context,
+                top: AppSpacing.x4,
+                bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
               ),
               itemCount: state.items.length + (state.hasMore ? 1 : 0),
-              separatorBuilder: (_, _) =>
-                  const SizedBox(height: AppSpacing.x3),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x3),
               itemBuilder: (context, index) {
                 if (index == state.items.length) {
                   return Center(
@@ -376,10 +373,7 @@ class _BellButton extends StatelessWidget {
               right: -6,
               top: -5,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 5,
-                  vertical: 1,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 constraints: const BoxConstraints(minWidth: 17),
                 decoration: BoxDecoration(
                   color: scheme.primary,

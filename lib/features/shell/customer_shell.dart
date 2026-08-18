@@ -133,9 +133,8 @@ class CustomerShell extends StatelessWidget {
           sfSymbol: 'calendar',
           icon: Icons.calendar_month_outlined,
           selectedIcon: Icons.calendar_month,
-          builder: (context) => BookTableScreen(
-            onSeeBookings: () => _openMyBookings(context),
-          ),
+          builder: (context) =>
+              BookTableScreen(onSeeBookings: () => _openMyBookings(context)),
         ),
         ShellTab(
           label: 'Orders',

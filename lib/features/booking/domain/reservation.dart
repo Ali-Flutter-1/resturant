@@ -33,20 +33,18 @@ enum ReservationStatus {
   /// trade for a mobile app: a backend that gains a state would take the whole
   /// history screen down with it, when showing one row as in-progress costs
   /// nothing and the server refuses any action the state does not allow.
-  static ReservationStatus fromApi(Object? value) => switch (value
-      ?.toString()
-      .trim()
-      .toLowerCase()) {
-    'pending' => pending,
-    'confirmed' => confirmed,
-    'rejected' => rejected,
-    'seated' => seated,
-    'completed' => completed,
-    'cancelled' || 'canceled' => cancelled,
-    'no_show' || 'noshow' => noShow,
-    'expired' => expired,
-    _ => pending,
-  };
+  static ReservationStatus fromApi(Object? value) =>
+      switch (value?.toString().trim().toLowerCase()) {
+        'pending' => pending,
+        'confirmed' => confirmed,
+        'rejected' => rejected,
+        'seated' => seated,
+        'completed' => completed,
+        'cancelled' || 'canceled' => cancelled,
+        'no_show' || 'noshow' => noShow,
+        'expired' => expired,
+        _ => pending,
+      };
 
   /// Whether this booking still holds its slot, and so belongs at the top of the
   /// customer's list rather than in history.
@@ -87,16 +85,14 @@ enum UnavailableReason {
   const UnavailableReason(this.label);
   final String label;
 
-  static UnavailableReason fromApi(Object? value) => switch (value
-      ?.toString()
-      .trim()
-      .toLowerCase()) {
-    'booked' => booked,
-    'closed' => closed,
-    'too_soon' => tooSoon,
-    'too_small' => tooSmall,
-    _ => unknown,
-  };
+  static UnavailableReason fromApi(Object? value) =>
+      switch (value?.toString().trim().toLowerCase()) {
+        'booked' => booked,
+        'closed' => closed,
+        'too_soon' => tooSoon,
+        'too_small' => tooSmall,
+        _ => unknown,
+      };
 }
 
 /// One sitting on one table.
@@ -187,8 +183,9 @@ class AvailabilityTable extends Equatable {
           ? sittings
                 .whereType<Map>()
                 .map(
-                  (s) =>
-                      AvailabilitySitting.fromJson(Map<String, dynamic>.from(s)),
+                  (s) => AvailabilitySitting.fromJson(
+                    Map<String, dynamic>.from(s),
+                  ),
                 )
                 .toList()
           : const [],
@@ -239,7 +236,8 @@ class Availability extends Equatable {
           ? tables
                 .whereType<Map>()
                 .map(
-                  (t) => AvailabilityTable.fromJson(Map<String, dynamic>.from(t)),
+                  (t) =>
+                      AvailabilityTable.fromJson(Map<String, dynamic>.from(t)),
                 )
                 .toList()
           : const [],

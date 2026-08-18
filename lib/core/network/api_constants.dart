@@ -180,8 +180,7 @@ abstract final class ApiConstants {
   /// The durable in-app inbox — the reliable record when a push is delayed,
   /// dismissed or never delivered.
   static const String notifications = '/notifications';
-  static const String notificationsUnreadCount =
-      '/notifications/unread-count';
+  static const String notificationsUnreadCount = '/notifications/unread-count';
   static String notificationRead(String id) => '/notifications/$id/read';
   static const String notificationsReadAll = '/notifications/read-all';
 

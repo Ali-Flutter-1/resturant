@@ -98,16 +98,14 @@ class ApiVenueRepository implements VenueRepository {
   }
 
   @override
-  Future<VenueSlot> updateSlot(
-    String id,
-    Map<String, dynamic> changes,
-  ) async => VenueSlot.fromJson(
-    await _client.object(
-      ApiConstants.adminTableSlot(id),
-      method: 'PATCH',
-      body: changes,
-    ),
-  );
+  Future<VenueSlot> updateSlot(String id, Map<String, dynamic> changes) async =>
+      VenueSlot.fromJson(
+        await _client.object(
+          ApiConstants.adminTableSlot(id),
+          method: 'PATCH',
+          body: changes,
+        ),
+      );
 
   @override
   Future<void> deleteSlot(String id) async {

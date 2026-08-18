@@ -158,9 +158,7 @@ class _TabbedShellState extends State<TabbedShell> {
       (_useNativeBar ? _nativeBarHeight : AppNavBar.barHeight) +
       (bottomInset > 0
           ? bottomInset
-          : (_useNativeBar
-                ? 0.0
-                : AppNavBar.bottomPaddingWithoutInset));
+          : (_useNativeBar ? 0.0 : AppNavBar.bottomPaddingWithoutInset));
 
   Widget _tabNavigator(int index, double barExtent) {
     return Navigator(

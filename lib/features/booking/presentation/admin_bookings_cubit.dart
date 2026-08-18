@@ -113,10 +113,7 @@ class AdminBookingsCubit extends Cubit<AdminBookingsState> {
   Future<void> load({bool silent = false}) async {
     if (!silent) {
       emit(
-        state.copyWith(
-          status: AdminBookingsStatus.loading,
-          clearFailure: true,
-        ),
+        state.copyWith(status: AdminBookingsStatus.loading, clearFailure: true),
       );
     }
 
@@ -162,9 +159,7 @@ class AdminBookingsCubit extends Cubit<AdminBookingsState> {
   }
 
   Future<void> setDate(DateTime? date) async {
-    final day = date == null
-        ? null
-        : DateTime(date.year, date.month, date.day);
+    final day = date == null ? null : DateTime(date.year, date.month, date.day);
     if (day == state.date) return;
     emit(
       day == null ? state.copyWith(clearDate: true) : state.copyWith(date: day),

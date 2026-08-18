@@ -120,13 +120,7 @@ class CustomerOrderItem extends Equatable {
   final String? notes;
 
   @override
-  List<Object?> get props => [
-    dishName,
-    quantity,
-    linePence,
-    spiceLevel,
-    notes,
-  ];
+  List<Object?> get props => [dishName, quantity, linePence, spiceLevel, notes];
 }
 
 /// An order as the customer's own history shows it.

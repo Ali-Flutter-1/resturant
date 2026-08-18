@@ -20,6 +20,7 @@ import '../domain/admin_order.dart';
 import '../domain/admin_order_repository.dart';
 import 'admin_orders_cubit.dart';
 import '../../auth/session_refresh.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The kitchen queue.
 ///
@@ -54,6 +55,7 @@ class _QueueView extends StatefulWidget {
 class _QueueViewState extends State<_QueueView> {
   final _search = TextEditingController();
   Timer? _poll;
+  AppLifecycleListener? _lifecycle;
 
   @override
   void initState() {
@@ -61,6 +63,25 @@ class _QueueViewState extends State<_QueueView> {
     // The queue changes because customers order, not because staff refresh. The
     // guide notes there is no realtime subscription yet, so this polls — quietly,
     // so a ticket never disappears under someone's hand mid-read.
+    _startPolling();
+
+    // Stopped while the app is backgrounded. A kitchen tablet left on the queue
+    // overnight would otherwise make three requests a minute until morning.
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        if (!mounted) return;
+        context.read<AdminOrdersCubit>().load(silent: true);
+        _startPolling();
+      },
+      onPause: () {
+        _poll?.cancel();
+        _poll = null;
+      },
+    );
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
     _poll = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted) context.read<AdminOrdersCubit>().load(silent: true);
     });
@@ -69,6 +90,7 @@ class _QueueViewState extends State<_QueueView> {
   @override
   void dispose() {
     _poll?.cancel();
+    _lifecycle?.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -146,11 +168,11 @@ class _QueueViewState extends State<_QueueView> {
                             filtered: state.filter != null,
                           )
                         : ListView.separated(
-                            padding: EdgeInsets.fromLTRB(
-                              AppSpacing.gutter,
-                              0,
-                              AppSpacing.gutter,
-                              AppSpacing.x12 +
+                            padding: pagePadding(
+                              context,
+                              top: 0,
+                              bottom:
+                                  AppSpacing.x12 +
                                   MediaQuery.paddingOf(context).bottom,
                             ),
                             itemCount: state.visible.length,
@@ -572,11 +594,10 @@ class _OrderDetailState extends State<_OrderDetail> {
         final busy = state.busyIds.contains(order.id);
 
         return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.gutter,
-            0,
-            AppSpacing.gutter,
-            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+          padding: pagePadding(
+            context,
+            top: 0,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -763,11 +784,10 @@ Future<String?> _askReason(BuildContext context, OrderStatus status) {
     subtitle: 'The customer is told, so a reason helps.',
     child: Builder(
       builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.gutter,
-          0,
-          AppSpacing.gutter,
-          MediaQuery.viewInsetsOf(sheetContext).bottom + AppSpacing.x4,
+        padding: pagePadding(
+          context,
+          top: 0,
+          bottom: MediaQuery.viewInsetsOf(sheetContext).bottom + AppSpacing.x4,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

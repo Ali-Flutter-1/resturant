@@ -22,6 +22,7 @@ import '../../cart/cart_cubit.dart';
 import 'order_tracker.dart';
 import 'orders_cubit.dart';
 import '../../auth/session_refresh.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The customer's orders: what is happening now, and what happened before.
 ///
@@ -65,6 +66,7 @@ class _MyOrdersView extends StatefulWidget {
 
 class _MyOrdersViewState extends State<_MyOrdersView> {
   Timer? _poll;
+  AppLifecycleListener? _lifecycle;
 
   @override
   void initState() {
@@ -76,21 +78,43 @@ class _MyOrdersViewState extends State<_MyOrdersView> {
     //
     // Thirty seconds, and only while something is actually in progress: see the
     // listener below, which stops the timer the moment the last order settles.
+    _startPolling();
+
+    // Backgrounding stops it, resuming reads once and starts again. Without
+    // this the timer keeps firing on a suspended app — a request every thirty
+    // seconds, on mobile data, for a screen nobody is looking at.
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        if (!mounted) return;
+        context.read<OrdersCubit>().load(silent: true);
+        _startPolling();
+      },
+      onPause: _stopPolling,
+    );
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
     _poll = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) context.read<OrdersCubit>().load(silent: true);
     });
   }
 
+  void _stopPolling() {
+    _poll?.cancel();
+    _poll = null;
+  }
+
   @override
   void dispose() {
     _poll?.cancel();
+    _lifecycle?.dispose();
     super.dispose();
   }
 
   void _stopPollingIfSettled(OrdersState state) {
     if (state.status == OrdersStatus.ready && state.live.isEmpty) {
-      _poll?.cancel();
-      _poll = null;
+      _stopPolling();
     }
   }
 
@@ -137,11 +161,10 @@ class _MyOrdersViewState extends State<_MyOrdersView> {
             onRefresh: () =>
                 refreshWithSession(context, () => cubit.load(silent: true)),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.x4,
-                AppSpacing.gutter,
-                AppSpacing.x12,
+              padding: pagePadding(
+                context,
+                top: AppSpacing.x4,
+                bottom: AppSpacing.x12,
               ),
               children: [
                 if (live.isNotEmpty) ...[
@@ -463,11 +486,10 @@ void _showReceipt(BuildContext context, CustomerOrder order) {
     // sheet to the height cap and then clipped the total off the bottom.
     child: Builder(
       builder: (context) => SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.gutter,
-          0,
-          AppSpacing.gutter,
-          AppSpacing.x2 + MediaQuery.paddingOf(context).bottom,
+        padding: pagePadding(
+          context,
+          top: 0,
+          bottom: AppSpacing.x2 + MediaQuery.paddingOf(context).bottom,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -9,6 +9,7 @@ import '../../../shared/widgets/admin_nav.dart';
 import '../domain/admin_order.dart';
 import '../../../shared/widgets/metric_card.dart';
 import '../../../shared/widgets/order_row.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// Thousands separators, so a counting figure doesn't lurch as it crosses a
 /// power of ten.
@@ -69,11 +70,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       appBar: buildAdminAppBar(context),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.gutter,
-          AppSpacing.x2,
-          AppSpacing.gutter,
-          AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+        padding: pagePadding(
+          context,
+          top: AppSpacing.x2,
+          bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
         ),
         children: [
           Text(

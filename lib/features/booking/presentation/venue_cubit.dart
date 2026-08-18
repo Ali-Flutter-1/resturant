@@ -40,8 +40,10 @@ class VenueState extends Equatable {
   /// Tables or slots with a write in flight, so only that row is disabled.
   final Set<String> busyIds;
 
-  List<VenueTable> get liveTables =>
-      [for (final t in tables) if (!t.isArchived) t];
+  List<VenueTable> get liveTables => [
+    for (final t in tables)
+      if (!t.isArchived) t,
+  ];
 
   /// Sittings grouped by day, in service order — which is how a schedule is
   /// read.

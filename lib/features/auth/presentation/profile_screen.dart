@@ -12,6 +12,7 @@ import '../../../shared/widgets/skeleton.dart';
 import '../auth_cubit.dart';
 import 'account_panel.dart';
 import 'auth_form_parts.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The signed-in person's own account, whatever their role.
 ///
@@ -73,11 +74,10 @@ class ProfileScreen extends StatelessWidget {
           return RefreshIndicator(
             onRefresh: () => context.read<AuthCubit>().refreshUser(),
             child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.x5,
-                AppSpacing.gutter,
-                AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+              padding: pagePadding(
+                context,
+                top: AppSpacing.x5,
+                bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
               ),
               children: [
                 _Identity(user: user),
@@ -513,11 +513,10 @@ class _EditProfileFormState extends State<_EditProfileForm> {
     // child's height, so with the keyboard up an unscrollable column puts its
     // own submit button out of reach.
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        0,
-        AppSpacing.gutter,
-        MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+      padding: pagePadding(
+        context,
+        top: 0,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

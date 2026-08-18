@@ -38,6 +38,7 @@ abstract final class Skeleton {
     required Widget Function(BuildContext, int) itemBuilder,
     double spacing = AppSpacing.x3,
     EdgeInsetsGeometry? padding,
+
     /// Set when the placeholder sits inside another scrollable, which would
     /// otherwise give this list unbounded height and fail to lay out.
     bool shrinkWrap = false,
@@ -81,7 +82,11 @@ class _Block extends StatelessWidget {
 /// Placeholder rows shaped like a message in the contact inbox: a status dot, a
 /// name and status, a subject, and two lines of the message.
 class MessageListSkeleton extends StatelessWidget {
-  const MessageListSkeleton({super.key, this.rows = 5, this.shrinkWrap = false});
+  const MessageListSkeleton({
+    super.key,
+    this.rows = 5,
+    this.shrinkWrap = false,
+  });
 
   final int rows;
 

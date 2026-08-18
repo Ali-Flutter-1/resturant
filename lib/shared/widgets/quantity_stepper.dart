@@ -73,11 +73,10 @@ class QuantityStepper extends StatelessWidget {
                   child: child,
                 ),
               ),
-              layoutBuilder: (current, previous) =>
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [...previous, ?current],
-                  ),
+              layoutBuilder: (current, previous) => Stack(
+                alignment: Alignment.center,
+                children: [...previous, ?current],
+              ),
               child: Text(
                 '$value',
                 key: ValueKey(value),

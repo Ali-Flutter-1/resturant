@@ -9,6 +9,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../shared/widgets/app_buttons.dart';
 import 'auth_cubit.dart';
 import 'presentation/auth_form_parts.dart';
+import '../../shared/widgets/page_body.dart';
 
 /// Create an account.
 ///
@@ -129,11 +130,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           final formError = showServer ? state.error : null;
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.gutter,
-              AppSpacing.x4,
-              AppSpacing.gutter,
-              AppSpacing.x12,
+            padding: pagePadding(
+              context,
+              top: AppSpacing.x4,
+              bottom: AppSpacing.x12,
             ),
             children: [
               Text('Create an account', style: context.texts.displayLarge),

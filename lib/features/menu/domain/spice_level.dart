@@ -23,13 +23,11 @@ enum SpiceLevel {
   ///
   /// Tolerant on purpose: an order placed before the backend renamed a value
   /// should show no spice rather than fail the whole receipt.
-  static SpiceLevel? tryParse(Object? value) => switch (value
-      ?.toString()
-      .trim()
-      .toLowerCase()) {
-    'low' => low,
-    'mid' || 'medium' => mid,
-    'high' || 'hot' => high,
-    _ => null,
-  };
+  static SpiceLevel? tryParse(Object? value) =>
+      switch (value?.toString().trim().toLowerCase()) {
+        'low' => low,
+        'mid' || 'medium' => mid,
+        'high' || 'hot' => high,
+        _ => null,
+      };
 }

@@ -15,6 +15,7 @@ import '../../../shared/animations/fly_to_cart.dart';
 import '../../../shared/widgets/cart_icon_button.dart';
 import '../../../shared/widgets/dish_image.dart';
 import '../../../shared/widgets/quantity_stepper.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// One dish in full: photograph, provenance, required spice level, optional
 /// add-ons, and a running total that updates as choices are made.
@@ -141,11 +142,10 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.x5,
-                AppSpacing.gutter,
-                AppSpacing.x8,
+              padding: pagePadding(
+                context,
+                top: AppSpacing.x5,
+                bottom: AppSpacing.x8,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,7 +205,8 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
                       badge: 'Optional',
                       child: Row(
                         children: [
-                          for (final (i, level) in SpiceLevel.values.indexed) ...[
+                          for (final (i, level)
+                              in SpiceLevel.values.indexed) ...[
                             if (i > 0) const SizedBox(width: AppSpacing.x3),
                             Expanded(
                               child: _SpiceOption(
@@ -525,12 +526,7 @@ class _AddToCartBar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        AppSpacing.x3,
-        AppSpacing.gutter,
-        AppSpacing.x3,
-      ),
+      padding: pagePadding(context, top: AppSpacing.x3, bottom: AppSpacing.x3),
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(top: BorderSide(color: context.surfaces.line)),

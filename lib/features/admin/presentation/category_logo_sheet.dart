@@ -76,9 +76,10 @@ class _CategoryLogoSheetState extends State<_CategoryLogoSheet> {
     });
 
     try {
-      final updated = await context
-          .read<AdminMenuRepository>()
-          .setCategoryLogo(_category.id, file.path);
+      final updated = await context.read<AdminMenuRepository>().setCategoryLogo(
+        _category.id,
+        file.path,
+      );
       if (!mounted) return;
       AppHaptics.success();
       setState(() {

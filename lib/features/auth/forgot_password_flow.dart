@@ -13,6 +13,7 @@ import '../../shared/widgets/app_buttons.dart';
 import '../../shared/widgets/app_sheet.dart';
 import 'auth_cubit.dart';
 import 'presentation/auth_form_parts.dart';
+import '../../shared/widgets/page_body.dart';
 
 /// Resetting a forgotten password: email, then a six-digit code, then the new
 /// password.
@@ -284,11 +285,10 @@ class _ForgotPasswordFlowState extends State<ForgotPasswordFlow> {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.gutter,
-          AppSpacing.x4,
-          AppSpacing.gutter,
-          AppSpacing.x12,
+        padding: pagePadding(
+          context,
+          top: AppSpacing.x4,
+          bottom: AppSpacing.x12,
         ),
         children: [
           _StepIndicator(step: _step),

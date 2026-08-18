@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The splash: photograph, logo, promise. No controls.
 ///
@@ -26,11 +27,10 @@ class WelcomeScreen extends StatelessWidget {
           const _HeroBackdrop(),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.gutter,
-                AppSpacing.gutter,
-                AppSpacing.x12,
+              padding: pagePadding(
+                context,
+                top: AppSpacing.gutter,
+                bottom: AppSpacing.x12,
               ),
               child: const Column(children: [Expanded(child: _Branding())]),
             ),

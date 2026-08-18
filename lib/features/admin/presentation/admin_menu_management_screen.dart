@@ -20,6 +20,7 @@ import 'category_logo_sheet.dart';
 import 'admin_menu_cubit.dart';
 import 'dish_editor_sheet.dart';
 import '../../auth/session_refresh.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// What's on and what's off tonight.
 ///
@@ -236,12 +237,11 @@ class _AdminMenuViewState extends State<_AdminMenuView> {
                     child: visible.isEmpty
                         ? _EmptyMenu(filtered: state.isFilteredEmpty)
                         : ListView.separated(
-                            padding: EdgeInsets.fromLTRB(
-                              AppSpacing.gutter,
-                              0,
-                              AppSpacing.gutter,
-                              // Clear the FAB as well as the tab bar.
-                              AppSpacing.x12 +
+                            padding: pagePadding(
+                              context,
+                              top: 0,
+                              bottom: // Clear the FAB as well as the tab bar.
+                                  AppSpacing.x12 +
                                   MediaQuery.paddingOf(context).bottom,
                             ),
                             itemCount: visible.length,

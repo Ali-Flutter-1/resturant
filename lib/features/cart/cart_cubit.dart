@@ -28,18 +28,18 @@ class CartLine extends Equatable {
     String? notes,
     SpiceLevel? spiceLevel,
   }) => CartLine(
-        dishId: dish.id,
-        title: dish.name,
-        displayPricePence: dish.pricePence,
-        quantity: quantity,
-        notes: (notes?.trim().isEmpty ?? true) ? null : notes!.trim(),
-        // Dropped for a dish that does not offer the choice, rather than sent
-        // and refused with SPICE_LEVEL_NOT_OFFERED. A stale selection is the
-        // app's problem to discard, not the customer's to see an error for.
-        spiceLevel: dish.hasSpiceLevels ? spiceLevel : null,
-        // Carried so the checkout can refuse a slot the kitchen cannot make.
-        prepMaxMinutes: dish.prepMaxMinutes,
-      );
+    dishId: dish.id,
+    title: dish.name,
+    displayPricePence: dish.pricePence,
+    quantity: quantity,
+    notes: (notes?.trim().isEmpty ?? true) ? null : notes!.trim(),
+    // Dropped for a dish that does not offer the choice, rather than sent
+    // and refused with SPICE_LEVEL_NOT_OFFERED. A stale selection is the
+    // app's problem to discard, not the customer's to see an error for.
+    spiceLevel: dish.hasSpiceLevels ? spiceLevel : null,
+    // Carried so the checkout can refuse a slot the kitchen cannot make.
+    prepMaxMinutes: dish.prepMaxMinutes,
+  );
 
   final String dishId;
   final String title;

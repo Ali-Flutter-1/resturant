@@ -15,6 +15,7 @@ import '../../auth/session_refresh.dart';
 import '../domain/reservation_repository.dart';
 import '../domain/venue_table.dart';
 import 'venue_cubit.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The room and the timetable. Admin only.
 ///
@@ -103,49 +104,44 @@ class _TablesTab extends StatelessWidget {
       onRefresh: () =>
           refreshWithSession(context, () => cubit.load(silent: true)),
       child: ListView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.gutter,
-          AppSpacing.x4,
-          AppSpacing.gutter,
-          AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+        padding: pagePadding(
+          context,
+          top: AppSpacing.x4,
+          bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
         ),
-        children:
-            [
-              // On its own row. "New table" is an app-bar action, where a
-              // primary create belongs, rather than competing with a filter.
-              Align(
-                alignment: Alignment.centerLeft,
-                child: SelectableChip(
-                  label: 'Show archived',
-                  selected: state.includeArchived,
-                  onSelected: () => cubit.showArchived(!state.includeArchived),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.x4),
-              // The state an admin lands in after adding their first table and
-              // wondering why nobody can book: the room exists, the timetable
-              // does not. Said here rather than left to be discovered.
-              if (state.liveTables.isNotEmpty && state.slots.isEmpty) ...[
-                _NothingBookable(),
-                const SizedBox(height: AppSpacing.x4),
-              ],
-              if (state.tables.isEmpty)
-                _Empty(
-                  icon: Icons.table_restaurant_outlined,
-                  title: 'No tables yet',
-                  body:
-                      'Add the room first. Sittings are generated per table, so '
-                      'nothing can be booked until at least one exists.',
-                )
-              else
-                for (final table in state.tables) ...[
-                  _TableCard(
-                    table: table,
-                    busy: state.busyIds.contains(table.id),
-                  ),
-                  const SizedBox(height: AppSpacing.x3),
-                ],
-            ].revealStaggered(),
+        children: [
+          // On its own row. "New table" is an app-bar action, where a
+          // primary create belongs, rather than competing with a filter.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelectableChip(
+              label: 'Show archived',
+              selected: state.includeArchived,
+              onSelected: () => cubit.showArchived(!state.includeArchived),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x4),
+          // The state an admin lands in after adding their first table and
+          // wondering why nobody can book: the room exists, the timetable
+          // does not. Said here rather than left to be discovered.
+          if (state.liveTables.isNotEmpty && state.slots.isEmpty) ...[
+            _NothingBookable(),
+            const SizedBox(height: AppSpacing.x4),
+          ],
+          if (state.tables.isEmpty)
+            _Empty(
+              icon: Icons.table_restaurant_outlined,
+              title: 'No tables yet',
+              body:
+                  'Add the room first. Sittings are generated per table, so '
+                  'nothing can be booked until at least one exists.',
+            )
+          else
+            for (final table in state.tables) ...[
+              _TableCard(table: table, busy: state.busyIds.contains(table.id)),
+              const SizedBox(height: AppSpacing.x3),
+            ],
+        ].revealStaggered(),
       ),
     );
   }
@@ -442,11 +438,10 @@ class _TableFormState extends State<_TableForm> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        0,
-        AppSpacing.gutter,
-        MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+      padding: pagePadding(
+        context,
+        top: 0,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,7 +483,9 @@ class _TableFormState extends State<_TableForm> {
                 SelectableChip(
                   label: area.label,
                   selected: _area == area,
-                  onSelected: _saving ? null : () => setState(() => _area = area),
+                  onSelected: _saving
+                      ? null
+                      : () => setState(() => _area = area),
                 ),
             ],
           ),
@@ -560,62 +557,58 @@ class _SittingsTab extends StatelessWidget {
       onRefresh: () =>
           refreshWithSession(context, () => cubit.load(silent: true)),
       child: ListView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.gutter,
-          AppSpacing.x4,
-          AppSpacing.gutter,
-          AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+        padding: pagePadding(
+          context,
+          top: AppSpacing.x4,
+          bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
         ),
-        children:
-            [
-              if (state.liveTables.isEmpty)
-                _Empty(
-                  icon: Icons.event_busy_outlined,
-                  title: 'Add a table first',
-                  body: 'Sittings belong to a table, so there is nothing to '
-                      'schedule yet.',
-                )
-              else ...[
-                FilledButton.icon(
-                  onPressed: () => _generate(context, state),
-                  icon: const Icon(Icons.auto_awesome, size: AppIconSize.md),
-                  label: const Text('Generate sittings'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
+        children: [
+          if (state.liveTables.isEmpty)
+            _Empty(
+              icon: Icons.event_busy_outlined,
+              title: 'Add a table first',
+              body:
+                  'Sittings belong to a table, so there is nothing to '
+                  'schedule yet.',
+            )
+          else ...[
+            FilledButton.icon(
+              onPressed: () => _generate(context, state),
+              icon: const Icon(Icons.auto_awesome, size: AppIconSize.md),
+              label: const Text('Generate sittings'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.x3),
+            _TableFilter(state: state),
+            const SizedBox(height: AppSpacing.x4),
+            if (days.isEmpty)
+              _Empty(
+                icon: Icons.event_note_outlined,
+                title: 'Nothing scheduled',
+                body:
+                    'No sittings between ${_day(state.from)} and '
+                    '${_day(state.to)}. Generate some — customers see an '
+                    'empty day until you do.',
+              )
+            else
+              for (final entry in days.entries) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.x2),
+                  child: Text(
+                    _day(entry.key),
+                    style: context.texts.titleMedium,
                   ),
                 ),
+                for (final slot in entry.value) ...[
+                  _SlotRow(slot: slot, busy: state.busyIds.contains(slot.id)),
+                  const SizedBox(height: AppSpacing.x2),
+                ],
                 const SizedBox(height: AppSpacing.x3),
-                _TableFilter(state: state),
-                const SizedBox(height: AppSpacing.x4),
-                if (days.isEmpty)
-                  _Empty(
-                    icon: Icons.event_note_outlined,
-                    title: 'Nothing scheduled',
-                    body:
-                        'No sittings between ${_day(state.from)} and '
-                        '${_day(state.to)}. Generate some — customers see an '
-                        'empty day until you do.',
-                  )
-                else
-                  for (final entry in days.entries) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.x2),
-                      child: Text(
-                        _day(entry.key),
-                        style: context.texts.titleMedium,
-                      ),
-                    ),
-                    for (final slot in entry.value) ...[
-                      _SlotRow(
-                        slot: slot,
-                        busy: state.busyIds.contains(slot.id),
-                      ),
-                      const SizedBox(height: AppSpacing.x2),
-                    ],
-                    const SizedBox(height: AppSpacing.x3),
-                  ],
               ],
-            ].revealStaggered(),
+          ],
+        ].revealStaggered(),
       ),
     );
   }
@@ -883,11 +876,10 @@ class _GenerateFormState extends State<_GenerateForm> {
     final tooMany = preview.perDay >= 24;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        0,
-        AppSpacing.gutter,
-        MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+      padding: pagePadding(
+        context,
+        top: 0,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -915,7 +907,10 @@ class _GenerateFormState extends State<_GenerateForm> {
           ),
           const SizedBox(height: AppSpacing.x3),
 
-          Text('Which days (all if none picked)', style: context.texts.bodySmall),
+          Text(
+            'Which days (all if none picked)',
+            style: context.texts.bodySmall,
+          ),
           const SizedBox(height: AppSpacing.x2),
           Wrap(
             spacing: AppSpacing.x2,
@@ -937,7 +932,10 @@ class _GenerateFormState extends State<_GenerateForm> {
           ),
           const SizedBox(height: AppSpacing.x4),
 
-          Text('Which tables (all if none picked)', style: context.texts.bodySmall),
+          Text(
+            'Which tables (all if none picked)',
+            style: context.texts.bodySmall,
+          ),
           const SizedBox(height: AppSpacing.x2),
           Wrap(
             spacing: AppSpacing.x2,
@@ -1031,8 +1029,10 @@ class _GenerateFormState extends State<_GenerateForm> {
                 ),
                 if (preview.starts.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.x1),
-                  Text(preview.starts.join('  ·  '),
-                      style: context.texts.bodyMedium),
+                  Text(
+                    preview.starts.join('  ·  '),
+                    style: context.texts.bodyMedium,
+                  ),
                   const SizedBox(height: AppSpacing.x1),
                   Text(
                     'The last table is free again at ${preview.lastEnds}. '
@@ -1169,11 +1169,7 @@ class _Field extends StatelessWidget {
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
+  const _Empty({required this.icon, required this.title, required this.body});
 
   final IconData icon;
   final String title;

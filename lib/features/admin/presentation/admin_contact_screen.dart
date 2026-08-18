@@ -15,6 +15,7 @@ import '../domain/admin_contact_repository.dart';
 import '../domain/contact_message.dart';
 import 'admin_contact_cubit.dart';
 import '../../auth/session_refresh.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The inbox behind the customers' Contact Us form.
 ///
@@ -88,11 +89,11 @@ class _InboxView extends StatelessWidget {
                             searched: state.isSearchEmpty,
                           )
                         : ListView.separated(
-                            padding: EdgeInsets.fromLTRB(
-                              AppSpacing.gutter,
-                              0,
-                              AppSpacing.gutter,
-                              AppSpacing.x12 +
+                            padding: pagePadding(
+                              context,
+                              top: 0,
+                              bottom:
+                                  AppSpacing.x12 +
                                   MediaQuery.paddingOf(context).bottom,
                             ),
                             itemCount: state.visible.length,
@@ -441,11 +442,10 @@ class _MessageDetailState extends State<_MessageDetail> {
         // bottom with no way to reach it. The keyboard's own inset is added to
         // the padding so the last field can always be scrolled clear of it.
         return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.gutter,
-            0,
-            AppSpacing.gutter,
-            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+          padding: pagePadding(
+            context,
+            top: 0,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

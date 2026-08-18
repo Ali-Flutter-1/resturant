@@ -210,7 +210,8 @@ class VenueSlot extends Equatable {
   String get endsLabel {
     final parts = startTime.split(':');
     if (parts.length < 2) return '';
-    final start = (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
+    final start =
+        (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
     final end = start + durationMinutes + bufferMinutes;
     // Wraps past midnight, which a late sitting legitimately does.
     final hour = (end ~/ 60) % 24;
@@ -326,7 +327,9 @@ class SlotPreview extends Equatable {
       starts: starts,
       lastEnds: starts.isEmpty
           ? ''
-          : _label(first + (starts.length - 1) * step + turnMinutes + bufferMinutes),
+          : _label(
+              first + (starts.length - 1) * step + turnMinutes + bufferMinutes,
+            ),
     );
   }
 

@@ -14,7 +14,8 @@ class OpeningHoursSection extends StatelessWidget {
   const OpeningHoursSection({super.key});
 
   @override
-  Widget build(BuildContext context) => const OpeningHoursCard(withHeading: true);
+  Widget build(BuildContext context) =>
+      const OpeningHoursCard(withHeading: true);
 }
 
 /// The week, for a customer.

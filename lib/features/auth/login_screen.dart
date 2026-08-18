@@ -12,6 +12,7 @@ import 'auth_cubit.dart';
 import 'presentation/auth_form_parts.dart';
 import 'register_screen.dart';
 import 'forgot_password_flow.dart';
+import '../../shared/widgets/page_body.dart';
 
 /// Sign-in.
 ///
@@ -140,11 +141,10 @@ class _LoginScreenState extends State<LoginScreen> {
           final formError = showServer ? state.error : null;
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.gutter,
-              AppSpacing.x4,
-              AppSpacing.gutter,
-              AppSpacing.x12,
+            padding: pagePadding(
+              context,
+              top: AppSpacing.x4,
+              bottom: AppSpacing.x12,
             ),
             children: [
               Text('Welcome back', style: context.texts.displayLarge),

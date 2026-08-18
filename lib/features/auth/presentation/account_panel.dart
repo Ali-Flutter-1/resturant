@@ -8,6 +8,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/app_sheet.dart';
 import '../auth_cubit.dart';
 import 'auth_form_parts.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// Who you are signed in as, and the three things you can do about it.
 ///
@@ -174,11 +175,10 @@ class _ChangePasswordFormState extends State<_ChangePasswordForm> {
     // child's height, so with the keyboard up an unscrollable column puts its
     // own submit button out of reach.
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        0,
-        AppSpacing.gutter,
-        MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+      padding: pagePadding(
+        context,
+        top: 0,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -275,11 +275,10 @@ class _DeleteAccountFormState extends State<_DeleteAccountForm> {
     // child's height, so with the keyboard up an unscrollable column puts its
     // own submit button out of reach.
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        0,
-        AppSpacing.gutter,
-        MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+      padding: pagePadding(
+        context,
+        top: 0,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

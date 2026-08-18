@@ -16,6 +16,7 @@ import '../../auth/session_refresh.dart';
 import '../domain/reservation.dart';
 import '../domain/reservation_repository.dart';
 import 'my_bookings_cubit.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The customer's table bookings.
 class MyBookingsScreen extends StatelessWidget {
@@ -50,10 +51,7 @@ class _MyBookingsView extends StatelessWidget {
         title: const Text('My bookings'),
         leading: onBack == null
             ? null
-            : IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: onBack,
-              ),
+            : IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
       ),
       body: BlocBuilder<MyBookingsCubit, MyBookingsState>(
         builder: (context, state) {
@@ -79,56 +77,46 @@ class _MyBookingsView extends StatelessWidget {
             onRefresh: () =>
                 refreshWithSession(context, () => cubit.load(silent: true)),
             child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.x4,
-                AppSpacing.gutter,
-                AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+              padding: pagePadding(
+                context,
+                top: AppSpacing.x4,
+                bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
               ),
-              children:
-                  [
-                    if (live.isNotEmpty) ...[
-                      _Heading(
-                        live.length == 1 ? 'Your booking' : 'Your bookings',
-                      ),
-                      for (final booking in live)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: AppSpacing.x3,
+              children: [
+                if (live.isNotEmpty) ...[
+                  _Heading(live.length == 1 ? 'Your booking' : 'Your bookings'),
+                  for (final booking in live)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                      child: _BookingRow(booking: booking),
+                    ),
+                ],
+                if (past.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.x3),
+                  const _Heading('Earlier'),
+                  for (final booking in past)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                      child: _BookingRow(booking: booking),
+                    ),
+                ],
+                if (state.hasMore)
+                  Center(
+                    child: state.loadingMore
+                        ? const Padding(
+                            padding: EdgeInsets.all(AppSpacing.x3),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : OutlinedButton(
+                            onPressed: cubit.loadMore,
+                            child: const Text('Load more'),
                           ),
-                          child: _BookingRow(booking: booking),
-                        ),
-                    ],
-                    if (past.isNotEmpty) ...[
-                      const SizedBox(height: AppSpacing.x3),
-                      const _Heading('Earlier'),
-                      for (final booking in past)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: AppSpacing.x3,
-                          ),
-                          child: _BookingRow(booking: booking),
-                        ),
-                    ],
-                    if (state.hasMore)
-                      Center(
-                        child: state.loadingMore
-                            ? const Padding(
-                                padding: EdgeInsets.all(AppSpacing.x3),
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : OutlinedButton(
-                                onPressed: cubit.loadMore,
-                                child: const Text('Load more'),
-                              ),
-                      ),
-                  ].revealStaggered(),
+                  ),
+              ].revealStaggered(),
             ),
           );
         },
@@ -339,11 +327,10 @@ class _BookingDetailState extends State<_BookingDetail> {
         }
 
         return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.gutter,
-            0,
-            AppSpacing.gutter,
-            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+          padding: pagePadding(
+            context,
+            top: 0,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +348,10 @@ class _BookingDetailState extends State<_BookingDetail> {
                 ],
               ),
               const SizedBox(height: AppSpacing.x3),
-              Text(booking.status.customerNote, style: context.texts.bodyMedium),
+              Text(
+                booking.status.customerNote,
+                style: context.texts.bodyMedium,
+              ),
 
               if (booking.status == ReservationStatus.pending &&
                   booking.timeLeft != null) ...[
@@ -587,9 +577,11 @@ class _NoBookings extends StatelessWidget {
 String _dayLabel(DateTime date) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  final difference = DateTime(date.year, date.month, date.day)
-      .difference(today)
-      .inDays;
+  final difference = DateTime(
+    date.year,
+    date.month,
+    date.day,
+  ).difference(today).inDays;
   if (difference == 0) return 'Today';
   if (difference == 1) return 'Tomorrow';
   if (difference == -1) return 'Yesterday';

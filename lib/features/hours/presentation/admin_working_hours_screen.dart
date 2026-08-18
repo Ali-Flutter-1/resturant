@@ -13,6 +13,7 @@ import '../../auth/session_refresh.dart';
 import '../domain/working_hours.dart';
 import '../domain/working_hours_repository.dart';
 import 'working_hours_cubit.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// Setting the week. Admin only.
 class AdminWorkingHoursScreen extends StatelessWidget {
@@ -74,25 +75,23 @@ class _AdminHoursView extends StatelessWidget {
               onRefresh: () =>
                   refreshWithSession(context, () => cubit.load(silent: true)),
               child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.gutter,
-                  AppSpacing.x4,
-                  AppSpacing.gutter,
-                  AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+                padding: pagePadding(
+                  context,
+                  top: AppSpacing.x4,
+                  bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
                 ),
-                children:
-                    [
-                      const _Notice(),
-                      const SizedBox(height: AppSpacing.x4),
-                      for (final day in state.draft) ...[
-                        _DayRow(
-                          day: day,
-                          isConfigured: state.saved.isConfigured(day.weekday),
-                          busy: state.saving,
-                        ),
-                        const SizedBox(height: AppSpacing.x3),
-                      ],
-                    ].revealStaggered(),
+                children: [
+                  const _Notice(),
+                  const SizedBox(height: AppSpacing.x4),
+                  for (final day in state.draft) ...[
+                    _DayRow(
+                      day: day,
+                      isConfigured: state.saved.isConfigured(day.weekday),
+                      busy: state.saving,
+                    ),
+                    const SizedBox(height: AppSpacing.x3),
+                  ],
+                ].revealStaggered(),
               ),
             ),
           },
@@ -156,10 +155,7 @@ class _DayRow extends StatelessWidget {
   final bool isConfigured;
   final bool busy;
 
-  Future<void> _pick(
-    BuildContext context, {
-    required bool opening,
-  }) async {
+  Future<void> _pick(BuildContext context, {required bool opening}) async {
     final current = opening ? day.opensAt : day.closesAt;
     final parts = current?.split(':');
     final picked = await showTimePicker(
@@ -250,7 +246,9 @@ class _DayRow extends StatelessWidget {
                   child: _TimeButton(
                     label: 'Opens',
                     value: day.opensAt,
-                    onPressed: busy ? null : () => _pick(context, opening: true),
+                    onPressed: busy
+                        ? null
+                        : () => _pick(context, opening: true),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.x3),
@@ -310,11 +308,7 @@ class _DayRow extends StatelessWidget {
 }
 
 class _TimeButton extends StatelessWidget {
-  const _TimeButton({
-    required this.label,
-    required this.value,
-    this.onPressed,
-  });
+  const _TimeButton({required this.label, required this.value, this.onPressed});
 
   final String label;
   final String? value;
@@ -364,11 +358,10 @@ class _SaveBar extends StatelessWidget {
     final blocked = state.incomplete.isNotEmpty || state.backwards.isNotEmpty;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        AppSpacing.x3,
-        AppSpacing.gutter,
-        AppSpacing.x3 + MediaQuery.paddingOf(context).bottom,
+      padding: pagePadding(
+        context,
+        top: AppSpacing.x3,
+        bottom: AppSpacing.x3 + MediaQuery.paddingOf(context).bottom,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,

@@ -17,6 +17,7 @@ import '../../booking/domain/reservation.dart';
 import '../../booking/domain/reservation_repository.dart';
 import '../../booking/presentation/admin_bookings_cubit.dart';
 import '../../../shared/widgets/admin_nav.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The booking sheet, for staff and admin.
 ///
@@ -76,11 +77,11 @@ class _AdminReservationsView extends StatelessWidget {
                     child: state.bookings.isEmpty
                         ? _Empty(filter: state.filter)
                         : ListView.separated(
-                            padding: EdgeInsets.fromLTRB(
-                              AppSpacing.gutter,
-                              0,
-                              AppSpacing.gutter,
-                              AppSpacing.x12 +
+                            padding: pagePadding(
+                              context,
+                              top: 0,
+                              bottom:
+                                  AppSpacing.x12 +
                                   MediaQuery.paddingOf(context).bottom,
                             ),
                             itemCount: state.bookings.length,
@@ -282,10 +283,7 @@ class _BookingRow extends StatelessWidget {
               // The sitting time, large: a service sheet is read down the times.
               SizedBox(
                 width: 54,
-                child: Text(
-                  booking.timeLabel,
-                  style: context.texts.titleLarge,
-                ),
+                child: Text(booking.timeLabel, style: context.texts.titleLarge),
               ),
               const SizedBox(width: AppSpacing.x3),
               Expanded(
@@ -407,7 +405,9 @@ class _BookingDetail extends StatelessWidget {
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${ReservationTransitions.actionLabel(status)} this booking'),
+        title: Text(
+          '${ReservationTransitions.actionLabel(status)} this booking',
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,11 +465,10 @@ class _BookingDetail extends StatelessWidget {
         final moves = ReservationTransitions.nextFor(booking.status);
 
         return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.gutter,
-            0,
-            AppSpacing.gutter,
-            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+          padding: pagePadding(
+            context,
+            top: 0,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -659,9 +658,11 @@ class _Empty extends StatelessWidget {
 String _dayLabel(DateTime date) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  final difference = DateTime(date.year, date.month, date.day)
-      .difference(today)
-      .inDays;
+  final difference = DateTime(
+    date.year,
+    date.month,
+    date.day,
+  ).difference(today).inDays;
   if (difference == 0) return 'Today';
   if (difference == 1) return 'Tomorrow';
   if (difference == -1) return 'Yesterday';

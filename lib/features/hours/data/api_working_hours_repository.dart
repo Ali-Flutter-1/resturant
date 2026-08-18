@@ -21,7 +21,9 @@ class ApiWorkingHoursRepository implements WorkingHoursRepository {
     final rows = await _client.list(
       ApiConstants.adminWorkingHours,
       method: 'PUT',
-      body: {'days': [for (final day in days) day.toJson()]},
+      body: {
+        'days': [for (final day in days) day.toJson()],
+      },
     );
     return WorkingHours.fromList(rows);
   }

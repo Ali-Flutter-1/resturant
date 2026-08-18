@@ -16,6 +16,7 @@ import '../../cart/cart_cubit.dart';
 import '../../orders/domain/order_quote.dart';
 import '../../orders/domain/order_repository.dart';
 import 'checkout_cubit.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// Pricing the basket, then placing the order.
 ///
@@ -176,11 +177,10 @@ class _CheckoutViewState extends State<_CheckoutView> {
                   onRetry: () => cubit.quote(),
                 )
               : ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpacing.gutter,
-                    AppSpacing.x4,
-                    AppSpacing.gutter,
-                    AppSpacing.x12,
+                  padding: pagePadding(
+                    context,
+                    top: AppSpacing.x4,
+                    bottom: AppSpacing.x12,
                   ),
                   children: [
                     _MethodPicker(
@@ -553,11 +553,10 @@ class _TimingPanel extends StatelessWidget {
       child: Builder(
         builder: (sheetContext) => ListView(
           shrinkWrap: true,
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.gutter,
-            0,
-            AppSpacing.gutter,
-            AppSpacing.x2 + MediaQuery.paddingOf(sheetContext).bottom,
+          padding: pagePadding(
+            context,
+            top: 0,
+            bottom: AppSpacing.x2 + MediaQuery.paddingOf(sheetContext).bottom,
           ),
           children: [
             for (final slot in slots)
@@ -969,9 +968,7 @@ class _StepIcon extends StatelessWidget {
       label: semanticLabel,
       child: Material(
         color: context.surfaces.ground,
-        shape: CircleBorder(
-          side: BorderSide(color: context.surfaces.line),
-        ),
+        shape: CircleBorder(side: BorderSide(color: context.surfaces.line)),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: enabled

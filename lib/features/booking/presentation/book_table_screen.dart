@@ -18,6 +18,7 @@ import '../../auth/session_refresh.dart';
 import '../domain/reservation.dart';
 import '../domain/reservation_repository.dart';
 import 'booking_cubit.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// Requesting a table.
 ///
@@ -122,7 +123,8 @@ class _BookTableViewState extends State<_BookTableView> {
       builder: (context, state) {
         final cubit = context.read<BookingCubit>();
 
-        if (state.stage == BookingStage.requested && state.reservation != null) {
+        if (state.stage == BookingStage.requested &&
+            state.reservation != null) {
           return _RequestSent(
             reservation: state.reservation!,
             onSeeBookings: widget.onSeeBookings,
@@ -153,34 +155,29 @@ class _BookTableViewState extends State<_BookTableView> {
           body: RefreshIndicator(
             onRefresh: () => refreshWithSession(context, cubit.load),
             child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.x5,
-                AppSpacing.gutter,
-                AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+              padding: pagePadding(
+                context,
+                top: AppSpacing.x5,
+                bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
               ),
-              children:
-                  [
-                    _PartyAndDay(
-                      state: state,
-                      onGuests: cubit.setGuests,
-                      onPickDate: () => _pickDate(cubit, state.date),
-                    ),
-                    const SizedBox(height: AppSpacing.x5),
-                    _Sittings(state: state, onSelect: cubit.select),
-                    const SizedBox(height: AppSpacing.x5),
-                    _WhoFor(
-                      name: _name,
-                      phone: _phone,
-                      requests: _requests,
-                      fieldErrors: state.fieldErrors,
-                    ),
-                    const SizedBox(height: AppSpacing.x5),
-                    _RequestButton(
-                      state: state,
-                      onSubmit: () => _submit(cubit),
-                    ),
-                  ].revealStaggered(),
+              children: [
+                _PartyAndDay(
+                  state: state,
+                  onGuests: cubit.setGuests,
+                  onPickDate: () => _pickDate(cubit, state.date),
+                ),
+                const SizedBox(height: AppSpacing.x5),
+                _Sittings(state: state, onSelect: cubit.select),
+                const SizedBox(height: AppSpacing.x5),
+                _WhoFor(
+                  name: _name,
+                  phone: _phone,
+                  requests: _requests,
+                  fieldErrors: state.fieldErrors,
+                ),
+                const SizedBox(height: AppSpacing.x5),
+                _RequestButton(state: state, onSubmit: () => _submit(cubit)),
+              ].revealStaggered(),
             ),
           ),
         );
@@ -614,9 +611,7 @@ class _RequestButton extends StatelessWidget {
           // Disabled until a sitting is chosen, and while the request is with
           // the server — a second tap has no idempotency key to protect it.
           onPressed: state.canSubmit ? onSubmit : null,
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-          ),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
           child: state.isSubmitting
               ? const SizedBox(
                   width: 20,
@@ -663,88 +658,88 @@ class _RequestSent extends StatelessWidget {
     final colours = context.orderColors;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Request sent'), automaticallyImplyLeading: false),
+      appBar: AppBar(
+        title: const Text('Request sent'),
+        automaticallyImplyLeading: false,
+      ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.gutter,
-          AppSpacing.x8,
-          AppSpacing.gutter,
-          AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+        padding: pagePadding(
+          context,
+          top: AppSpacing.x8,
+          bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
         ),
-        children:
-            [
-              Icon(
-                Icons.mark_email_read_outlined,
-                size: AppIconSize.hero,
-                color: scheme.primary,
-              ),
-              const SizedBox(height: AppSpacing.x4),
-              Text(
-                'Awaiting approval',
-                textAlign: TextAlign.center,
-                style: context.texts.headlineLarge,
-              ),
-              const SizedBox(height: AppSpacing.x2),
-              Text(
-                'Your table is held while the restaurant reviews this. We will '
-                'update your booking as soon as they answer.',
-                textAlign: TextAlign.center,
-                style: context.texts.bodyMedium,
-              ),
-              const SizedBox(height: AppSpacing.x5),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.x4),
-                decoration: BoxDecoration(
-                  color: colours.preparingContainer,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Reference',
-                      style: context.texts.bodySmall?.copyWith(
-                        color: colours.preparing,
-                      ),
-                    ),
-                    // The one thing they need if they ring up, so it is the
-                    // largest text on the screen.
-                    Text(
-                      reservation.reference,
-                      style: AppTypography.money(colours.preparing),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.x4),
-              _SummaryRow(label: 'Table', value: reservation.tableName),
-              _SummaryRow(
-                label: 'When',
-                value:
-                    '${_dayLabel(reservation.serviceDate)}, '
-                    '${reservation.timeLabel}',
-              ),
-              _SummaryRow(label: 'Party', value: reservation.guestLabel),
-              if (!reservation.pricePence.isNegative &&
-                  reservation.pricePence > 0)
-                _SummaryRow(
-                  label: 'Table price',
-                  value: formatBookingPrice(reservation.pricePence),
-                ),
-              const SizedBox(height: AppSpacing.x6),
-              if (onSeeBookings != null)
-                FilledButton(
-                  onPressed: onSeeBookings,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
+        children: [
+          Icon(
+            Icons.mark_email_read_outlined,
+            size: AppIconSize.hero,
+            color: scheme.primary,
+          ),
+          const SizedBox(height: AppSpacing.x4),
+          Text(
+            'Awaiting approval',
+            textAlign: TextAlign.center,
+            style: context.texts.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.x2),
+          Text(
+            'Your table is held while the restaurant reviews this. We will '
+            'update your booking as soon as they answer.',
+            textAlign: TextAlign.center,
+            style: context.texts.bodyMedium,
+          ),
+          const SizedBox(height: AppSpacing.x5),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.x4),
+            decoration: BoxDecoration(
+              color: colours.preparingContainer,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  'Reference',
+                  style: context.texts.bodySmall?.copyWith(
+                    color: colours.preparing,
                   ),
-                  child: const Text('See my bookings'),
                 ),
-              const SizedBox(height: AppSpacing.x2),
-              TextButton(
-                onPressed: onBookAnother,
-                child: const Text('Book another table'),
+                // The one thing they need if they ring up, so it is the
+                // largest text on the screen.
+                Text(
+                  reservation.reference,
+                  style: AppTypography.money(colours.preparing),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.x4),
+          _SummaryRow(label: 'Table', value: reservation.tableName),
+          _SummaryRow(
+            label: 'When',
+            value:
+                '${_dayLabel(reservation.serviceDate)}, '
+                '${reservation.timeLabel}',
+          ),
+          _SummaryRow(label: 'Party', value: reservation.guestLabel),
+          if (!reservation.pricePence.isNegative && reservation.pricePence > 0)
+            _SummaryRow(
+              label: 'Table price',
+              value: formatBookingPrice(reservation.pricePence),
+            ),
+          const SizedBox(height: AppSpacing.x6),
+          if (onSeeBookings != null)
+            FilledButton(
+              onPressed: onSeeBookings,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
               ),
-            ].revealStaggered(),
+              child: const Text('See my bookings'),
+            ),
+          const SizedBox(height: AppSpacing.x2),
+          TextButton(
+            onPressed: onBookAnother,
+            child: const Text('Book another table'),
+          ),
+        ].revealStaggered(),
       ),
     );
   }
@@ -820,9 +815,11 @@ class _Nothing extends StatelessWidget {
 String _dayLabel(DateTime date) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  final difference = DateTime(date.year, date.month, date.day)
-      .difference(today)
-      .inDays;
+  final difference = DateTime(
+    date.year,
+    date.month,
+    date.day,
+  ).difference(today).inDays;
   if (difference == 0) return 'Today';
   if (difference == 1) return 'Tomorrow';
 

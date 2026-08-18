@@ -41,11 +41,15 @@ class MyBookingsState extends Equatable {
   bool get hasMore => page < totalPages;
 
   /// Still holding a table, newest sitting first.
-  List<ReservationSummary> get live =>
-      [for (final b in bookings) if (b.status.isLive) b];
+  List<ReservationSummary> get live => [
+    for (final b in bookings)
+      if (b.status.isLive) b,
+  ];
 
-  List<ReservationSummary> get past =>
-      [for (final b in bookings) if (!b.status.isLive) b];
+  List<ReservationSummary> get past => [
+    for (final b in bookings)
+      if (!b.status.isLive) b,
+  ];
 
   MyBookingsState copyWith({
     BookingsStatus? status,

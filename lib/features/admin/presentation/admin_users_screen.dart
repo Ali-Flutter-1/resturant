@@ -17,6 +17,7 @@ import '../domain/admin_user.dart';
 import '../domain/admin_user_repository.dart';
 import 'admin_users_cubit.dart';
 import '../../auth/session_refresh.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// Accounts, for an administrator.
 ///
@@ -101,11 +102,11 @@ class _UsersViewState extends State<_UsersView> {
                     child: state.users.isEmpty
                         ? _NoUsers(filtered: state.hasFilters)
                         : ListView.separated(
-                            padding: EdgeInsets.fromLTRB(
-                              AppSpacing.gutter,
-                              0,
-                              AppSpacing.gutter,
-                              AppSpacing.x12 +
+                            padding: pagePadding(
+                              context,
+                              top: 0,
+                              bottom:
+                                  AppSpacing.x12 +
                                   MediaQuery.paddingOf(context).bottom,
                             ),
                             // One extra row for the pager at the end.
@@ -653,11 +654,10 @@ class _UserDetail extends StatelessWidget {
         final canAct = user.isEditable && !isSelf && !busy;
 
         return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.gutter,
-            0,
-            AppSpacing.gutter,
-            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
+          padding: pagePadding(
+            context,
+            top: 0,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.x4,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

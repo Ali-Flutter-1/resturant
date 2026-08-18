@@ -17,6 +17,7 @@ import '../domain/dish.dart';
 import '../domain/menu_repository.dart';
 import 'menu_cubit.dart';
 import '../../auth/session_refresh.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The full menu — a filterable list of large photographic cards.
 ///
@@ -84,21 +85,14 @@ class _MenuViewState extends State<_MenuView> {
         // what it actually withheld was the back button, leaving the screen
         // escapable only by the Android system gesture.
         title: const Text("T's Cafe"),
-        actions: [
-          NotificationBell(onOpen: () => openNotifications(context)),
-        ],
+        actions: [NotificationBell(onOpen: () => openNotifications(context))],
       ),
       body: BlocBuilder<MenuCubit, MenuState>(
         builder: (context, state) {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.gutter,
-                  0,
-                  AppSpacing.gutter,
-                  AppSpacing.x4,
-                ),
+                padding: pagePadding(context, top: 0, bottom: AppSpacing.x4),
                 child: TextField(
                   controller: _search,
                   textInputAction: TextInputAction.search,
@@ -186,11 +180,10 @@ class _Body extends StatelessWidget {
             () => context.read<MenuCubit>().load(silent: true),
           ),
           child: ListView.separated(
-            padding: EdgeInsets.fromLTRB(
-              AppSpacing.gutter,
-              0,
-              AppSpacing.gutter,
-              AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
+            padding: pagePadding(
+              context,
+              top: 0,
+              bottom: AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
             ),
             itemCount: visible.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x4),

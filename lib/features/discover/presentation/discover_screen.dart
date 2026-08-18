@@ -19,6 +19,7 @@ import '../../menu/domain/dish.dart';
 import '../../menu/domain/menu_repository.dart';
 import 'discover_cubit.dart';
 import '../../auth/session_refresh.dart';
+import '../../../shared/widgets/page_body.dart';
 
 /// The customer home: greeting, search, categories, a featured dish, and
 /// what's selling today.
@@ -61,11 +62,11 @@ class DiscoverScreen extends StatelessWidget {
                 onRefresh: () =>
                     refreshWithSession(context, () => cubit.load(silent: true)),
                 child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpacing.gutter,
-                    AppSpacing.x6,
-                    AppSpacing.gutter,
-                    AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
+                  padding: pagePadding(
+                    context,
+                    top: AppSpacing.x6,
+                    bottom:
+                        AppSpacing.x8 + MediaQuery.paddingOf(context).bottom,
                   ),
                   children: [
                     const _Greeting(),
@@ -207,8 +208,10 @@ class _HeroCarouselState extends State<_HeroCarousel> {
                 setState(() => _page = page);
               },
               itemBuilder: (context, index) => Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.gutter,
+                // The same inset the page itself uses, so a card's edges keep
+                // landing on the line the search bar sits on at every width.
+                padding: EdgeInsets.symmetric(
+                  horizontal: pageSideInset(context),
                 ),
                 child: _FeaturedCard(
                   dish: widget.dishes[index],
@@ -419,7 +422,6 @@ class _Greeting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
