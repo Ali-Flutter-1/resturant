@@ -9,6 +9,7 @@ class ApiDashboardRepository implements DashboardRepository {
   final ApiClient _client;
 
   @override
-  Future<DashboardSummary> summary() async =>
-      DashboardSummary.fromJson(await _client.object(ApiConstants.adminDashboard));
+  Future<DashboardSummary> summary() async => DashboardSummary.fromJson(
+    await _client.object(ApiConstants.adminDashboard),
+  );
 }

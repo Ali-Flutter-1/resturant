@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/animations/reveal.dart';
+import '../../../core/animations/motion.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -104,11 +105,9 @@ class _DashboardViewState extends State<_DashboardView> {
             return _NoAccess(message: state.failure!.message);
           }
 
-          if (state.status == DashboardStatus.failure && state.failure != null) {
-            return ApiErrorView(
-              failure: state.failure!,
-              onRetry: cubit.load,
-            );
+          if (state.status == DashboardStatus.failure &&
+              state.failure != null) {
+            return ApiErrorView(failure: state.failure!, onRetry: cubit.load);
           }
 
           final summary = state.summary ?? const DashboardSummary();
@@ -121,24 +120,23 @@ class _DashboardViewState extends State<_DashboardView> {
                 top: AppSpacing.x4,
                 bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
               ),
-              children:
-                  [
-                    // Figures stay put through a failed refresh — zero revenue
-                    // is a real number and must never stand in for "failed".
-                    if (state.isStale) _StaleBanner(state: state),
-                    _RevenueRow(revenue: summary.revenue),
-                    const SizedBox(height: AppSpacing.x5),
-                    _OrdersPanel(
-                      orders: summary.orders,
-                      onTap: widget.onViewAll,
-                    ),
-                    const SizedBox(height: AppSpacing.x5),
-                    _AttentionPanel(
-                      attention: summary.attention,
-                      onBookings: widget.onViewBookings,
-                      onMessages: widget.onViewMessages,
-                    ),
-                  ].revealStaggered(),
+              children: [
+                // Figures stay put through a failed refresh — zero revenue
+                // is a real number and must never stand in for "failed".
+                if (state.isStale) _StaleBanner(state: state),
+                const _SectionHeading('Takings'),
+                _RevenueBlock(revenue: summary.revenue),
+                const SizedBox(height: AppSpacing.x6),
+                const _SectionHeading('Service'),
+                _OrdersPanel(orders: summary.orders, onTap: widget.onViewAll),
+                const SizedBox(height: AppSpacing.x6),
+                const _SectionHeading('Needs attention'),
+                _AttentionPanel(
+                  attention: summary.attention,
+                  onBookings: widget.onViewBookings,
+                  onMessages: widget.onViewMessages,
+                ),
+              ].revealStaggered(),
             ),
           );
         },
@@ -147,69 +145,146 @@ class _DashboardViewState extends State<_DashboardView> {
   }
 }
 
-/// Takings. Three tiles, deliberately not compared to each other — a month can
-/// start mid-week, so `today <= week <= month` is not guaranteed.
-class _RevenueRow extends StatelessWidget {
-  const _RevenueRow({required this.revenue});
+/// Takings.
+///
+/// Today is the figure anybody opening this screen came for, so it gets the
+/// card. Week and month support it underneath at half the weight — deliberately
+/// not framed as a comparison, because a month can start mid-week and
+/// `today <= week <= month` is not guaranteed.
+class _RevenueBlock extends StatelessWidget {
+  const _RevenueBlock({required this.revenue});
 
   final RevenueTiles revenue;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tiles = [
-          _RevenueTile(
-            label: 'Today',
-            pence: revenue.todayPence,
-            emphasise: true,
-          ),
-          _RevenueTile(label: 'This week', pence: revenue.thisWeekPence),
-          _RevenueTile(label: 'This month', pence: revenue.thisMonthPence),
-        ];
+    return Column(
+      children: [
+        _TodayCard(pence: revenue.todayPence),
+        const SizedBox(height: AppSpacing.x3),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final tiles = [
+              _RevenueTile(label: 'This week', pence: revenue.thisWeekPence),
+              _RevenueTile(label: 'This month', pence: revenue.thisMonthPence),
+            ];
 
-        // Side by side where there is room; stacked on a narrow phone, where
-        // three money figures on one line would each be ellipsised.
-        if (constraints.maxWidth < 360) {
-          return Column(
-            children: [
-              for (final (index, tile) in tiles.indexed) ...[
-                if (index > 0) const SizedBox(height: AppSpacing.x3),
-                SizedBox(width: double.infinity, child: tile),
-              ],
-            ],
-          );
-        }
+            // Stacked on a narrow phone, where two money figures on one line
+            // would each be ellipsised.
+            if (constraints.maxWidth < 300) {
+              return Column(
+                children: [
+                  tiles.first,
+                  const SizedBox(height: AppSpacing.x3),
+                  tiles.last,
+                ],
+              );
+            }
 
-        // `IntrinsicHeight` so the three tiles match even when one figure wraps
-        // — `CrossAxisAlignment.stretch` alone needs a bounded height, and this
-        // Row lives in a ListView.
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (index, tile) in tiles.indexed) ...[
-                if (index > 0) const SizedBox(width: AppSpacing.x3),
-                Expanded(child: tile),
+            // `IntrinsicHeight` so both tiles match even when one figure wraps
+            // — `stretch` alone needs a bounded height, and this Row lives in
+            // a ListView.
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: tiles.first),
+                  const SizedBox(width: AppSpacing.x3),
+                  Expanded(child: tiles.last),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// The headline figure.
+class _TodayCard extends StatelessWidget {
+  const _TodayCard({required this.pence});
+
+  final int pence;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        // A two-stop wash rather than a flat fill, so the card reads as the
+        // one thing on the screen with weight behind it.
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primary,
+            Color.lerp(scheme.primary, Colors.black, 0.22)!,
+          ],
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TAKEN TODAY',
+                  style: AppTypography.caption(
+                    scheme.onPrimary.withValues(alpha: 0.75),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.x2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    formatPence(pence),
+                    // Not tabular: a single headline figure set in full-width
+                    // commas reads as "£1 , 240 . 00".
+                    style: AppTypography.money(
+                      scheme.onPrimary,
+                      size: MoneySize.hero,
+                      tabular: false,
+                    ),
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
-        );
-      },
+          const SizedBox(width: AppSpacing.x3),
+          // Decorative, and marked as such — a screen reader announcing
+          // "graph" here would add nothing to the figure beside it.
+          ExcludeSemantics(
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: scheme.onPrimary.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.trending_up,
+                size: AppIconSize.lg,
+                color: scheme.onPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _RevenueTile extends StatelessWidget {
-  const _RevenueTile({
-    required this.label,
-    required this.pence,
-    this.emphasise = false,
-  });
+  const _RevenueTile({required this.label, required this.pence});
 
   final String label;
   final int pence;
-  final bool emphasise;
 
   @override
   Widget build(BuildContext context) {
@@ -218,9 +293,9 @@ class _RevenueTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.x4),
       decoration: BoxDecoration(
-        color: emphasise ? scheme.primary : context.surfaces.ground,
+        color: context.surfaces.raised,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: emphasise ? null : Border.all(color: context.surfaces.line),
+        border: Border.all(color: context.surfaces.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,9 +303,7 @@ class _RevenueTile extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: AppTypography.caption(
-              emphasise ? scheme.onPrimary : context.surfaces.inkSoft,
-            ),
+            style: AppTypography.caption(context.surfaces.inkSoft),
           ),
           const SizedBox(height: AppSpacing.x1),
           FittedBox(
@@ -239,7 +312,9 @@ class _RevenueTile extends StatelessWidget {
             child: Text(
               formatPence(pence),
               style: AppTypography.money(
-                emphasise ? scheme.onPrimary : scheme.onSurface,
+                scheme.onSurface,
+                size: MoneySize.large,
+                tabular: false,
               ),
             ),
           ),
@@ -260,6 +335,28 @@ class _OrdersPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final open = orders.open;
+    final colours = context.orderColors;
+    final stages = [
+      _Stage(
+        'Placed',
+        open.placed,
+        colours.preparing,
+        colours.preparingContainer,
+      ),
+      _Stage(
+        'Preparing',
+        open.preparing,
+        colours.overdue,
+        colours.overdueContainer,
+      ),
+      _Stage('Ready', open.ready, colours.ready, colours.readyContainer),
+      _Stage(
+        'Delivering',
+        open.outForDelivery,
+        colours.served,
+        colours.servedContainer,
+      ),
+    ];
 
     return Material(
       color: Colors.transparent,
@@ -302,18 +399,14 @@ class _OrdersPanel extends StatelessWidget {
                 ),
               ),
               if (open.total > 0) ...[
+                const SizedBox(height: AppSpacing.x4),
+                _QueueBar(stages: stages, total: open.total),
                 const SizedBox(height: AppSpacing.x3),
                 Wrap(
                   spacing: AppSpacing.x2,
                   runSpacing: AppSpacing.x2,
                   children: [
-                    _QueueChip(label: 'Placed', count: open.placed),
-                    _QueueChip(label: 'Preparing', count: open.preparing),
-                    _QueueChip(label: 'Ready', count: open.ready),
-                    _QueueChip(
-                      label: 'Out for delivery',
-                      count: open.outForDelivery,
-                    ),
+                    for (final stage in stages) _QueueChip(stage: stage),
                   ],
                 ),
               ],
@@ -325,25 +418,91 @@ class _OrdersPanel extends StatelessWidget {
   }
 }
 
-class _QueueChip extends StatelessWidget {
-  const _QueueChip({required this.label, required this.count});
+/// One stage of the live queue.
+class _Stage {
+  const _Stage(this.label, this.count, this.ink, this.container);
 
   final String label;
   final int count;
+  final Color ink;
+  final Color container;
+}
+
+/// The open queue as one bar, split by how much of it each stage holds.
+///
+/// The shape carries the reading before any number is parsed: mostly amber
+/// means the kitchen is behind, mostly green means the counter is.
+class _QueueBar extends StatelessWidget {
+  const _QueueBar({required this.stages, required this.total});
+
+  final List<_Stage> stages;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
-    final colours = context.orderColors;
+    // The counts beside it say the same thing more precisely, so the bar is
+    // decoration as far as a screen reader is concerned.
+    return ExcludeSemantics(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: SizedBox(
+          height: 8,
+          child: Row(
+            children: [
+              for (final stage in stages)
+                if (stage.count > 0)
+                  Expanded(
+                    // Integer flex, so a one-order stage still shows: the
+                    // segments are weighted by count and never rounded to zero.
+                    flex: stage.count,
+                    child: AnimatedContainer(
+                      duration: Motion.base,
+                      curve: Motion.standard,
+                      color: stage.ink,
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QueueChip extends StatelessWidget {
+  const _QueueChip({required this.stage});
+
+  final _Stage stage;
+
+  @override
+  Widget build(BuildContext context) {
     // A zero stage is muted rather than hidden, so the four stages stay in the
     // same place from one glance to the next.
-    final quiet = count == 0;
+    final quiet = stage.count == 0;
 
     return AppChip.status(
-      label: '$label $count',
-      foreground: quiet ? context.surfaces.inkSoft : colours.preparing,
-      background: quiet
-          ? context.surfaces.ground
-          : colours.preparingContainer,
+      label: '${stage.label} ${stage.count}',
+      foreground: quiet ? context.surfaces.inkSoft : stage.ink,
+      background: quiet ? context.surfaces.ground : stage.container,
+    );
+  }
+}
+
+/// A quiet label over each block, so the screen reads as three sections rather
+/// than one run of cards.
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+      child: Text(
+        label.toUpperCase(),
+        style: AppTypography.caption(context.surfaces.inkSoft),
+      ),
     );
   }
 }
@@ -365,8 +524,6 @@ class _AttentionPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Needs attention', style: context.texts.titleMedium),
-        const SizedBox(height: AppSpacing.x3),
         if (attention.isClear)
           AppSurface.row(
             padding: const EdgeInsets.all(AppSpacing.x4),

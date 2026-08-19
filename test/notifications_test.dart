@@ -305,8 +305,13 @@ void main() {
   });
 
   group('the inbox screen', () {
-    Widget wrap() => BlocProvider(
-      create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+    Widget wrap() => MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
+        // One cubit, app-level — the bell and this screen share it, which is
+        // what makes "mark all read" move the badge.
+        BlocProvider(create: (_) => NotificationsCubit(repository: repository)),
+      ],
       child: RepositoryProvider<NotificationRepository>.value(
         value: repository,
         child: MaterialApp(
@@ -340,19 +345,18 @@ void main() {
       await tester.pumpWidget(wrap());
       await tester.pumpAndSettle();
 
-      final button = tester.widget<TextButton>(
-        find.widgetWithText(TextButton, 'Mark all read'),
-      );
-      expect(button.onPressed, isNotNull);
+      // Offered while something is unread, alongside the count.
+      expect(find.text('1 unread'), findsOneWidget);
+      expect(find.text('Mark all read'), findsOneWidget);
 
       await tester.tap(find.text('Mark all read'));
       await tester.pumpAndSettle();
 
       expect(repository.markAllCalls, 1);
-      final after = tester.widget<TextButton>(
-        find.widgetWithText(TextButton, 'Mark all read'),
-      );
-      expect(after.onPressed, isNull);
+      // Gone once there is nothing to do, rather than sitting there disabled
+      // with no explanation — and the header says why.
+      expect(find.text('Mark all read'), findsNothing);
+      expect(find.text('All caught up'), findsOneWidget);
     });
 
     testWidgets('an empty inbox says so', (tester) async {
@@ -378,6 +382,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // No cubit in scope, so no bell.
       expect(find.byType(IconButton), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -390,8 +395,15 @@ void main() {
       NotificationPayload? followed;
 
       await tester.pumpWidget(
-        BlocProvider(
-          create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+        MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+            ),
+            BlocProvider(
+              create: (_) => NotificationsCubit(repository: repository),
+            ),
+          ],
           child: RepositoryProvider<NotificationRepository>.value(
             value: repository,
             child: MaterialApp(
@@ -426,8 +438,15 @@ void main() {
 
     testWidgets('no routing in scope still marks the row read', (tester) async {
       await tester.pumpWidget(
-        BlocProvider(
-          create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+        MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+            ),
+            BlocProvider(
+              create: (_) => NotificationsCubit(repository: repository),
+            ),
+          ],
           child: RepositoryProvider<NotificationRepository>.value(
             value: repository,
             child: MaterialApp(
@@ -444,6 +463,68 @@ void main() {
 
       // Read-only is a legitimate state, not a dead tap.
       expect(repository.markedRead, ['n1']);
+    });
+  });
+
+  group('the bell and the inbox are one thing', () {
+    testWidgets('marking all read moves the badge immediately', (tester) async {
+      final inbox = NotificationsCubit(repository: repository);
+      addTearDown(inbox.close);
+
+      await tester.pumpWidget(
+        MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+            ),
+            BlocProvider.value(value: inbox),
+          ],
+          child: RepositoryProvider<NotificationRepository>.value(
+            value: repository,
+            child: MaterialApp(
+              theme: AppTheme.light,
+              home: Scaffold(
+                appBar: AppBar(
+                  actions: [NotificationBell(onOpen: () {})],
+                ),
+                body: const NotificationsScreen(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The badge and the list are reading the same state.
+      expect(find.text('1'), findsWidgets);
+      expect(find.text('1 unread'), findsOneWidget);
+
+      await tester.tap(find.text('Mark all read'));
+      await tester.pumpAndSettle();
+
+      // This is the bug: the bell used to build its own cubit, so the badge
+      // stayed on the old count until it happened to be rebuilt.
+      expect(inbox.state.unread, 0);
+      expect(find.text('All caught up'), findsOneWidget);
+      final badge = tester.widget<AnimatedScale>(
+        find.byType(AnimatedScale).first,
+      );
+      expect(badge.scale, 0);
+    });
+
+    test('signing out empties the inbox for the next account', () async {
+      final inbox = NotificationsCubit(repository: repository);
+      await inbox.load();
+      expect(inbox.state.items, isNotEmpty);
+      expect(inbox.state.unread, 1);
+
+      inbox.clear();
+
+      // The next person to sign in on this phone must not see the previous
+      // user's unread count, even briefly.
+      expect(inbox.state.items, isEmpty);
+      expect(inbox.state.unread, 0);
+      await inbox.close();
     });
   });
 }
