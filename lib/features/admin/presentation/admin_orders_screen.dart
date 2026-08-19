@@ -549,7 +549,6 @@ class _OrderDetail extends StatefulWidget {
 }
 
 class _OrderDetailState extends State<_OrderDetail> {
-
   Future<void> _change(OrderStatus next) async {
     // Rejecting or cancelling asks for a reason, which the API stores as the
     // cancellation reason — the customer is told, so it should not be blank.

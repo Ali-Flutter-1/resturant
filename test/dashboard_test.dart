@@ -189,6 +189,28 @@ void main() {
       expect(find.text('Nothing open right now'), findsOneWidget);
     });
 
+    testWidgets('the queue bar is weighted by count, not by stage', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap());
+      await tester.pumpAndSettle();
+
+      // Only the stages that actually hold something take up bar; their widths
+      // are integer flex on the counts, so a single order still shows.
+      final segments = tester
+          .widgetList<Expanded>(
+            find.descendant(
+              of: find.byType(ClipRRect),
+              matching: find.byType(Expanded),
+            ),
+          )
+          .toList();
+      expect(segments.map((e) => e.flex).toList(), [1, 1, 1]);
+
+      // Empty stages stay visible as chips, so the four never move about.
+      expect(find.text('DELIVERING 0'), findsOneWidget);
+    });
+
     testWidgets('a staff account is told, not offered a retry', (tester) async {
       repository.failure = const ApiFailure(
         kind: ApiFailureKind.forbidden,

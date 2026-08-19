@@ -179,6 +179,13 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     }
   }
 
+  /// Drops everything on sign-out.
+  ///
+  /// The inbox and the badge belong to one account. Leaving them in place means
+  /// the next person to sign in on this phone sees the previous user's unread
+  /// count until the first refresh lands — briefly, but it is their data.
+  void clear() => emit(const NotificationsState(status: InboxStatus.ready));
+
   Future<void> markAllRead() async {
     if (!state.hasUnread) return;
     final now = DateTime.now();

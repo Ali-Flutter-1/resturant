@@ -39,7 +39,9 @@ void openNotifications(
   final routing = NotificationRouting.maybeOf(context);
   final follow =
       onFollow ??
-      (routing == null ? null : (payload) => routing.onFollow(context, payload));
+      (routing == null
+          ? null
+          : (payload) => routing.onFollow(context, payload));
 
   Navigator.of(context).push(
     AppPageRoute<void>(builder: (_) => NotificationsScreen(onOpen: follow)),
@@ -62,12 +64,11 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) =>
-          NotificationsCubit(repository: context.read<NotificationRepository>())
-            ..load(),
-      child: _NotificationsView(onOpen: onOpen),
-    );
+    // The app-level cubit, not a new one. The bell and this screen have to be
+    // the same instance or marking everything read here leaves the badge
+    // showing the old count — which is exactly what used to happen.
+    context.read<NotificationsCubit>().load();
+    return _NotificationsView(onOpen: onOpen);
   }
 }
 
@@ -88,20 +89,7 @@ class _NotificationsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Notifications'),
-        actions: [
-          BlocBuilder<NotificationsCubit, NotificationsState>(
-            buildWhen: (a, b) => a.hasUnread != b.hasUnread,
-            builder: (context, state) => TextButton(
-              onPressed: state.hasUnread
-                  ? context.read<NotificationsCubit>().markAllRead
-                  : null,
-              child: const Text('Mark all read'),
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Notifications')),
       body: BlocBuilder<NotificationsCubit, NotificationsState>(
         builder: (context, state) {
           final cubit = context.read<NotificationsCubit>();
@@ -126,9 +114,19 @@ class _NotificationsView extends StatelessWidget {
                 top: AppSpacing.x4,
                 bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
               ),
-              itemCount: state.items.length + (state.hasMore ? 1 : 0),
+              // One extra leading row for the summary bar.
+              itemCount: state.items.length + 1 + (state.hasMore ? 1 : 0),
               separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.x3),
               itemBuilder: (context, index) {
+                if (index == 0) {
+                  return _InboxHeader(
+                    unread: state.unread,
+                    busy: state.status == InboxStatus.loading,
+                    onMarkAllRead: cubit.markAllRead,
+                  );
+                }
+                index -= 1;
+
                 if (index == state.items.length) {
                   return Center(
                     child: state.loadingMore
@@ -162,6 +160,67 @@ class _NotificationsView extends StatelessWidget {
   }
 }
 
+/// How many are unread, and the one action that changes it.
+///
+/// In the list rather than the app bar: a disabled text button in a bar says
+/// nothing about *why* it is disabled, and "Mark all read" with nothing unread
+/// is a control with no work to do. Here it simply is not offered, and the row
+/// says what the state is instead.
+class _InboxHeader extends StatelessWidget {
+  const _InboxHeader({
+    required this.unread,
+    required this.busy,
+    required this.onMarkAllRead,
+  });
+
+  final int unread;
+  final bool busy;
+  final VoidCallback onMarkAllRead;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasUnread = unread > 0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.x1),
+      child: Row(
+        children: [
+          if (hasUnread) ...[
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.x2),
+          ],
+          Expanded(
+            child: Text(
+              hasUnread ? '$unread unread' : 'All caught up',
+              style: context.texts.titleMedium?.copyWith(
+                color: hasUnread ? null : context.surfaces.inkSoft,
+              ),
+            ),
+          ),
+          if (hasUnread)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () {
+                      AppHaptics.toggle();
+                      onMarkAllRead();
+                    },
+              child: const Text('Mark all read'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _NotificationRow extends StatelessWidget {
   const _NotificationRow({super.key, required this.item, required this.onTap});
 
@@ -179,66 +238,84 @@ class _NotificationRow extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: AppSurface.row(
-          padding: const EdgeInsets.all(AppSpacing.x4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: context.surfaces.accentContainer,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
+          padding: EdgeInsets.zero,
+          clip: true,
+          // `IntrinsicHeight` so the edge stripe runs the full height of the
+          // row — `stretch` alone needs a bounded height, and a list item has
+          // none.
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // A crimson edge down the unread rows. Cheaper to scan than a dot
+                // on the far side, and it survives being read in bright sun where
+                // a weight difference alone does not.
+                AnimatedContainer(
+                  duration: context.motion.fade(Motion.fast),
+                  width: 3,
+                  color: item.isUnread ? scheme.primary : Colors.transparent,
                 ),
-                child: Icon(
-                  _iconFor(item.payload.event),
-                  size: AppIconSize.lg,
-                  color: scheme.primary,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: context.texts.titleMedium?.copyWith(
-                        // Weight, not colour: an unread row must still be
-                        // legible, and a bold line is the convention every
-                        // inbox already uses.
-                        fontWeight: item.isUnread
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                      ),
-                    ),
-                    if (item.body.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(item.body, style: context.texts.bodySmall),
-                    ],
-                    if (item.createdAt != null) ...[
-                      const SizedBox(height: AppSpacing.x1),
-                      Text(
-                        _ago(item.createdAt!),
-                        style: context.texts.labelSmall?.copyWith(
-                          color: context.surfaces.inkSoft,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.x4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: item.isUnread
+                                ? context.surfaces.accentContainer
+                                : context.surfaces.ground,
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Icon(
+                            _iconFor(item.payload.event),
+                            size: AppIconSize.lg,
+                            color: item.isUnread
+                                ? scheme.primary
+                                : context.surfaces.inkSoft,
+                          ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (item.isUnread)
-                Container(
-                  margin: const EdgeInsets.only(top: 6, left: AppSpacing.x2),
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    shape: BoxShape.circle,
+                        const SizedBox(width: AppSpacing.x3),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.title,
+                                style: context.texts.titleMedium?.copyWith(
+                                  // Weight, not colour: an unread row must still be
+                                  // legible, and a bold line is the convention every
+                                  // inbox already uses.
+                                  fontWeight: item.isUnread
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                              if (item.body.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(item.body, style: context.texts.bodySmall),
+                              ],
+                              if (item.createdAt != null) ...[
+                                const SizedBox(height: AppSpacing.x1),
+                                Text(
+                                  _ago(item.createdAt!),
+                                  style: context.texts.labelSmall?.copyWith(
+                                    color: context.surfaces.inkSoft,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -335,20 +412,18 @@ class NotificationBell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NotificationRepository repository;
+    // Draws nothing where no cubit is in scope — a screen pumped standalone, or
+    // a test. A bell that cannot count anything and opens an inbox that cannot
+    // load is a decoration shaped like a control.
     try {
-      repository = context.read<NotificationRepository>();
+      context.read<NotificationsCubit>();
     } on ProviderNotFoundException {
       debugPrint(
-        'NotificationBell: no NotificationRepository in scope, so no bell.',
+        'NotificationBell: no NotificationsCubit in scope, so no bell.',
       );
       return const SizedBox.shrink();
     }
-
-    return BlocProvider(
-      create: (_) => NotificationsCubit(repository: repository)..refreshBadge(),
-      child: _BellButton(onOpen: onOpen),
-    );
+    return _BellButton(onOpen: onOpen);
   }
 }
 
@@ -360,10 +435,13 @@ class _BellButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final motion = context.motion;
     final unread = context.select((NotificationsCubit c) => c.state.unread);
 
     return IconButton(
-      tooltip: 'Notifications',
+      tooltip: unread == 0
+          ? 'Notifications'
+          : '$unread unread ${unread == 1 ? 'notification' : 'notifications'}',
       color: scheme.primary,
       onPressed: () {
         AppHaptics.toggle();
@@ -372,32 +450,62 @@ class _BellButton extends StatelessWidget {
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
-          Icon(
-            unread > 0
-                ? Icons.notifications
-                : Icons.notifications_none_outlined,
+          // Filled while something is waiting, outlined once it is not — the
+          // glyph carries the state as well as the pill, so the bell still reads
+          // at a glance to somebody who cannot make out a small red circle.
+          AnimatedSwitcher(
+            duration: motion.fade(Motion.fast),
+            child: Icon(
+              unread > 0
+                  ? Icons.notifications
+                  : Icons.notifications_none_outlined,
+              key: ValueKey(unread > 0),
+            ),
           ),
-          if (unread > 0)
-            Positioned(
-              right: -6,
-              top: -5,
+          Positioned(
+            right: -6,
+            top: -5,
+            // Scales in and out rather than appearing: the count changes while
+            // the user is looking at the bar, and a pill that pops into
+            // existence reads as a glitch.
+            child: AnimatedScale(
+              scale: unread > 0 ? 1 : 0,
+              duration: motion.move(Motion.fast),
+              curve: motion.emphasized,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 constraints: const BoxConstraints(minWidth: 17),
                 decoration: BoxDecoration(
                   color: scheme.primary,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
-                  border: Border.all(color: scheme.surface),
+                  // Punches the pill out of the bar behind it, so it reads as
+                  // sitting on top of the bell rather than merging with it.
+                  border: Border.all(color: scheme.surface, width: 1.5),
                 ),
-                child: Text(
-                  // Past 99 the pill stops being a number and starts being a
-                  // width problem.
-                  unread > 99 ? '99+' : '$unread',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.badge(scheme.onPrimary),
+                child: AnimatedSwitcher(
+                  duration: motion.fade(Motion.fast),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween(
+                        begin: const Offset(0, 0.5),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    // Past 99 the pill stops being a number and starts being a
+                    // width problem.
+                    unread > 99 ? '99+' : '$unread',
+                    key: ValueKey(unread),
+                    textAlign: TextAlign.center,
+                    style: AppTypography.badge(scheme.onPrimary),
+                  ),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );

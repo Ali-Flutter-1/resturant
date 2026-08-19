@@ -31,6 +31,7 @@ import 'features/notifications/data/firebase_push_service.dart';
 import 'features/notifications/data/push_coordinator.dart';
 import 'features/notifications/domain/notification_repository.dart';
 import 'features/notifications/domain/push_service.dart';
+import 'features/notifications/presentation/notifications_cubit.dart';
 import 'features/hours/data/api_working_hours_repository.dart';
 import 'features/hours/domain/working_hours_repository.dart';
 import 'features/contact/data/api_contact_repository.dart';
@@ -93,6 +94,15 @@ Future<void> main() async {
   final pushes = PushCoordinator(repository: notifications, push: push);
   await pushes.start();
 
+  // One inbox cubit for the whole app. The bell and the inbox screen used to
+  // build one each, so marking everything read left the badge showing the old
+  // count until the bell happened to be rebuilt.
+  final inbox = NotificationsCubit(repository: notifications);
+
+  // A push that arrives while the app is open moves the badge without the user
+  // opening anything.
+  pushes.received.listen((_) => inbox.refreshBadge());
+
   // A notification that launched a terminated app. Held rather than acted on:
   // there is no session and no navigator yet, and the coordinator hands it over
   // once there is.
@@ -101,12 +111,21 @@ Future<void> main() async {
 
   // Registration runs after a session exists, and never blocks anything: a
   // failed registration is retried next launch rather than kept anyone out.
-  auth.onSignedIn = pushes.register;
+  // The badge is read at the same moment, because until there is a session
+  // there is nothing to count.
+  auth.onSignedIn = () async {
+    inbox.refreshBadge();
+    await pushes.register();
+  };
 
   // The device association is removed **before** the logout request, while the
   // access token still works. Skip that and the next person to sign in on this
-  // phone receives the previous user's alerts.
-  auth.onSigningOut = pushes.unregister;
+  // phone receives the previous user's alerts — and the inbox is emptied for
+  // the same reason.
+  auth.onSigningOut = () async {
+    inbox.clear();
+    await pushes.unregister();
+  };
 
   // Closes the loop: when a refresh finally fails, the app returns to sign-in
   // instead of leaving the user on a screen that will never load again.
@@ -132,6 +151,7 @@ Future<void> main() async {
       reservations: ApiReservationRepository(client: client),
       venue: ApiVenueRepository(client: client),
       notifications: notifications,
+      inbox: inbox,
       workingHours: ApiWorkingHoursRepository(client: client),
       orders: AppConfig.useDemoOrders
           ? DemoOrderRepository()
@@ -154,6 +174,7 @@ class TsCafeApp extends StatelessWidget {
     required this.reservations,
     required this.venue,
     required this.notifications,
+    required this.inbox,
     required this.workingHours,
     required this.orders,
   });
@@ -201,6 +222,9 @@ class TsCafeApp extends StatelessWidget {
   /// The notification inbox and this installation's push registration.
   final NotificationRepository notifications;
 
+  /// The notification inbox and badge, shared by the bell and the inbox screen.
+  final NotificationsCubit inbox;
+
   /// Opening hours. The read is public — somebody deciding whether to walk over
   /// does not have an account — and only an admin may edit the week.
   final WorkingHoursRepository workingHours;
@@ -230,6 +254,7 @@ class TsCafeApp extends StatelessWidget {
         providers: [
           BlocProvider.value(value: auth),
           BlocProvider(create: (_) => CartCubit()),
+          BlocProvider.value(value: inbox),
         ],
         child: ScreenUtilInit(
           designSize: const Size(AppLayout.designWidth, AppLayout.designHeight),
