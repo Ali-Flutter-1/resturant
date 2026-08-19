@@ -733,7 +733,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Runner/RunnerRelease.entitlements;
+//				CODE_SIGN_ENTITLEMENTS = Runner/RunnerRelease.entitlements; /* RESTORE BEFORE TESTFLIGHT: needs an explicit App ID for com.tscafe.app with Push Notifications */
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = WQJAG88Y5W;
 				ENABLE_BITCODE = NO;
