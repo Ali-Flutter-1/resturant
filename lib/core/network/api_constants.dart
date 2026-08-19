@@ -155,6 +155,10 @@ abstract final class ApiConstants {
   static String adminOrder(String id) => '/admin/orders/$id';
   static String adminOrderStatus(String id) => '/admin/orders/$id/status';
 
+  /// The admin landing screen. One request powers the whole thing — no
+  /// pagination, no polling.
+  static const String adminDashboard = '/admin/dashboard';
+
   // ----------------------------------------------------------- working hours
 
   /// Public. Somebody deciding whether to walk over does not have an account.

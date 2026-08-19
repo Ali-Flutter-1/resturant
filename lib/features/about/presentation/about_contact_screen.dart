@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../contact/domain/contact_repository.dart';
 import '../../hours/presentation/opening_hours_card.dart';
+import '../../venue/domain/restaurant_location.dart';
+import '../../venue/presentation/restaurant_map_card.dart';
 import '../../auth/presentation/auth_form_parts.dart';
 import '../../auth/auth_cubit.dart';
 import '../../../core/network/api_failure.dart';
@@ -93,19 +95,17 @@ class AboutContactScreen extends StatelessWidget {
 
                 Text('Find Us', style: context.texts.headlineLarge),
                 const SizedBox(height: AppSpacing.x3),
-                const _MapPanel(),
+                // The real map, in place of the painted grid that said "Map to
+                // be wired up".
+                const RestaurantMapCard(),
                 const SizedBox(height: AppSpacing.x4),
 
-                const _ContactRow(
-                  icon: Icons.place_outlined,
-                  label: 'Address',
-                  value: '128 Heritage Lane, London SW1A 1AA',
-                ),
-                const SizedBox(height: AppSpacing.x3),
+                // The address is on the map card above; repeating it here was
+                // the same street name maintained in two places.
                 const _ContactRow(
                   icon: Icons.call_outlined,
                   label: 'Phone',
-                  value: '+44 20 7946 0958',
+                  value: RestaurantLocation.phone,
                 ),
                 const SizedBox(height: AppSpacing.x3),
                 const _ContactRow(
@@ -316,65 +316,6 @@ class _BentoImageCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _MapPanel extends StatelessWidget {
-  const _MapPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Container(
-        height: 160,
-        color: context.surfaces.ground,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CustomPaint(painter: _StreetGridPainter(context.surfaces.line)),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.place,
-                    size: AppIconSize.xxl,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: AppSpacing.x1),
-                  Text('Map to be wired up', style: context.texts.bodySmall),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StreetGridPainter extends CustomPainter {
-  const _StreetGridPainter(this.colour);
-
-  final Color colour;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = colour
-      ..strokeWidth = 1;
-
-    for (var x = 0.0; x < size.width; x += 32) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (var y = 0.0; y < size.height; y += 32) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_StreetGridPainter oldDelegate) =>
-      oldDelegate.colour != colour;
 }
 
 class _ContactRow extends StatelessWidget {

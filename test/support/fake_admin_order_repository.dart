@@ -56,6 +56,10 @@ class FakeAdminOrderRepository implements AdminOrderRepository {
 
   List<AdminOrder> _orders;
 
+  /// Replaces what the list endpoint answers with, so a test can simulate an
+  /// order leaving the filtered queue between polls.
+  void replaceListWith(List<AdminOrder> value) => _orders = List.of(value);
+
   ApiFailure? failure;
 
   /// Fails only the status write, so a test can load fine and be refused on the

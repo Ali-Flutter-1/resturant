@@ -17,6 +17,7 @@ class AdminOrdersState extends Equatable {
     this.openOnly = true,
     this.query = '',
     this.busyIds = const {},
+    this.detail,
   });
 
   final QueueStatus status;
@@ -41,6 +42,15 @@ class AdminOrdersState extends Equatable {
   /// Orders with a status change in flight, so only that row is disabled.
   final Set<String> busyIds;
 
+  /// The order open in the detail sheet, held **outside** [orders].
+  ///
+  /// The sheet used to look its order up in the list, which meant the 20-second
+  /// poll wiped it: `load` replaces the list wholesale, and an order the current
+  /// filter no longer returns — a completed one, or anything past the first page
+  /// — simply vanished from under the reader. Keeping it here makes the sheet
+  /// independent of whatever the queue is showing.
+  final AdminOrder? detail;
+
   List<AdminOrder> get visible {
     final needle = query.trim().toLowerCase();
     if (needle.isEmpty) return orders;
@@ -63,8 +73,10 @@ class AdminOrdersState extends Equatable {
     bool? openOnly,
     String? query,
     Set<String>? busyIds,
+    AdminOrder? detail,
     bool clearFilter = false,
     bool clearFailure = false,
+    bool clearDetail = false,
   }) {
     return AdminOrdersState(
       status: status ?? this.status,
@@ -75,6 +87,7 @@ class AdminOrdersState extends Equatable {
       openOnly: openOnly ?? this.openOnly,
       query: query ?? this.query,
       busyIds: busyIds ?? this.busyIds,
+      detail: clearDetail ? null : (detail ?? this.detail),
     );
   }
 
@@ -88,6 +101,7 @@ class AdminOrdersState extends Equatable {
     openOnly,
     query,
     busyIds,
+    detail,
   ];
 }
 
@@ -211,6 +225,18 @@ class AdminOrdersCubit extends Cubit<AdminOrdersState> {
     }
   }
 
+  /// Opens the detail sheet on [order], then fetches the full ticket.
+  ///
+  /// Seeded from the row so the sheet has something to draw immediately — the
+  /// list carries `item_count` rather than lines, so the fetch is what fills in
+  /// the breakdown.
+  Future<void> openDetail(AdminOrder order) async {
+    emit(state.copyWith(detail: order));
+    await refreshOne(order.id);
+  }
+
+  void closeDetail() => emit(state.copyWith(clearDetail: true));
+
   /// Re-reads one order, for a stale row or an opened detail sheet.
   Future<AdminOrder?> refreshOne(String id) async {
     try {
@@ -223,6 +249,11 @@ class AdminOrdersCubit extends Cubit<AdminOrdersState> {
   }
 
   void _adopt(AdminOrder order, {bool dropIfClosed = false}) {
+    // The sheet reads `detail`, so every write has to land there too — otherwise
+    // advancing an order leaves the ticket showing its previous status.
+    if (state.detail?.id == order.id) {
+      emit(state.copyWith(detail: order));
+    }
     // An order that has just been completed or cancelled leaves the kitchen
     // queue, because that is what the queue means. On the full history it stays,
     // with its new status.

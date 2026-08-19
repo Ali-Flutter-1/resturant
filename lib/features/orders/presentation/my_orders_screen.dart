@@ -231,29 +231,49 @@ class _LiveOrderCard extends StatelessWidget {
       context: context,
       title: 'Cancel order ${order.reference}?',
       child: Builder(
-        builder: (sheetContext) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'This cannot be undone. If the kitchen has already started, we '
-              'may not be able to cancel.',
-              style: sheetContext.texts.bodyMedium?.copyWith(
-                color: sheetContext.surfaces.inkMuted,
+        // `AppSheet` pads its title block but hands the child through bare, so
+        // a sheet has to bring its own gutter. Without it the text ran to both
+        // edges and the last button sat under the home indicator.
+        builder: (sheetContext) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.gutter,
+            0,
+            AppSpacing.gutter,
+            AppSpacing.x2 + MediaQuery.paddingOf(sheetContext).bottom,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'This cannot be undone. If the kitchen has already started, we '
+                'may not be able to cancel.',
+                style: sheetContext.texts.bodyMedium?.copyWith(
+                  color: sheetContext.surfaces.inkMuted,
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.x5),
-            PrimaryButton(
-              label: 'Cancel this order',
-              // Pops the sheet's own route, not the screen behind it — hence
-              // the Builder: the enclosing context predates the sheet.
-              onPressed: () => Navigator.of(sheetContext).pop(true),
-            ),
-            const SizedBox(height: AppSpacing.x2),
-            SecondaryButton(
-              label: 'Keep my order',
-              onPressed: () => Navigator.of(sheetContext).pop(false),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.x5),
+              // Keeping the order is the safe choice, so it gets the filled
+              // button; cancelling is the destructive one and reads as such.
+              // The old layout had them the other way round, which put the
+              // irreversible action under the thumb by default.
+              PrimaryButton(
+                label: 'Keep my order',
+                onPressed: () => Navigator.of(sheetContext).pop(false),
+              ),
+              const SizedBox(height: AppSpacing.x2),
+              TextButton(
+                // Pops the sheet's own route, not the screen behind it — hence
+                // the Builder: the enclosing context predates the sheet.
+                onPressed: () => Navigator.of(sheetContext).pop(true),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  foregroundColor: sheetContext.orderColors.overdue,
+                ),
+                child: const Text('Cancel this order'),
+              ),
+            ],
+          ),
         ),
       ),
     );

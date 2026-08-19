@@ -311,20 +311,8 @@ class _SearchAndFilter extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.x2),
-          // Filters have no designed panel behind them, so this states its
-          // own absence rather than opening an empty sheet.
-          SizedBox(
-            width: 36,
-            height: 44,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.tune, size: AppIconSize.lg),
-              tooltip: 'More filters',
-              onPressed: () =>
-                  showAppSnack(context, 'Filter options are not designed yet.'),
-            ),
-          ),
+          // The filter icon is gone. It only ever said filters were not
+          // designed yet; the category chips below already do the filtering.
         ],
       ),
     );

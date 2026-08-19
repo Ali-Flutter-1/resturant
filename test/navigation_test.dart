@@ -26,6 +26,8 @@ import 'support/fake_order_repository.dart';
 import 'support/fake_menu_repository.dart';
 import 'package:practice/features/booking/domain/reservation_repository.dart';
 import 'support/fake_reservation_repository.dart';
+import 'package:practice/features/admin/domain/dashboard_repository.dart';
+import 'support/fake_dashboard_repository.dart';
 
 /// Every screen needs a way out, and no screen may advertise one it doesn't
 /// have. These tests pin both halves of that, because both have been wrong:
@@ -50,6 +52,9 @@ Widget _host(Widget home, {TargetPlatform? platform}) {
         ),
         RepositoryProvider<AdminOrderRepository>(
           create: (_) => FakeAdminOrderRepository(),
+        ),
+        RepositoryProvider<DashboardRepository>(
+          create: (_) => FakeDashboardRepository(),
         ),
         RepositoryProvider<ReservationRepository>(
           create: (_) => FakeReservationRepository(),
@@ -256,6 +261,9 @@ void main() {
               RepositoryProvider<AdminOrderRepository>(
                 create: (_) => FakeAdminOrderRepository(),
               ),
+              RepositoryProvider<DashboardRepository>(
+                create: (_) => FakeDashboardRepository(),
+              ),
               RepositoryProvider<ReservationRepository>(
                 create: (_) => FakeReservationRepository(),
               ),
@@ -309,6 +317,9 @@ void main() {
           ),
           RepositoryProvider<AdminOrderRepository>(
             create: (_) => FakeAdminOrderRepository(),
+          ),
+          RepositoryProvider<DashboardRepository>(
+            create: (_) => FakeDashboardRepository(),
           ),
           RepositoryProvider<ReservationRepository>(
             create: (_) => FakeReservationRepository(),

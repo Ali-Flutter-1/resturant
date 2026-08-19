@@ -525,6 +525,7 @@ class _OrderTicket extends StatelessWidget {
 /// The full ticket, with every legal move on it.
 void _showOrder(BuildContext context, AdminOrder order) {
   final cubit = context.read<AdminOrdersCubit>();
+  cubit.openDetail(order);
   showAppSheet<void>(
     context: context,
     title: order.orderNumber,
@@ -533,7 +534,9 @@ void _showOrder(BuildContext context, AdminOrder order) {
       value: cubit,
       child: _OrderDetail(id: order.id),
     ),
-  );
+    // Dropped when the sheet goes, so a stale ticket is not still held in state
+    // the next time one is opened.
+  ).whenComplete(cubit.closeDetail);
 }
 
 class _OrderDetail extends StatefulWidget {
@@ -546,15 +549,6 @@ class _OrderDetail extends StatefulWidget {
 }
 
 class _OrderDetailState extends State<_OrderDetail> {
-  @override
-  void initState() {
-    super.initState();
-    // The list row carries no lines — `item_count` instead — so the ticket is
-    // fetched. It also picks up a change another member of staff just made.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<AdminOrdersCubit>().refreshOne(widget.id);
-    });
-  }
 
   Future<void> _change(OrderStatus next) async {
     // Rejecting or cancelling asks for a reason, which the API stores as the
@@ -586,10 +580,16 @@ class _OrderDetailState extends State<_OrderDetail> {
   Widget build(BuildContext context) {
     return BlocBuilder<AdminOrdersCubit, AdminOrdersState>(
       builder: (context, state) {
-        final order = state.orders.where((o) => o.id == widget.id).firstOrNull;
-        // Gone from the list — completed and dropped from the kitchen queue, most
-        // likely — so the sheet closes rather than showing a blank.
-        if (order == null) return const SizedBox.shrink();
+        // Read from `detail`, never from the list. The 20-second poll replaces
+        // `orders` wholesale, and an order the current filter no longer returns
+        // used to disappear from under the reader mid-sentence.
+        final order = state.detail?.id == widget.id ? state.detail : null;
+        if (order == null) {
+          return const Padding(
+            padding: EdgeInsets.all(AppSpacing.x8),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
 
         final busy = state.busyIds.contains(order.id);
 

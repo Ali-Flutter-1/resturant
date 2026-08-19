@@ -404,6 +404,53 @@ void main() {
       expect(repository.lastStatusChange?['note'], 'Kitchen closed early');
     });
   });
+
+  group('the detail sheet survives the queue refreshing under it', () {
+    test('a poll that drops the order from the list keeps the sheet', () async {
+      final cubit = AdminOrdersCubit(repository: repository);
+      await cubit.load();
+
+      final order = cubit.state.orders.first;
+      await cubit.openDetail(order);
+      expect(cubit.state.detail?.id, order.id);
+
+      // The order leaves the filtered list — completed, or simply past the first
+      // page. This is exactly what the 20-second poll does every time.
+      repository.replaceListWith(const []);
+      await cubit.load(silent: true);
+
+      expect(cubit.state.orders, isEmpty);
+      // The ticket is still there. It used to be looked up in `orders`, so this
+      // wiped it and the sheet went blank mid-read.
+      expect(cubit.state.detail?.id, order.id);
+      await cubit.close();
+    });
+
+    test('advancing an order updates the open sheet', () async {
+      final cubit = AdminOrdersCubit(repository: repository);
+      await cubit.load();
+
+      final order = cubit.state.orders.firstWhere(
+        (o) => o.status == OrderStatus.placed,
+      );
+      await cubit.openDetail(order);
+
+      await cubit.changeStatus(order.id, OrderStatus.preparing);
+      // Otherwise the ticket keeps showing the status it had when it opened.
+      expect(cubit.state.detail?.status, OrderStatus.preparing);
+      await cubit.close();
+    });
+
+    test('closing drops it, so the next open starts clean', () async {
+      final cubit = AdminOrdersCubit(repository: repository);
+      await cubit.load();
+      await cubit.openDetail(cubit.state.orders.first);
+
+      cubit.closeDetail();
+      expect(cubit.state.detail, isNull);
+      await cubit.close();
+    });
+  });
 }
 
 /// Reaches the cubit for the filter test, which has no on-screen control that a

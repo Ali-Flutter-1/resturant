@@ -16,6 +16,7 @@ import '../../../shared/widgets/skeleton.dart';
 import '../../auth/session_refresh.dart';
 import '../domain/app_notification.dart';
 import '../domain/notification_repository.dart';
+import 'notification_routing.dart';
 import 'notifications_cubit.dart';
 import '../../../shared/widgets/page_body.dart';
 
@@ -32,8 +33,16 @@ void openNotifications(
   BuildContext context, {
   void Function(NotificationPayload payload)? onFollow,
 }) {
+  // The shell's answer, unless the caller supplied one. Captured here — before
+  // the push — because the route's own context sits above the shell and would
+  // not find it.
+  final routing = NotificationRouting.maybeOf(context);
+  final follow =
+      onFollow ??
+      (routing == null ? null : (payload) => routing.onFollow(context, payload));
+
   Navigator.of(context).push(
-    AppPageRoute<void>(builder: (_) => NotificationsScreen(onOpen: onFollow)),
+    AppPageRoute<void>(builder: (_) => NotificationsScreen(onOpen: follow)),
   );
 }
 

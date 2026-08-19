@@ -8,6 +8,7 @@ import 'package:practice/features/notifications/data/push_coordinator.dart';
 import 'package:practice/features/notifications/domain/app_notification.dart';
 import 'package:practice/features/notifications/domain/notification_repository.dart';
 import 'package:practice/features/notifications/domain/push_service.dart';
+import 'package:practice/features/notifications/presentation/notification_routing.dart';
 import 'package:practice/features/notifications/presentation/notifications_cubit.dart';
 import 'package:practice/features/notifications/presentation/notifications_screen.dart';
 
@@ -379,6 +380,70 @@ void main() {
 
       expect(find.byType(IconButton), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('tap-through routing', () {
+    testWidgets('the shell supplies the destination, not the inbox', (
+      tester,
+    ) async {
+      NotificationPayload? followed;
+
+      await tester.pumpWidget(
+        BlocProvider(
+          create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+          child: RepositoryProvider<NotificationRepository>.value(
+            value: repository,
+            child: MaterialApp(
+              theme: AppTheme.light,
+              home: NotificationRouting(
+                onFollow: (_, payload) => followed = payload,
+                child: Builder(
+                  builder: (context) => Scaffold(
+                    body: TextButton(
+                      onPressed: () => openNotifications(context),
+                      child: const Text('open inbox'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open inbox'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Order ready'));
+      await tester.pumpAndSettle();
+
+      // The payload reached the shell, validated — the inbox never navigates on
+      // its own.
+      expect(followed, isNotNull);
+      expect(followed!.target, NotificationTarget.customerOrder);
+      expect(followed!.entityId, 'o1');
+    });
+
+    testWidgets('no routing in scope still marks the row read', (tester) async {
+      await tester.pumpWidget(
+        BlocProvider(
+          create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
+          child: RepositoryProvider<NotificationRepository>.value(
+            value: repository,
+            child: MaterialApp(
+              theme: AppTheme.light,
+              home: const NotificationsScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Order ready'));
+      await tester.pumpAndSettle();
+
+      // Read-only is a legitimate state, not a dead tap.
+      expect(repository.markedRead, ['n1']);
     });
   });
 }

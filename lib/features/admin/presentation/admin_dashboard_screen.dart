@@ -1,167 +1,559 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/admin_nav.dart';
-import '../domain/admin_order.dart';
-import '../../../shared/widgets/metric_card.dart';
-import '../../../shared/widgets/order_row.dart';
+import '../../../shared/widgets/api_error_view.dart';
+import '../../../shared/widgets/app_chip.dart';
+import '../../../shared/widgets/app_surface.dart';
 import '../../../shared/widgets/page_body.dart';
+import '../../../shared/widgets/skeleton.dart';
+import '../../auth/session_refresh.dart';
+import '../domain/dashboard_repository.dart';
+import '../domain/dashboard_summary.dart';
+import 'dashboard_cubit.dart';
 
-/// Thousands separators, so a counting figure doesn't lurch as it crosses a
-/// power of ten.
-String _grouped(double value) => value.round().toString().replaceAllMapped(
-  RegExp(r'(\d)(?=(\d{3})+$)'),
-  (m) => '${m[1]},',
-);
-
-String _money(double value) => '£${_grouped(value)}.00';
-
-/// Staff-facing snapshot of the current service.
+/// The admin landing screen: takings, the live queue, and what needs attention.
 ///
-/// The content below is hard-coded for layout purposes only — there is no
-/// repository, data source or mock service behind it. When the API contract
-/// arrives this widget takes its values from a bloc and nothing else here
-/// needs to change.
-class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key, this.onViewAll});
+/// One request powers all three sections. Everything here was hardcoded sample
+/// content until now — three invented orders and a made-up revenue figure.
+class AdminDashboardScreen extends StatelessWidget {
+  const AdminDashboardScreen({
+    super.key,
+    this.onViewAll,
+    this.onViewBookings,
+    this.onViewMessages,
+  });
+
+  /// Opens the order queue. The dashboard adds no destinations of its own — it
+  /// points at screens that already exist.
   final VoidCallback? onViewAll;
+  final VoidCallback? onViewBookings;
+  final VoidCallback? onViewMessages;
 
   @override
-  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) =>
+          DashboardCubit(repository: context.read<DashboardRepository>())
+            ..load(),
+      child: _DashboardView(
+        onViewAll: onViewAll,
+        onViewBookings: onViewBookings,
+        onViewMessages: onViewMessages,
+      ),
+    );
+  }
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  /// Tapping a row sends staff to the real queue rather than opening a status
-  /// sheet on a made-up order. These rows are still sample content — the
-  /// dashboard is not wired to `/admin/orders/stats` yet — and a control that
-  /// appears to change an order that does not exist is worse than no control.
-  void _openOrder(Object _) => widget.onViewAll?.call();
+class _DashboardView extends StatefulWidget {
+  const _DashboardView({
+    this.onViewAll,
+    this.onViewBookings,
+    this.onViewMessages,
+  });
 
-  static const _recentOrders = [
-    (
-      reference: '#042',
-      destination: 'Table 4',
-      detail: '2 items · 5 mins ago',
-      amount: '£28.50',
-      status: OrderStatus.preparing,
-    ),
-    (
-      reference: '#041',
-      destination: 'Takeaway',
-      detail: '4 items · 12 mins ago',
-      amount: '£45.00',
-      status: OrderStatus.ready,
-    ),
-    (
-      reference: '#040',
-      destination: 'Table 12',
-      detail: '1 item · 25 mins ago',
-      amount: '£8.00',
-      status: OrderStatus.completed,
-    ),
-  ];
+  final VoidCallback? onViewAll;
+  final VoidCallback? onViewBookings;
+  final VoidCallback? onViewMessages;
+
+  @override
+  State<_DashboardView> createState() => _DashboardViewState();
+}
+
+class _DashboardViewState extends State<_DashboardView> {
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refreshed on return to the foreground, and never on a timer. Push already
+    // announces new orders, and one round trip when somebody looks at the screen
+    // is cheaper and quieter than polling all day.
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        if (mounted) context.read<DashboardCubit>().load();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: buildAdminAppBar(context),
-      body: ListView(
-        padding: pagePadding(
-          context,
-          top: AppSpacing.x2,
-          bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
-        ),
+      appBar: buildAdminAppBar(context, title: 'Dashboard'),
+      body: BlocBuilder<DashboardCubit, DashboardState>(
+        builder: (context, state) {
+          final cubit = context.read<DashboardCubit>();
+
+          if (state.status == DashboardStatus.loading) {
+            return const MessageListSkeleton(rows: 4);
+          }
+
+          // A staff account, or an admin demoted mid-session. Not a retry —
+          // signing in again produces the same role and the same refusal.
+          if (state.isForbidden && state.summary == null) {
+            return _NoAccess(message: state.failure!.message);
+          }
+
+          if (state.status == DashboardStatus.failure && state.failure != null) {
+            return ApiErrorView(
+              failure: state.failure!,
+              onRetry: cubit.load,
+            );
+          }
+
+          final summary = state.summary ?? const DashboardSummary();
+
+          return RefreshIndicator(
+            onRefresh: () => refreshWithSession(context, cubit.load),
+            child: ListView(
+              padding: pagePadding(
+                context,
+                top: AppSpacing.x4,
+                bottom: AppSpacing.x12 + MediaQuery.paddingOf(context).bottom,
+              ),
+              children:
+                  [
+                    // Figures stay put through a failed refresh — zero revenue
+                    // is a real number and must never stand in for "failed".
+                    if (state.isStale) _StaleBanner(state: state),
+                    _RevenueRow(revenue: summary.revenue),
+                    const SizedBox(height: AppSpacing.x5),
+                    _OrdersPanel(
+                      orders: summary.orders,
+                      onTap: widget.onViewAll,
+                    ),
+                    const SizedBox(height: AppSpacing.x5),
+                    _AttentionPanel(
+                      attention: summary.attention,
+                      onBookings: widget.onViewBookings,
+                      onMessages: widget.onViewMessages,
+                    ),
+                  ].revealStaggered(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Takings. Three tiles, deliberately not compared to each other — a month can
+/// start mid-week, so `today <= week <= month` is not guaranteed.
+class _RevenueRow extends StatelessWidget {
+  const _RevenueRow({required this.revenue});
+
+  final RevenueTiles revenue;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tiles = [
+          _RevenueTile(
+            label: 'Today',
+            pence: revenue.todayPence,
+            emphasise: true,
+          ),
+          _RevenueTile(label: 'This week', pence: revenue.thisWeekPence),
+          _RevenueTile(label: 'This month', pence: revenue.thisMonthPence),
+        ];
+
+        // Side by side where there is room; stacked on a narrow phone, where
+        // three money figures on one line would each be ellipsised.
+        if (constraints.maxWidth < 360) {
+          return Column(
+            children: [
+              for (final (index, tile) in tiles.indexed) ...[
+                if (index > 0) const SizedBox(height: AppSpacing.x3),
+                SizedBox(width: double.infinity, child: tile),
+              ],
+            ],
+          );
+        }
+
+        // `IntrinsicHeight` so the three tiles match even when one figure wraps
+        // — `CrossAxisAlignment.stretch` alone needs a bounded height, and this
+        // Row lives in a ListView.
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (index, tile) in tiles.indexed) ...[
+                if (index > 0) const SizedBox(width: AppSpacing.x3),
+                Expanded(child: tile),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RevenueTile extends StatelessWidget {
+  const _RevenueTile({
+    required this.label,
+    required this.pence,
+    this.emphasise = false,
+  });
+
+  final String label;
+  final int pence;
+  final bool emphasise;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.x4),
+      decoration: BoxDecoration(
+        color: emphasise ? scheme.primary : context.surfaces.ground,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: emphasise ? null : Border.all(color: context.surfaces.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Dashboard Overview',
-            style: context.texts.headlineLarge,
-          ).reveal(),
+            label.toUpperCase(),
+            style: AppTypography.caption(
+              emphasise ? scheme.onPrimary : context.surfaces.inkSoft,
+            ),
+          ),
           const SizedBox(height: AppSpacing.x1),
-          Text(
-            "Today's snapshot for T's Café.",
-            style: context.texts.bodyMedium,
-          ).revealItem(1),
-          const SizedBox(height: AppSpacing.x6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatPence(pence),
+              style: AppTypography.money(
+                emphasise ? scheme.onPrimary : scheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-          MetricCard(
-            caption: 'Total Revenue',
-            value: '£24,500.00',
-            // Takings are the figure the eye goes to first, and watching one
-            // climb reads its scale before a single digit has been parsed.
-            countTo: 24500,
-            countFormat: _money,
-            icon: Icons.currency_pound,
-            delta: '+12%',
-          ).revealItem(2),
-          const SizedBox(height: AppSpacing.x3),
+/// How busy today has been, and what is open right now — two different things,
+/// so they are labelled as such.
+class _OrdersPanel extends StatelessWidget {
+  const _OrdersPanel({required this.orders, this.onTap});
 
-          Row(
+  final OrdersSummary orders;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final open = orders.open;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: AppSurface.row(
+          padding: const EdgeInsets.all(AppSpacing.x4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: MetricCard(
-                  caption: 'Total Orders',
-                  value: '1,248',
-                  countTo: 1248,
-                  countFormat: _grouped,
-                  icon: Icons.shopping_bag_outlined,
-                  valueSize: MoneySize.large,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      orders.today == 1
+                          ? '1 order today'
+                          : '${orders.today} orders today',
+                      style: context.texts.titleMedium,
+                    ),
+                  ),
+                  if (onTap != null)
+                    Icon(
+                      Icons.chevron_right,
+                      size: AppIconSize.xl,
+                      color: context.surfaces.inkSoft,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                // "Open now" is the live queue, which can include an order
+                // placed yesterday — hence the separate wording.
+                open.total == 0
+                    ? 'Nothing open right now'
+                    : '${open.total} open right now',
+                style: context.texts.bodySmall?.copyWith(
+                  color: context.surfaces.inkSoft,
                 ),
+              ),
+              if (open.total > 0) ...[
+                const SizedBox(height: AppSpacing.x3),
+                Wrap(
+                  spacing: AppSpacing.x2,
+                  runSpacing: AppSpacing.x2,
+                  children: [
+                    _QueueChip(label: 'Placed', count: open.placed),
+                    _QueueChip(label: 'Preparing', count: open.preparing),
+                    _QueueChip(label: 'Ready', count: open.ready),
+                    _QueueChip(
+                      label: 'Out for delivery',
+                      count: open.outForDelivery,
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QueueChip extends StatelessWidget {
+  const _QueueChip({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colours = context.orderColors;
+    // A zero stage is muted rather than hidden, so the four stages stay in the
+    // same place from one glance to the next.
+    final quiet = count == 0;
+
+    return AppChip.status(
+      label: '$label $count',
+      foreground: quiet ? context.surfaces.inkSoft : colours.preparing,
+      background: quiet
+          ? context.surfaces.ground
+          : colours.preparingContainer,
+    );
+  }
+}
+
+/// A to-do list, not a statistic.
+class _AttentionPanel extends StatelessWidget {
+  const _AttentionPanel({
+    required this.attention,
+    this.onBookings,
+    this.onMessages,
+  });
+
+  final AttentionSummary attention;
+  final VoidCallback? onBookings;
+  final VoidCallback? onMessages;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Needs attention', style: context.texts.titleMedium),
+        const SizedBox(height: AppSpacing.x3),
+        if (attention.isClear)
+          AppSurface.row(
+            padding: const EdgeInsets.all(AppSpacing.x4),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  size: AppIconSize.lg,
+                  color: context.orderColors.ready,
+                ),
+                const SizedBox(width: AppSpacing.x3),
+                Expanded(
+                  child: Text(
+                    'Nothing waiting. Every request has been answered.',
+                    style: context.texts.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          if (attention.pendingBookings > 0)
+            _AttentionRow(
+              icon: Icons.event_note_outlined,
+              label: attention.pendingBookings == 1
+                  ? '1 booking request'
+                  : '${attention.pendingBookings} booking requests',
+              detail: 'Waiting for approve or reject',
+              onTap: onBookings,
+            ),
+          if (attention.pendingBookings > 0 && attention.newMessages > 0)
+            const SizedBox(height: AppSpacing.x3),
+          if (attention.newMessages > 0)
+            _AttentionRow(
+              icon: Icons.mail_outline,
+              label: attention.newMessages == 1
+                  ? '1 new message'
+                  : '${attention.newMessages} new messages',
+              detail: 'Sent through the website',
+              onTap: onMessages,
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AttentionRow extends StatelessWidget {
+  const _AttentionRow({
+    required this.icon,
+    required this.label,
+    required this.detail,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String detail;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: AppSurface.row(
+          padding: const EdgeInsets.all(AppSpacing.x4),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.surfaces.accentContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Icon(icon, size: AppIconSize.lg, color: scheme.primary),
               ),
               const SizedBox(width: AppSpacing.x3),
               Expanded(
-                child: const MetricCard(
-                  caption: 'Active Tables',
-                  value: '14/20',
-                  icon: Icons.chair_outlined,
-                  valueSize: MoneySize.large,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: context.texts.titleSmall),
+                    Text(
+                      detail,
+                      style: context.texts.bodySmall?.copyWith(
+                        color: context.surfaces.inkSoft,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ).revealItem(3),
-
-          const SizedBox(height: AppSpacing.x8),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Text(
-                  'Recent Orders',
-                  style: context.texts.headlineLarge,
-                  overflow: TextOverflow.ellipsis,
+              if (onTap != null)
+                Icon(
+                  Icons.chevron_right,
+                  size: AppIconSize.xl,
+                  color: context.surfaces.inkSoft,
                 ),
-              ),
-              TextButton(
-                onPressed: widget.onViewAll,
-                child: const Text('View All'),
-              ),
             ],
-          ).revealItem(4),
-          const SizedBox(height: AppSpacing.x3),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-          for (final (index, order) in _recentOrders.indexed) ...[
-            OrderRow(
-              reference: order.reference,
-              destination: order.destination,
-              detail: order.detail,
-              amount: order.amount,
-              status: order.status,
-              onTap: () => _openOrder(order),
-            ).revealItem(
-              index,
-              after: Motion.staggerFor(5),
-              duration: Motion.fast,
-              direction: AxisDirection.left,
+/// A refresh failed, but the figures below are still worth reading.
+class _StaleBanner extends StatelessWidget {
+  const _StaleBanner({required this.state});
+
+  final DashboardState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final colours = context.orderColors;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.x4),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.x3),
+        decoration: BoxDecoration(
+          color: colours.overdueContainer,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.cloud_off_outlined,
+              size: AppIconSize.md,
+              color: colours.overdue,
             ),
-            if (index != _recentOrders.length - 1)
-              const SizedBox(height: AppSpacing.x2),
+            const SizedBox(width: AppSpacing.x2),
+            Expanded(
+              child: Text(
+                // Says the numbers are old rather than replacing them with
+                // zeros, which would read as a very bad day's trading.
+                'Could not refresh. These figures may be out of date.',
+                style: context.texts.bodySmall?.copyWith(
+                  color: colours.overdue,
+                ),
+              ),
+            ),
           ],
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoAccess extends StatelessWidget {
+  const _NoAccess({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.x8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock_outline,
+              size: AppIconSize.hero,
+              color: context.surfaces.inkSoft,
+            ),
+            const SizedBox(height: AppSpacing.x4),
+            Text(
+              'Takings are admin only',
+              style: context.texts.headlineMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.x2),
+            Text(
+              message,
+              style: context.texts.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

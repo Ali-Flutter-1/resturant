@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/animations/motion.dart';
 import '../../../core/animations/reveal.dart';
-import '../../../core/haptics/app_haptics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -355,13 +354,10 @@ class _MenuCard extends StatelessWidget {
                         background: context.orderColors.overdueContainer,
                       ),
                     ),
-                  Positioned(
-                    right: AppSpacing.x3,
-                    top: AppSpacing.x3,
-                    // Local only. The API has no favourites endpoint, so this
-                    // does not survive a restart — see the note on the widget.
-                    child: const _FavouriteButton(active: false),
-                  ),
+                  // The favourites heart is gone. The API has no favourites
+                  // endpoint, so it only ever held state until the next
+                  // restart — a control that looks like it saves something and
+                  // does not is worse than no control.
                 ],
               ),
               Padding(
@@ -445,60 +441,6 @@ class _MenuCard extends StatelessWidget {
   }
 }
 
-class _FavouriteButton extends StatefulWidget {
-  const _FavouriteButton({required this.active});
-
-  final bool active;
-
-  @override
-  State<_FavouriteButton> createState() => _FavouriteButtonState();
-}
-
-class _FavouriteButtonState extends State<_FavouriteButton> {
-  late bool _active = widget.active;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final motion = context.motion;
-
-    return GestureDetector(
-      onTap: () {
-        AppHaptics.toggle();
-        setState(() => _active = !_active);
-      },
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: scheme.surface.withValues(alpha: 0.92),
-          shape: BoxShape.circle,
-        ),
-        // Swapping outline for fill is the state change; the scale-in gives
-        // it a moment of confirmation. Overshoot is warranted here in a way
-        // it never is on a list — this is the user's own deliberate act
-        // answering back.
-        child: AnimatedSwitcher(
-          duration: motion.move(Motion.fast),
-          transitionBuilder: (child, animation) => ScaleTransition(
-            scale: CurvedAnimation(parent: animation, curve: motion.playful),
-            child: child,
-          ),
-          child: Icon(
-            _active ? Icons.favorite : Icons.favorite_border,
-            key: ValueKey(_active),
-            size: AppIconSize.lg,
-            color: _active ? scheme.primary : context.surfaces.inkSoft,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Shown when a search or filter excludes everything. The design file has no
-/// empty state for any screen, so this is invented — but a filterable list
-/// without one leaves the user staring at nothing.
 class _NoMatches extends StatelessWidget {
   const _NoMatches({required this.query, required this.onClear});
 

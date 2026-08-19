@@ -16,6 +16,8 @@ import 'features/admin/data/api_admin_contact_repository.dart';
 import 'features/admin/data/api_admin_menu_repository.dart';
 import 'features/admin/data/api_admin_order_repository.dart';
 import 'features/admin/data/api_admin_user_repository.dart';
+import 'features/admin/data/api_dashboard_repository.dart';
+import 'features/admin/domain/dashboard_repository.dart';
 import 'features/admin/domain/admin_contact_repository.dart';
 import 'features/admin/domain/admin_order_repository.dart';
 import 'features/admin/domain/admin_menu_repository.dart';
@@ -126,6 +128,7 @@ Future<void> main() async {
       adminContact: ApiAdminContactRepository(client: client),
       adminOrders: ApiAdminOrderRepository(client: client),
       adminUsers: ApiAdminUserRepository(client: client),
+      dashboard: ApiDashboardRepository(client: client),
       reservations: ApiReservationRepository(client: client),
       venue: ApiVenueRepository(client: client),
       notifications: notifications,
@@ -147,6 +150,7 @@ class TsCafeApp extends StatelessWidget {
     required this.adminContact,
     required this.adminOrders,
     required this.adminUsers,
+    required this.dashboard,
     required this.reservations,
     required this.venue,
     required this.notifications,
@@ -182,6 +186,9 @@ class TsCafeApp extends StatelessWidget {
   /// but provided app-wide for the same reason as [adminMenu].
   final AdminUserRepository adminUsers;
 
+  /// The admin landing screen's figures. Admin only at the API.
+  final DashboardRepository dashboard;
+
   /// Table bookings. One repository for both sides — the customer routes and
   /// the staff sheet share their models, and the backend decides from the token
   /// which of them a caller may actually use.
@@ -212,6 +219,7 @@ class TsCafeApp extends StatelessWidget {
         RepositoryProvider<AdminContactRepository>.value(value: adminContact),
         RepositoryProvider<AdminOrderRepository>.value(value: adminOrders),
         RepositoryProvider<AdminUserRepository>.value(value: adminUsers),
+        RepositoryProvider<DashboardRepository>.value(value: dashboard),
         RepositoryProvider<ReservationRepository>.value(value: reservations),
         RepositoryProvider<VenueRepository>.value(value: venue),
         RepositoryProvider<NotificationRepository>.value(value: notifications),
