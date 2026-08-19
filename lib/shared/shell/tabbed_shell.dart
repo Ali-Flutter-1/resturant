@@ -82,6 +82,17 @@ class _TabbedShellState extends State<TabbedShell> {
     (_) => GlobalKey<NavigatorState>(),
   );
 
+  /// Tabs that have been shown at least once.
+  ///
+  /// `IndexedStack` keeps every child in the tree, which is what preserves each
+  /// tab's navigation stack -- but it also *builds* them all up front. Every
+  /// admin tab fetches on build, so landing on the shell fired four requests at
+  /// once and the one screen actually on display had to queue behind three
+  /// nobody had looked at. Building a tab on first sight makes the visible
+  /// screen's request the only one in flight; once built it stays built, so
+  /// state is still preserved on the way back.
+  late final Set<int> _built = {widget.initialIndex};
+
   /// False while the active tab has a detail screen open.
   bool _showBar = true;
   bool _refreshScheduled = false;
@@ -111,7 +122,10 @@ class _TabbedShellState extends State<TabbedShell> {
     if (index == _currentIndex || index < 0 || index >= widget.tabs.length) {
       return;
     }
-    setState(() => _currentIndex = index);
+    setState(() {
+      _built.add(index);
+      _currentIndex = index;
+    });
     _scheduleBarVisibilityRefresh();
   }
 
@@ -123,7 +137,10 @@ class _TabbedShellState extends State<TabbedShell> {
       return;
     }
     AppHaptics.selection();
-    setState(() => _currentIndex = index);
+    setState(() {
+      _built.add(index);
+      _currentIndex = index;
+    });
     _scheduleBarVisibilityRefresh();
   }
 
@@ -135,7 +152,10 @@ class _TabbedShellState extends State<TabbedShell> {
       return;
     }
     if (_currentIndex != 0) {
-      setState(() => _currentIndex = 0);
+      setState(() {
+        _built.add(0);
+        _currentIndex = 0;
+      });
       _scheduleBarVisibilityRefresh();
       return;
     }
@@ -212,7 +232,12 @@ class _TabbedShellState extends State<TabbedShell> {
                 index: _currentIndex,
                 children: [
                   for (var i = 0; i < widget.tabs.length; i++)
-                    _tabNavigator(i, _barExtent(bottomInset)),
+                    // An unvisited tab is a placeholder, not a screen: no
+                    // navigator, no cubit, no request.
+                    if (_built.contains(i))
+                      _tabNavigator(i, _barExtent(bottomInset))
+                    else
+                      const SizedBox.shrink(),
                 ],
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/animations/reveal.dart';
 import '../../../core/animations/motion.dart';
+import '../../../core/animations/skeleton.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -96,7 +97,10 @@ class _DashboardViewState extends State<_DashboardView> {
           final cubit = context.read<DashboardCubit>();
 
           if (state.status == DashboardStatus.loading) {
-            return const MessageListSkeleton(rows: 4);
+            // Shaped like the dashboard, not like a message list: a placeholder
+            // whose layout matches what arrives makes the wait read as this
+            // screen loading rather than as a different screen being replaced.
+            return const _DashboardSkeleton();
           }
 
           // A staff account, or an admin demoted mid-session. Not a retry —
@@ -140,6 +144,55 @@ class _DashboardViewState extends State<_DashboardView> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Stands in for the real thing while the one request is in flight.
+class _DashboardSkeleton extends StatelessWidget {
+  const _DashboardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: pagePadding(context, top: AppSpacing.x4),
+        children: [
+          Skeleton.line(width: 70, height: 10),
+          const SizedBox(height: AppSpacing.x3),
+          // The hero card.
+          Skeleton.box(
+            width: double.infinity,
+            height: 104,
+            radius: AppRadius.lg,
+          ),
+          const SizedBox(height: AppSpacing.x3),
+          Row(
+            children: [
+              Expanded(child: Skeleton.box(height: 78, radius: AppRadius.md)),
+              const SizedBox(width: AppSpacing.x3),
+              Expanded(child: Skeleton.box(height: 78, radius: AppRadius.md)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.x6),
+          Skeleton.line(width: 60, height: 10),
+          const SizedBox(height: AppSpacing.x3),
+          Skeleton.box(
+            width: double.infinity,
+            height: 122,
+            radius: AppRadius.md,
+          ),
+          const SizedBox(height: AppSpacing.x6),
+          Skeleton.line(width: 110, height: 10),
+          const SizedBox(height: AppSpacing.x3),
+          Skeleton.box(
+            width: double.infinity,
+            height: 74,
+            radius: AppRadius.md,
+          ),
+        ],
       ),
     );
   }

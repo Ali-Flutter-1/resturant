@@ -71,6 +71,30 @@ double _insetFrom(WidgetTester tester, String prefix) {
   return double.parse(text.substring(prefix.length));
 }
 
+/// Counts how many times its screen is *created*, which is when a real tab
+/// would build its cubit and fetch.
+class _CountsCreations extends StatefulWidget {
+  const _CountsCreations({required this.onCreate, required this.label});
+
+  final VoidCallback onCreate;
+  final String label;
+
+  @override
+  State<_CountsCreations> createState() => _CountsCreationsState();
+}
+
+class _CountsCreationsState extends State<_CountsCreations> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onCreate();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(widget.label)));
+}
+
 void main() {
   Widget harness() => MaterialApp(
     theme: AppTheme.light,
@@ -233,5 +257,58 @@ void main() {
       detailInset,
       tester.view.padding.bottom / tester.view.devicePixelRatio,
     );
+  });
+
+  group('tabs are built on first sight', () {
+    testWidgets('an unvisited tab never runs its builder', (tester) async {
+      var oneBuilt = 0;
+      var twoBuilt = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: TabbedShell(
+            tabs: [
+              ShellTab(
+                label: 'One',
+                sfSymbol: 'circle',
+                icon: Icons.circle_outlined,
+                selectedIcon: Icons.circle,
+                builder: (_) =>
+                    _CountsCreations(onCreate: () => oneBuilt++, label: 'one'),
+              ),
+              ShellTab(
+                label: 'Two',
+                sfSymbol: 'square',
+                icon: Icons.square_outlined,
+                selectedIcon: Icons.square,
+                builder: (_) =>
+                    _CountsCreations(onCreate: () => twoBuilt++, label: 'two'),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The whole point: every admin tab fetches on build, so a tab nobody has
+      // opened must not be constructed. `IndexedStack` builds all of its
+      // children, which is what made landing on the shell fire four requests.
+      expect(oneBuilt, 1);
+      expect(twoBuilt, 0);
+
+      await tester.tap(find.text('Two'));
+      await tester.pumpAndSettle();
+      expect(twoBuilt, 1);
+
+      // ...and going back does not rebuild it, so its state and its already
+      // loaded data survive.
+      await tester.tap(find.text('One'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Two'));
+      await tester.pumpAndSettle();
+      expect(twoBuilt, 1);
+      expect(oneBuilt, 1);
+    });
   });
 }
