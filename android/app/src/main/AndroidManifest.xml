@@ -67,5 +67,13 @@
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE"/>
         </intent>
+        <!-- Android 11+ hides other apps unless they are declared here. Without
+             this, url_launcher can see no browser: the Worldpay payment page
+             and the Directions button both fail with an activity-not-found
+             rather than opening. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

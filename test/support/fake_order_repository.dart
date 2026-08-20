@@ -24,6 +24,9 @@ class FakeOrderRepository implements OrderRepository {
   int loadCount = 0;
   final cancelled = <String>[];
 
+  /// What the customer typed, in call order. Null where they said nothing.
+  final cancelReasons = <String?>[];
+
   /// What a quote answers with. Set by a test that cares.
   ///
   /// The slots are relative to now, not fixed dates. They used to be pinned to
@@ -58,6 +61,64 @@ class FakeOrderRepository implements OrderRepository {
   final idempotencyKeys = <String>[];
   Map<String, Object?>? lastPlaced;
 
+  /// The page a card order is handed, and how many times one was asked for.
+  String? payUrl = 'https://hpp-sandbox.worldpay.com/test-page';
+  int payCalls = 0;
+  ApiFailure? payFailure;
+
+  @override
+  Future<CustomerOrder> pay(String id) async {
+    payCalls++;
+    final error = payFailure ?? failure;
+    if (error != null) throw error;
+    final existing = orders.firstWhere((o) => o.id == id);
+    return existing.paymentUrl != null
+        ? existing
+        : _replace(existing, paymentUrl: payUrl);
+  }
+
+  /// Stands in for the server settling a payment, so a test can say what the
+  /// webhook decided.
+  void settlePayment(String id, CustomerPaymentStatus status) {
+    final existing = orders.firstWhere((o) => o.id == id);
+    orders = [
+      for (final o in orders)
+        if (o.id == id)
+          _replace(
+            existing,
+            paymentStatus: status,
+            // The server nulls the page once there is nothing left to pay.
+            clearUrl: status != CustomerPaymentStatus.pending,
+            paidAt: status == CustomerPaymentStatus.paid
+                ? DateTime.now()
+                : null,
+          )
+        else
+          o,
+    ];
+  }
+
+  CustomerOrder _replace(
+    CustomerOrder order, {
+    String? paymentUrl,
+    CustomerPaymentStatus? paymentStatus,
+    DateTime? paidAt,
+    bool clearUrl = false,
+  }) => CustomerOrder(
+    id: order.id,
+    reference: order.reference,
+    status: order.status,
+    totalPence: order.totalPence,
+    placedAt: order.placedAt,
+    items: order.items,
+    isDelivery: order.isDelivery,
+    canCancel: order.canCancel,
+    paymentMethod: order.paymentMethod,
+    paymentStatus: paymentStatus ?? order.paymentStatus,
+    paymentUrl: clearUrl ? null : (paymentUrl ?? order.paymentUrl),
+    paidAt: paidAt ?? order.paidAt,
+  );
+
   @override
   Future<OrderQuote> quote({
     required bool isDelivery,
@@ -77,6 +138,7 @@ class FakeOrderRepository implements OrderRepository {
     required List<CartLine> lines,
     required String contactName,
     required String contactPhone,
+    PaymentMethod paymentMethod = PaymentMethod.cash,
     bool isAsap = true,
     String? requestedFor,
     String? addressLine1,
@@ -93,6 +155,7 @@ class FakeOrderRepository implements OrderRepository {
       'items': [for (final line in lines) line.toJson()],
       'contact_name': contactName,
       'contact_phone': contactPhone,
+      'payment_method': paymentMethod.wire,
       'is_asap': isAsap,
       'requested_for': requestedFor,
       'address_line1': addressLine1,
@@ -112,6 +175,8 @@ class FakeOrderRepository implements OrderRepository {
       placedAt: DateTime(2026, 8, 12, 18, 30),
       isDelivery: isDelivery,
       canCancel: true,
+      paymentMethod: paymentMethod,
+      paymentUrl: paymentMethod == PaymentMethod.card ? payUrl : null,
     );
     orders = [placed, ...orders];
     return placed;
@@ -131,9 +196,10 @@ class FakeOrderRepository implements OrderRepository {
   }
 
   @override
-  Future<CustomerOrder> cancel(String id) async {
+  Future<CustomerOrder> cancel(String id, {String? reason}) async {
     if (cancelFailure != null) throw cancelFailure!;
     cancelled.add(id);
+    cancelReasons.add(reason);
     final order = orders.firstWhere((o) => o.id == id);
     final updated = OrderFixtures.copyCancelled(order);
     orders = [

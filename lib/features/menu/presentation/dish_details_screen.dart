@@ -8,7 +8,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../features/cart/cart_cubit.dart';
-import '../../../shared/preview/sample_content.dart';
 import '../domain/dish.dart';
 import '../domain/spice_level.dart';
 import '../../../shared/animations/fly_to_cart.dart';
@@ -49,7 +48,6 @@ class DishDetailsScreen extends StatefulWidget {
 
 class _DishDetailsScreenState extends State<DishDetailsScreen> {
   SpiceLevel? _spice;
-  final _selectedAddOns = <int>{};
   int _quantity = 1;
 
   /// Measured at launch to position the flying copy and its destination.
@@ -76,14 +74,13 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
       ),
       onArrive: () {
         if (!mounted) return;
-        // Spice level is a real API field. Add-ons are not — they go into the
-        // line's `notes`, the only free field the API offers on an order line,
-        // and are therefore *instructions* rather than priced extras. The server
-        // prices from `dish_id` alone, so a paid modifier would be its own dish.
+        // Spice level is a real API field, so it is sent as one. Add-ons were
+        // never priced by the server -- they were sample data squeezed into the
+        // line's free-text `notes` -- so offering them promised extras nobody
+        // could charge for or fulfil.
         context.read<CartCubit>().addDish(
           _dish,
           quantity: _quantity,
-          notes: _notes(),
           spiceLevel: _spice,
         );
         AppHaptics.success();
@@ -100,31 +97,7 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
       widget.dish ??
       const Dish(id: '', name: 'Dish', description: '', pricePence: 0);
 
-  double get _total {
-    final addOns = _selectedAddOns.fold<double>(
-      0,
-      (sum, i) => sum + SampleContent.addOns[i].price,
-    );
-    return (_dish.price + addOns) * _quantity;
-  }
-
-  /// What the kitchen is told about this line.
-  ///
-  /// The chosen add-ons, in one string of at most 200 characters — the API's
-  /// limit. Truncated rather than refused: losing the tail of a long note is
-  /// better than refusing to add the dish.
-  ///
-  /// Spice level is no longer in here. It has its own API field now, and putting
-  /// it in free text meant the kitchen ticket carried it but no report could
-  /// count it.
-  String? _notes() {
-    final parts = <String>[
-      for (final i in _selectedAddOns) SampleContent.addOns[i].name,
-    ];
-    final text = parts.join(', ');
-    if (text.isEmpty) return null;
-    return text.length <= 200 ? text : text.substring(0, 200);
-  }
+  double get _total => _dish.price * _quantity;
 
   @override
   Widget build(BuildContext context) {
@@ -225,30 +198,6 @@ class _DishDetailsScreenState extends State<DishDetailsScreen> {
                     ),
                     const SizedBox(height: AppSpacing.x6),
                   ],
-
-                  _ChoiceSection(
-                    title: 'Add-ons',
-                    badge: 'Optional',
-                    child: Column(
-                      children: [
-                        for (final (i, addOn)
-                            in SampleContent.addOns.indexed) ...[
-                          if (i > 0) const SizedBox(height: AppSpacing.x3),
-                          _AddOnTile(
-                            name: addOn.name,
-                            description: addOn.description,
-                            price: addOn.price,
-                            selected: _selectedAddOns.contains(i),
-                            onChanged: (on) => setState(() {
-                              on
-                                  ? _selectedAddOns.add(i)
-                                  : _selectedAddOns.remove(i);
-                            }),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 ].revealStaggered(),
               ),
             ),
@@ -427,81 +376,6 @@ class _SpiceOption extends StatelessWidget {
           style: context.texts.titleMedium?.copyWith(
             color: selected ? scheme.primary : scheme.onSurface,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddOnTile extends StatelessWidget {
-  const _AddOnTile({
-    required this.name,
-    required this.description,
-    required this.price,
-    required this.selected,
-    required this.onChanged,
-  });
-
-  final String name;
-  final String description;
-  final double price;
-  final bool selected;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return InkWell(
-      onTap: () {
-        AppHaptics.selection();
-        onChanged(!selected);
-      },
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: AnimatedContainer(
-        duration: context.motion.fade(Motion.fast),
-        padding: const EdgeInsets.all(AppSpacing.x3),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(
-            color: selected ? scheme.primary : context.surfaces.line,
-          ),
-          color: selected
-              ? context.surfaces.accentContainer.withValues(alpha: 0.5)
-              : Colors.transparent,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Checkbox(
-                value: selected,
-                onChanged: (v) => onChanged(v ?? false),
-                activeColor: scheme.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.xs),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.x3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: context.texts.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(description, style: context.texts.bodySmall),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.x2),
-            Text(
-              '+ £${price.toStringAsFixed(2)}',
-              style: context.texts.titleMedium,
-            ),
-          ],
         ),
       ),
     );

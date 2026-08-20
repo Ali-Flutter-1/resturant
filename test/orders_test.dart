@@ -149,6 +149,18 @@ void main() {
       expect(cooking.canCancel, isFalse);
     });
 
+    test('cancelling stops at the kitchen door', () {
+      // The server can veto, but it cannot widen the window: once cooking has
+      // started, food and time have been spent and calling it off is a
+      // conversation with the restaurant rather than a button.
+      final cookingButAllowed = CustomerOrder.fromJson({
+        'id': 'd',
+        'status': 'preparing',
+        'can_cancel': true,
+      });
+      expect(cookingButAllowed.canCancel, isFalse);
+    });
+
     test('collection orders are never described as on their way', () {
       final order = CustomerOrder.fromJson({
         'id': 'a',
@@ -551,10 +563,7 @@ void main() {
       expect(rejected.status, CustomerOrderStatus.cancelled);
       expect(rejected.wasRejected, isTrue);
       expect(rejected.statusLabel, 'Declined');
-      expect(
-        rejected.cancellationReason,
-        'The requested dish is unavailable.',
-      );
+      expect(rejected.cancellationReason, 'The requested dish is unavailable.');
       expect(rejected.cancelledAt, isNotNull);
 
       final cancelled = CustomerOrder.fromJson(const {
@@ -600,10 +609,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('declined this order'), findsOneWidget);
-      expect(
-        find.text('The requested dish is unavailable.'),
-        findsOneWidget,
-      );
+      expect(find.text('The requested dish is unavailable.'), findsOneWidget);
     });
   });
 

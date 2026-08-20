@@ -389,14 +389,31 @@ void main() {
       expect(find.text('High spice · No coriander'), findsOneWidget);
     });
 
-    testWidgets('offers cash only, and says so', (tester) async {
+    testWidgets('offers cash and card, with cash preselected', (tester) async {
       await tester.pumpWidget(wrap());
       await tester.pump(const Duration(seconds: 2));
 
-      // The API answers `card` with CARD_PAYMENT_UNAVAILABLE, so a card option
-      // would be a button that always fails.
-      expect(find.textContaining('Pay with cash'), findsOne);
-      expect(find.text('Card'), findsNothing);
+      expect(find.text('Cash'), findsOne);
+      expect(find.text('Card'), findsOne);
+
+      // Cash until asked otherwise: moving somebody to paying online is not a
+      // choice the checkout screen gets to make for them.
+      expect(find.textContaining('Place order'), findsOne);
+    });
+
+    testWidgets('choosing card changes what the button promises', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.text('Card'));
+      await tester.pumpAndSettle();
+
+      // "Pay", because the next thing that happens is a payment page, not a
+      // confirmed order.
+      expect(find.textContaining('Pay ·'), findsOne);
+      expect(find.textContaining('Place order'), findsNothing);
     });
 
     testWidgets('offers two timing choices rather than a wall of chips', (

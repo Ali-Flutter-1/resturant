@@ -146,46 +146,17 @@ void main() {
       expect(find.text('£35.00'), findsOneWidget);
     });
 
-    testWidgets('an add-on raises the total', (tester) async {
+    testWidgets('there are no add-ons to choose', (tester) async {
       await tester.pumpWidget(wrap(wrapDish()));
       await tester.pumpAndSettle();
 
-      // Coconut Roti is £3.50, and sits below the fold on a test viewport.
-      await tester.scrollUntilVisible(find.text('Coconut Roti'), 200);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Coconut Roti'));
-      await tester.pumpAndSettle();
+      // They were sample data priced entirely in the app and passed to the
+      // kitchen as free text -- the server prices from `dish_id` alone, so
+      // nothing here could ever have been charged for.
+      expect(find.text('Add-ons'), findsNothing);
+      expect(find.text('Coconut Roti'), findsNothing);
 
-      expect(find.text('£21.00'), findsOneWidget);
-    });
-
-    testWidgets('add-ons multiply with quantity', (tester) async {
-      await tester.pumpWidget(wrap(wrapDish()));
-      await tester.pumpAndSettle();
-
-      await tester.scrollUntilVisible(find.text('Coconut Roti'), 200);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Coconut Roti'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.add_rounded));
-      await tester.pumpAndSettle();
-
-      // (17.50 + 3.50) x 2
-      expect(find.text('£42.00'), findsOneWidget);
-    });
-
-    testWidgets('deselecting an add-on removes its cost', (tester) async {
-      await tester.pumpWidget(wrap(wrapDish()));
-      await tester.pumpAndSettle();
-
-      await tester.scrollUntilVisible(find.text('Coconut Roti'), 200);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Coconut Roti'));
-      await tester.pumpAndSettle();
-      expect(find.text('£21.00'), findsOneWidget);
-
-      await tester.tap(find.text('Coconut Roti'));
-      await tester.pumpAndSettle();
+      // The total is the dish, times however many.
       expect(find.text('£17.50'), findsOneWidget);
     });
 

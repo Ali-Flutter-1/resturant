@@ -32,7 +32,7 @@ void main() {
 
   Widget wrap({AuthUser user = AuthFixtures.admin}) => BlocProvider(
     create: (_) => AuthFixtures.cubit(user),
-    child:    RepositoryProvider<AdminUserRepository>.value(
+    child: RepositoryProvider<AdminUserRepository>.value(
       value: repository,
       child: MaterialApp(theme: AppTheme.light, home: const AdminUsersScreen()),
     ),

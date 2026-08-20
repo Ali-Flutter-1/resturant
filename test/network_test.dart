@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/network/api_client.dart';
+import 'package:practice/features/orders/data/api_order_repository.dart';
 import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/core/network/connectivity_service.dart';
 import 'package:practice/core/network/token_store.dart';
@@ -485,6 +486,59 @@ void main() {
       expect(failure.code, isNull);
       expect(failure.message, isNot(contains('500')));
       expect(failure.isRetryable, isTrue);
+    });
+  });
+
+  group('cancelling an order on the wire', () {
+    Future<ResponseBody> ok(RequestOptions _) async => _json(
+      200,
+      '{"success":true,"message":"Your order has been cancelled.",'
+      '"data":{"id":"o1","status":"cancelled",'
+      '"cancellation_reason":"Ordered by mistake"}}',
+    );
+
+    test('sends a JSON body even when there is no reason', () async {
+      final adapter = _StubAdapter(ok);
+      final repository = ApiOrderRepository(
+        client: _client(handler: ok, adapter: adapter),
+      );
+
+      await repository.cancel('o1');
+
+      // The route declares a required body. Sending none at all -- which is
+      // what a bare POST does -- comes back as a validation error rather than
+      // a cancellation, so the key goes out even when it is null.
+      final call = adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, contains('/orders/o1/cancel'));
+      expect(call.data, isA<Map<String, dynamic>>());
+    });
+
+    test("sends the customer's reason, trimmed", () async {
+      final adapter = _StubAdapter(ok);
+      final repository = ApiOrderRepository(
+        client: _client(handler: ok, adapter: adapter),
+      );
+
+      await repository.cancel('o1', reason: '  Ordered by mistake  ');
+
+      expect(
+        (adapter.calls.single.data as Map)['reason'],
+        'Ordered by mistake',
+      );
+    });
+
+    test('truncates a reason past the 500 the API accepts', () async {
+      final adapter = _StubAdapter(ok);
+      final repository = ApiOrderRepository(
+        client: _client(handler: ok, adapter: adapter),
+      );
+
+      await repository.cancel('o1', reason: 'x' * 600);
+
+      // Truncated rather than refused: losing the tail of a long explanation
+      // is better than refusing to cancel the order over it.
+      expect((adapter.calls.single.data as Map)['reason'], hasLength(500));
     });
   });
 }

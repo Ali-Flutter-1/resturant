@@ -226,18 +226,20 @@ void main() {
       await cubit.close();
     });
 
-    test('marking all read does nothing when there is nothing unread',
-        () async {
-      final cubit = NotificationsCubit(repository: repository);
-      await cubit.load();
-      await cubit.markAllRead();
-      expect(repository.markAllCalls, 1);
+    test(
+      'marking all read does nothing when there is nothing unread',
+      () async {
+        final cubit = NotificationsCubit(repository: repository);
+        await cubit.load();
+        await cubit.markAllRead();
+        expect(repository.markAllCalls, 1);
 
-      await cubit.markAllRead();
-      // Already zero, so no second request.
-      expect(repository.markAllCalls, 1);
-      await cubit.close();
-    });
+        await cubit.markAllRead();
+        // Already zero, so no second request.
+        expect(repository.markAllCalls, 1);
+        await cubit.close();
+      },
+    );
 
     test('the badge can be refreshed on its own', () async {
       final cubit = NotificationsCubit(repository: repository);
@@ -374,9 +376,7 @@ void main() {
         MaterialApp(
           theme: AppTheme.light,
           home: Scaffold(
-            appBar: AppBar(
-              actions: [NotificationBell(onOpen: () {})],
-            ),
+            appBar: AppBar(actions: [NotificationBell(onOpen: () {})]),
           ),
         ),
       );
@@ -484,9 +484,7 @@ void main() {
             child: MaterialApp(
               theme: AppTheme.light,
               home: Scaffold(
-                appBar: AppBar(
-                  actions: [NotificationBell(onOpen: () {})],
-                ),
+                appBar: AppBar(actions: [NotificationBell(onOpen: () {})]),
                 body: const NotificationsScreen(),
               ),
             ),

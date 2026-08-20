@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_constants.dart';
 import '../../cart/cart_cubit.dart';
@@ -33,6 +35,7 @@ class ApiOrderRepository implements OrderRepository {
     required List<CartLine> lines,
     required String contactName,
     required String contactPhone,
+    PaymentMethod paymentMethod = PaymentMethod.cash,
     bool isAsap = true,
     String? requestedFor,
     String? addressLine1,
@@ -50,9 +53,7 @@ class ApiOrderRepository implements OrderRepository {
       headers: {ApiConstants.idempotencyKeyHeader: idempotencyKey},
       body: {
         'fulfilment_type': isDelivery ? 'delivery' : 'collection',
-        // Cash only: the API answers `card` with CARD_PAYMENT_UNAVAILABLE, so
-        // offering it would be offering a button that always fails.
-        'payment_method': 'cash',
+        'payment_method': paymentMethod.wire,
         'items': [for (final line in lines) line.toJson()],
         'is_asap': isAsap,
         // Sent verbatim as the quote gave it, offset included — the API refuses
@@ -111,7 +112,30 @@ class ApiOrderRepository implements OrderRepository {
       CustomerOrder.fromJson(await _client.object(ApiConstants.order(id)));
 
   @override
-  Future<CustomerOrder> cancel(String id) async => CustomerOrder.fromJson(
-    await _client.object(ApiConstants.orderCancel(id), method: 'POST'),
+  Future<CustomerOrder> cancel(String id, {String? reason}) async {
+    final trimmed = reason?.trim();
+    return CustomerOrder.fromJson(
+      await _client.object(
+        ApiConstants.orderCancel(id),
+        method: 'POST',
+        // The body is not optional even though every field in it is: the route
+        // declares one, so sending nothing at all is a validation error rather
+        // than a cancellation.
+        body: {
+          'reason': ?(trimmed == null || trimmed.isEmpty
+              ? null
+              : trimmed.substring(0, min(trimmed.length, _reasonLimit))),
+        },
+      ),
+    );
+  }
+
+  /// The API's own ceiling. Truncated rather than refused -- losing the tail of
+  /// a long explanation is better than refusing to cancel the order.
+  static const int _reasonLimit = 500;
+
+  @override
+  Future<CustomerOrder> pay(String id) async => CustomerOrder.fromJson(
+    await _client.object(ApiConstants.orderPay(id), method: 'POST'),
   );
 }

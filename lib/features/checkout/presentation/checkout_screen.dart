@@ -13,6 +13,7 @@ import '../../../shared/widgets/app_sheet.dart';
 import '../../../shared/widgets/app_surface.dart';
 import '../../auth/auth_cubit.dart';
 import '../../cart/cart_cubit.dart';
+import '../../orders/domain/customer_order.dart';
 import '../../orders/domain/order_quote.dart';
 import '../../orders/domain/order_repository.dart';
 import 'checkout_cubit.dart';
@@ -143,12 +144,28 @@ class _CheckoutViewState extends State<_CheckoutView> {
       return;
     }
 
-    AppHaptics.success();
     final order = cubit.state.placedOrder;
-    if (order != null) {
-      showAppSnack(context, 'Order ${order.reference} placed.');
-      widget.onPlaceOrder?.call(order.reference);
-    }
+    if (order == null) return;
+
+    // What the customer is told depends on where the money got to, because it
+    // decides whether the kitchen has the order at all. A card order that has
+    // not been paid for is held back until the payment webhook lands, so
+    // telling them it is being prepared would be a lie they act on.
+    final message = switch (order) {
+      _ when !order.isCard => 'Order ${order.reference} placed.',
+      _ when order.isPaid =>
+        "Order ${order.reference} confirmed - we're preparing it.",
+      _ when order.paymentStatus == CustomerPaymentStatus.failed =>
+        'Your card was declined. Your order is saved - tap Pay to try again.',
+      // Placed, unpaid, and the webhook has not arrived within the window.
+      // Neither a success nor a failure, and worth saying so exactly.
+      _ => "We're still confirming your payment for ${order.reference}.",
+    };
+    final wentWrong = order.isCard && !order.isPaid;
+
+    wentWrong ? AppHaptics.failure() : AppHaptics.success();
+    showAppSnack(context, message, isError: wentWrong);
+    widget.onPlaceOrder?.call(order.reference);
   }
 
   @override
@@ -309,32 +326,21 @@ class _CheckoutViewState extends State<_CheckoutView> {
                         // Re-priced by the server, not adjusted locally. Removing
                         // a line can drop the basket under the delivery minimum
                         // or change the fee, and only the quote knows that.
-                        context.read<CheckoutCubit>().quote();
+                        //
+                        // Debounced: a customer settling on a quantity taps
+                        // several times in a second, and each tap used to cost
+                        // its own round trip.
+                        context.read<CheckoutCubit>().quoteSoon();
                       },
                     ),
 
                     const SizedBox(height: AppSpacing.x5),
-                    // Cash only, said plainly rather than offering a card option
-                    // the API rejects with CARD_PAYMENT_UNAVAILABLE.
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.payments_outlined,
-                          size: AppIconSize.lg,
-                          color: context.surfaces.inkSoft,
-                        ),
-                        const SizedBox(width: AppSpacing.x3),
-                        Expanded(
-                          child: Text(
-                            'Pay with cash on '
-                            '${state.isDelivery ? 'delivery' : 'collection'}. '
-                            'Card payments are coming.',
-                            style: context.texts.bodySmall?.copyWith(
-                              color: context.surfaces.inkSoft,
-                            ),
-                          ),
-                        ),
-                      ],
+                    _PaymentMethodPicker(
+                      method: state.paymentMethod,
+                      isDelivery: state.isDelivery,
+                      onChanged: (method) => context
+                          .read<CheckoutCubit>()
+                          .setPaymentMethod(method),
                     ),
 
                     const SizedBox(height: AppSpacing.x5),
@@ -754,7 +760,6 @@ class _QuotePanel extends StatelessWidget {
             _BasketRow(
               line: line,
               pricePence: _pricedFor(line)?.linePence ?? line.displayLinePence,
-              busy: loading,
               onChangeQuantity: (quantity) => onChangeQuantity(line, quantity),
             ),
             const SizedBox(height: AppSpacing.x3),
@@ -831,17 +836,142 @@ class _QuotePanel extends StatelessWidget {
 }
 
 /// One editable basket line.
+/// Cash or card.
+///
+/// Card is the default nudge but not the default choice: switching somebody to
+/// paying online without them asking is not a decision a checkout screen gets
+/// to make.
+class _PaymentMethodPicker extends StatelessWidget {
+  const _PaymentMethodPicker({
+    required this.method,
+    required this.isDelivery,
+    required this.onChanged,
+  });
+
+  final PaymentMethod method;
+  final bool isDelivery;
+  final ValueChanged<PaymentMethod> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      title: 'Payment',
+      child: Column(
+        children: [
+          _PaymentOption(
+            icon: Icons.payments_outlined,
+            title: 'Cash',
+            detail: 'Pay when you ${isDelivery ? 'get it' : 'collect'}.',
+            selected: method == PaymentMethod.cash,
+            onTap: () => onChanged(PaymentMethod.cash),
+          ),
+          const SizedBox(height: AppSpacing.x3),
+          _PaymentOption(
+            icon: Icons.credit_card,
+            title: 'Card',
+            // Said up front, because it changes what happens next: the kitchen
+            // does not start a card order until the money clears.
+            detail:
+                'Pay now on a secure page. Your order is confirmed once '
+                'the payment goes through.',
+            selected: method == PaymentMethod.card,
+            onTap: () => onChanged(PaymentMethod.card),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentOption extends StatelessWidget {
+  const _PaymentOption({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: AnimatedContainer(
+            duration: Motion.fast,
+            curve: Motion.standard,
+            padding: const EdgeInsets.all(AppSpacing.x4),
+            decoration: BoxDecoration(
+              color: selected
+                  ? context.surfaces.accentContainer
+                  : context.surfaces.ground,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: selected ? scheme.primary : context.surfaces.line,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: AppIconSize.lg,
+                  color: selected ? scheme.primary : context.surfaces.inkSoft,
+                ),
+                const SizedBox(width: AppSpacing.x3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: context.texts.titleSmall),
+                      Text(
+                        detail,
+                        style: context.texts.bodySmall?.copyWith(
+                          color: context.surfaces.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: AppIconSize.lg,
+                  color: selected ? scheme.primary : context.surfaces.inkSoft,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BasketRow extends StatelessWidget {
   const _BasketRow({
     required this.line,
     required this.pricePence,
-    required this.busy,
     required this.onChangeQuantity,
   });
 
   final CartLine line;
   final int pricePence;
-  final bool busy;
   final ValueChanged<int> onChangeQuantity;
 
   Future<void> _confirmRemove(BuildContext context) async {
@@ -911,11 +1041,13 @@ class _BasketRow extends StatelessWidget {
                     semanticLabel: line.quantity > 1
                         ? 'One fewer ${line.title}'
                         : 'Remove ${line.title}',
-                    onPressed: busy
-                        ? null
-                        : () => line.quantity > 1
-                              ? onChangeQuantity(line.quantity - 1)
-                              : _confirmRemove(context),
+                    // Live while a quote is in flight. The basket, not the
+                    // server, owns the quantity -- pricing merely follows it --
+                    // so locking the stepper for the length of a round trip
+                    // made every tap feel like it cost a second.
+                    onPressed: () => line.quantity > 1
+                        ? onChangeQuantity(line.quantity - 1)
+                        : _confirmRemove(context),
                   ),
                   SizedBox(
                     width: 34,
@@ -928,7 +1060,7 @@ class _BasketRow extends StatelessWidget {
                   _StepIcon(
                     icon: Icons.add_rounded,
                     semanticLabel: 'One more ${line.title}',
-                    onPressed: busy || line.quantity >= CartState.maxQuantity
+                    onPressed: line.quantity >= CartState.maxQuantity
                         ? null
                         : () => onChangeQuantity(line.quantity + 1),
                   ),
@@ -1031,18 +1163,23 @@ class _PlaceButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final submitting = state.stage == CheckoutStage.submitting;
     final quote = state.quote;
+    // The card wording is a promise about the next screen: tapping this opens
+    // Worldpay's page rather than finishing the order outright.
+    final verb = state.isCard ? 'Pay' : 'Place order';
 
     return FilledButton(
       // Disabled while in flight, so a double tap cannot become two attempts —
       // the idempotency key would catch it, but not asking is better.
-      onPressed: submitting ? null : onPressed,
+      onPressed: submitting || state.paying ? null : onPressed,
       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
       child: Text(
-        submitting
+        state.paying
+            ? 'Confirming your payment…'
+            : submitting
             ? 'Placing your order…'
             : quote == null
-            ? 'Place order'
-            : 'Place order · ${quote.formattedTotal}',
+            ? verb
+            : '$verb · ${quote.formattedTotal}',
       ),
     );
   }

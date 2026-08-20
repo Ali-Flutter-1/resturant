@@ -180,6 +180,7 @@ class _MyOrdersViewState extends State<_MyOrdersView> {
                       child: _LiveOrderCard(
                         order: order,
                         isCancelling: state.cancellingId == order.id,
+                        isPaying: state.payingId == order.id,
                       ),
                     ),
                 ],
@@ -218,15 +219,39 @@ class _SectionHeading extends StatelessWidget {
 
 /// An order still in progress: the tracker, what is in it, and the way out.
 class _LiveOrderCard extends StatelessWidget {
-  const _LiveOrderCard({required this.order, required this.isCancelling});
+  const _LiveOrderCard({
+    required this.order,
+    required this.isCancelling,
+    required this.isPaying,
+  });
 
   final CustomerOrder order;
   final bool isCancelling;
+  final bool isPaying;
+
+  Future<void> _pay(BuildContext context) async {
+    final cubit = context.read<OrdersCubit>();
+    final message = await cubit.payOrder(order.id);
+    if (!context.mounted) return;
+
+    if (message == null) {
+      AppHaptics.success();
+      showAppSnack(
+        context,
+        'Payment received. Order ${order.reference} is '
+        "confirmed and we're preparing it.",
+      );
+      return;
+    }
+    AppHaptics.failure();
+    showAppSnack(context, message, isError: true);
+  }
 
   Future<void> _cancel(BuildContext context) async {
     final cubit = context.read<OrdersCubit>();
     // Asked before it happens, not undone afterwards. There is no un-cancelling
     // an order the kitchen has already stopped cooking.
+    final reason = TextEditingController();
     final confirmed = await showAppSheet<bool>(
       context: context,
       title: 'Cancel order ${order.reference}?',
@@ -252,7 +277,22 @@ class _LiveOrderCard extends StatelessWidget {
                   color: sheetContext.surfaces.inkMuted,
                 ),
               ),
-              const SizedBox(height: AppSpacing.x5),
+              const SizedBox(height: AppSpacing.x4),
+              // Optional, and said to be: the restaurant reads these, but
+              // demanding an explanation before letting somebody out of an
+              // order they have not been charged for is a toll, not a question.
+              TextField(
+                controller: reason,
+                maxLength: 500,
+                maxLines: 2,
+                minLines: 1,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (optional)',
+                  hintText: 'Ordered by mistake, changed my mind…',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.x4),
               // Keeping the order is the safe choice, so it gets the filled
               // button; cancelling is the destructive one and reads as such.
               // The old layout had them the other way round, which put the
@@ -278,9 +318,11 @@ class _LiveOrderCard extends StatelessWidget {
       ),
     );
 
+    final typed = reason.text;
+    reason.dispose();
     if (confirmed != true || !context.mounted) return;
 
-    final error = await cubit.cancelOrder(order.id);
+    final error = await cubit.cancelOrder(order.id, reason: typed);
     if (!context.mounted) return;
 
     if (error == null) {
@@ -375,6 +417,22 @@ class _LiveOrderCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+
+          if (order.needsPayment) ...[
+            const SizedBox(height: AppSpacing.x4),
+            PrimaryButton(
+              // "Try again" after a decline, because the first attempt is not
+              // something to repeat -- the flow fetches a new page, which
+              // Worldpay requires for a retry to reach it at all.
+              label: isPaying
+                  ? 'Confirming payment…'
+                  : order.paymentStatus == CustomerPaymentStatus.failed
+                  ? 'Try again'
+                  : 'Pay ${order.formattedTotal}',
+              icon: Icons.credit_card,
+              onPressed: isPaying ? null : () => _pay(context),
             ),
           ],
 

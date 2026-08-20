@@ -82,7 +82,9 @@ class NotificationsCubit extends Cubit<NotificationsState> {
 
   /// Never unbounded. The API caps a page at 100 and the guide asks for
   /// pagination rather than "give me everything".
-  static const int pageSize = 20;
+  /// Fifteen a page: enough to fill any phone screen with a little to scroll
+  /// into, small enough that the first page lands quickly on a slow connection.
+  static const int pageSize = 15;
 
   Future<void> load({bool silent = false}) async {
     if (!silent) {

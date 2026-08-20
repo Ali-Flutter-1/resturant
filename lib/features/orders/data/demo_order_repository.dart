@@ -71,6 +71,7 @@ class DemoOrderRepository implements OrderRepository {
     required List<CartLine> lines,
     required String contactName,
     required String contactPhone,
+    PaymentMethod paymentMethod = PaymentMethod.cash,
     bool isAsap = true,
     String? requestedFor,
     String? addressLine1,
@@ -90,6 +91,12 @@ class DemoOrderRepository implements OrderRepository {
       placedAt: DateTime.now(),
       isDelivery: isDelivery,
       canCancel: true,
+      paymentMethod: paymentMethod,
+      // A card order starts unpaid with a page to open, exactly as the real one
+      // does; cash has nothing to pay online, ever.
+      paymentUrl: paymentMethod == PaymentMethod.card
+          ? 'https://hpp-sandbox.worldpay.com/demo'
+          : null,
       items: [
         for (final line in lines)
           CustomerOrderItem(
@@ -105,6 +112,13 @@ class DemoOrderRepository implements OrderRepository {
   }
 
   @override
+  Future<CustomerOrder> pay(String id) async {
+    await Future<void>.delayed(delay);
+    final order = _orders.firstWhere((o) => o.id == id);
+    return order;
+  }
+
+  @override
   Future<List<CustomerOrder>> myOrders() async {
     await Future<void>.delayed(delay);
     return _orders;
@@ -117,7 +131,7 @@ class DemoOrderRepository implements OrderRepository {
   }
 
   @override
-  Future<CustomerOrder> cancel(String id) async {
+  Future<CustomerOrder> cancel(String id, {String? reason}) async {
     await Future<void>.delayed(delay);
     final existing = _orders.firstWhere((order) => order.id == id);
     final cancelled = _copyWithStatus(existing, CustomerOrderStatus.cancelled);

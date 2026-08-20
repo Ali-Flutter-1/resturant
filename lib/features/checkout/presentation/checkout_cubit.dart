@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:equatable/equatable.dart';
@@ -8,6 +9,7 @@ import '../../cart/cart_cubit.dart';
 import '../../orders/domain/customer_order.dart';
 import '../../orders/domain/order_quote.dart';
 import '../../orders/domain/order_repository.dart';
+import '../../orders/domain/payment_flow.dart';
 
 /// Where a checkout has got to.
 ///
@@ -25,6 +27,8 @@ class CheckoutState extends Equatable {
     this.fieldErrors = const {},
     this.requestedFor,
     this.prepMinutes,
+    this.paymentMethod = PaymentMethod.cash,
+    this.paying = false,
   });
 
   final CheckoutStage stage;
@@ -35,6 +39,13 @@ class CheckoutState extends Equatable {
 
   /// The server's price. Null until the first quote lands.
   final OrderQuote? quote;
+
+  /// Cash on handover, or a card paid on Worldpay's page before the kitchen
+  /// ever sees the order.
+  final PaymentMethod paymentMethod;
+
+  /// True while the payment sheet is open or the result is being confirmed.
+  final bool paying;
 
   final ApiFailure? failure;
 
@@ -98,6 +109,8 @@ class CheckoutState extends Equatable {
       stage != CheckoutStage.submitting &&
       stage != CheckoutStage.placed;
 
+  bool get isCard => paymentMethod == PaymentMethod.card;
+
   CheckoutState copyWith({
     CheckoutStage? stage,
     bool? isDelivery,
@@ -107,6 +120,8 @@ class CheckoutState extends Equatable {
     Map<String, String>? fieldErrors,
     String? requestedFor,
     int? prepMinutes,
+    PaymentMethod? paymentMethod,
+    bool? paying,
     bool clearFailure = false,
     bool clearSlot = false,
   }) {
@@ -119,6 +134,8 @@ class CheckoutState extends Equatable {
       fieldErrors: fieldErrors ?? this.fieldErrors,
       requestedFor: clearSlot ? null : (requestedFor ?? this.requestedFor),
       prepMinutes: prepMinutes ?? this.prepMinutes,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paying: paying ?? this.paying,
     );
   }
 
@@ -129,6 +146,8 @@ class CheckoutState extends Equatable {
     quote,
     failure,
     placedOrder,
+    paymentMethod,
+    paying,
     fieldErrors,
     requestedFor,
     prepMinutes,
@@ -148,13 +167,18 @@ class CheckoutState extends Equatable {
 ///    optimistically and a request that then failed leaves the customer with
 ///    neither an order nor the things they chose.
 class CheckoutCubit extends Cubit<CheckoutState> {
-  CheckoutCubit({required OrderRepository repository, required CartCubit cart})
-    : _repository = repository,
-      _cart = cart,
-      super(const CheckoutState());
+  CheckoutCubit({
+    required OrderRepository repository,
+    required CartCubit cart,
+    PaymentFlow? paymentFlow,
+  }) : _repository = repository,
+       _cart = cart,
+       _payments = paymentFlow ?? PaymentFlow(repository: repository),
+       super(const CheckoutState());
 
   final OrderRepository _repository;
   final CartCubit _cart;
+  final PaymentFlow _payments;
 
   /// Generated once per checkout attempt. See the class note.
   String _idempotencyKey = _uuidV4();
@@ -163,7 +187,41 @@ class CheckoutCubit extends Cubit<CheckoutState> {
   /// one rather than being deduplicated against the last.
   List<CartLine>? _keyedFor;
 
+  Timer? _quoteDebounce;
+
+  /// Rises with every quote started. A reply whose ticket is no longer the
+  /// latest is dropped: taps come faster than the round trip, and responses can
+  /// arrive out of order, so the older answer would otherwise land last and
+  /// show a total for a basket the customer has already changed.
+  int _quoteTicket = 0;
+
+  /// Re-price after the customer stops tapping.
+  ///
+  /// Every `+` and `-` used to fire its own request, so adjusting a line three
+  /// times meant three round trips of half a second or more each, with the
+  /// totals flicking through a loading state between them. One burst of taps is
+  /// one question for the server: what does this basket cost now.
+  void quoteSoon() {
+    _quoteDebounce?.cancel();
+    _quoteDebounce = Timer(const Duration(milliseconds: 350), quote);
+  }
+
+  @override
+  Future<void> close() {
+    _quoteDebounce?.cancel();
+    return super.close();
+  }
+
+  /// Cash or card. Does not re-quote: the price is the same either way -- only
+  /// where and when the money moves changes.
+  void setPaymentMethod(PaymentMethod method) {
+    if (method == state.paymentMethod) return;
+    emit(state.copyWith(paymentMethod: method));
+  }
+
   Future<void> quote() async {
+    _quoteDebounce?.cancel();
+    final ticket = ++_quoteTicket;
     final lines = _cart.state.lines;
     if (lines.isEmpty) {
       emit(
@@ -191,6 +249,7 @@ class CheckoutCubit extends Cubit<CheckoutState> {
         isDelivery: state.isDelivery,
         lines: lines,
       );
+      if (ticket != _quoteTicket) return;
       emit(
         state.copyWith(
           stage: CheckoutStage.ready,
@@ -202,7 +261,28 @@ class CheckoutCubit extends Cubit<CheckoutState> {
         ),
       );
     } on ApiFailure catch (failure) {
+      if (ticket != _quoteTicket) return;
       emit(state.copyWith(stage: CheckoutStage.failed, failure: failure));
+    }
+  }
+
+  /// Opens the payment page for the order just placed, then asks the server
+  /// what happened.
+  ///
+  /// Also the "Try again" path after a decline: the flow asks for a fresh page,
+  /// which Worldpay requires -- a repeated reference is treated as the same
+  /// payment, so retrying the old URL would achieve nothing.
+  Future<void> payNow() async {
+    final order = state.placedOrder;
+    if (order == null || !order.needsPayment || state.paying) return;
+
+    emit(state.copyWith(paying: true, clearFailure: true));
+    try {
+      final settled = await _payments.payFor(order);
+      emit(state.copyWith(placedOrder: settled, paying: false));
+    } on ApiFailure catch (failure) {
+      // The order still exists and is still payable; only this attempt failed.
+      emit(state.copyWith(paying: false, failure: failure));
     }
   }
 
@@ -264,6 +344,7 @@ class CheckoutCubit extends Cubit<CheckoutState> {
         postcode: postcode,
         deliveryNotes: deliveryNotes,
         customerNote: customerNote,
+        paymentMethod: state.paymentMethod,
       );
 
       // Confirmed, so now the basket goes — and the key with it, since this
@@ -273,6 +354,11 @@ class CheckoutCubit extends Cubit<CheckoutState> {
       _keyedFor = null;
 
       emit(state.copyWith(stage: CheckoutStage.placed, placedOrder: order));
+
+      // Straight to the payment page. A card order sits outside the kitchen
+      // until the money clears, so there is nothing to wait for and every
+      // reason not to make the customer find a "Pay" button.
+      if (order.needsPayment) await payNow();
       return null;
     } on ApiFailure catch (failure) {
       // Back to ready, not failed: the entered details are still on screen and

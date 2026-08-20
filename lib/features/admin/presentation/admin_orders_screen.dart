@@ -801,17 +801,27 @@ Future<String?> _askReason(BuildContext context, OrderStatus status) {
               ),
             ),
             const SizedBox(height: AppSpacing.x2),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: sheetContext.orderColors.overdue,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () =>
-                  Navigator.of(sheetContext).pop(controller.text.trim()),
-              child: Text(
-                status == OrderStatus.rejected
-                    ? 'Reject order'
-                    : 'Cancel order',
+            // The API refuses a cancellation or rejection with no note, so the
+            // button waits for one rather than sending a request that comes
+            // back as a validation error. The customer is shown this text, so
+            // a blank would leave them with an order gone and no reason why.
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (context, value, _) => FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: sheetContext.orderColors.overdue,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: value.text.trim().isEmpty
+                    ? null
+                    : () => Navigator.of(
+                        sheetContext,
+                      ).pop(controller.text.trim()),
+                child: Text(
+                  status == OrderStatus.rejected
+                      ? 'Reject order'
+                      : 'Cancel order',
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.x2),

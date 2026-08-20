@@ -419,7 +419,7 @@ void main() {
   group('the booking screen', () {
     Widget wrap() => BlocProvider(
       create: (_) => AuthFixtures.cubit(AuthFixtures.customer),
-      child:      RepositoryProvider<ReservationRepository>.value(
+      child: RepositoryProvider<ReservationRepository>.value(
         value: repository,
         // The app theme, because the screen reads the `AppSurfaces` extension
         // from it — a bare MaterialApp has none and every surface throws.

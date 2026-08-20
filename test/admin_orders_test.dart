@@ -33,7 +33,7 @@ void main() {
     providers: [
       BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.staff)),
     ],
-    child:    RepositoryProvider<AdminOrderRepository>.value(
+    child: RepositoryProvider<AdminOrderRepository>.value(
       value: repository,
       child: MaterialApp(
         theme: AppTheme.light,

@@ -147,6 +147,15 @@ abstract final class ApiConstants {
   /// Only while the order is still `placed`.
   static String orderCancel(String id) => '/orders/$id/cancel';
 
+  /// Asks for a Worldpay page for an unpaid card order.
+  ///
+  /// Safe to call twice: an unpaid order returns its existing page rather than
+  /// a second one, so a customer cannot be charged twice by tapping "Pay" in a
+  /// hurry. A *failed* order gets a brand new page with a new reference, which
+  /// it must -- Worldpay treats a repeated reference as the same payment, so a
+  /// retry on the old URL would go nowhere.
+  static String orderPay(String id) => '/orders/$id/pay';
+
   // ---------------------------------------------------------- orders (admin)
 
   /// `?open_only=true` is the kitchen queue.

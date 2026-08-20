@@ -139,8 +139,10 @@ void main() {
     });
 
     test('a schedule failure belongs beside the schedule fields', () {
-      expect(VenueErrorCodes.isScheduleProblem(VenueErrorCodes.slotOverlaps),
-          isTrue);
+      expect(
+        VenueErrorCodes.isScheduleProblem(VenueErrorCodes.slotOverlaps),
+        isTrue,
+      );
       expect(
         VenueErrorCodes.isScheduleProblem(VenueErrorCodes.tooManySittings),
         isTrue,
@@ -187,10 +189,7 @@ void main() {
 
       final days = cubit.state.byDay;
       expect(days.keys, hasLength(1));
-      expect(
-        days.values.first.map((s) => s.timeLabel),
-        ['19:00', '20:45'],
-      );
+      expect(days.values.first.map((s) => s.timeLabel), ['19:00', '20:45']);
       await cubit.close();
     });
 

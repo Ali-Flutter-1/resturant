@@ -123,6 +123,44 @@ class CustomerOrderItem extends Equatable {
   List<Object?> get props => [dishName, quantity, linePence, spiceLevel, notes];
 }
 
+/// How the customer chose to pay.
+enum PaymentMethod {
+  cash('cash', 'Cash'),
+  card('card', 'Card');
+
+  const PaymentMethod(this.wire, this.label);
+
+  final String wire;
+  final String label;
+
+  static PaymentMethod fromApi(String? raw) =>
+      raw?.trim().toLowerCase() == 'card' ? card : cash;
+}
+
+/// Where the money has got to.
+///
+/// The only thing that moves an order to [paid] is Worldpay calling the
+/// backend's webhook, server to server. The app never decides this -- a closed
+/// payment sheet and a success-looking redirect both prove nothing.
+enum CustomerPaymentStatus {
+  pending('pending'),
+  paid('paid'),
+  failed('failed'),
+  refunded('refunded');
+
+  const CustomerPaymentStatus(this.wire);
+
+  final String wire;
+
+  static CustomerPaymentStatus fromApi(String? raw) =>
+      switch (raw?.trim().toLowerCase()) {
+        'paid' => paid,
+        'failed' || 'declined' || 'refused' => failed,
+        'refunded' => refunded,
+        _ => pending,
+      };
+}
+
 /// An order as the customer's own history shows it.
 class CustomerOrder extends Equatable {
   const CustomerOrder({
@@ -139,6 +177,10 @@ class CustomerOrder extends Equatable {
     this.cancellationReason,
     this.cancelledAt,
     this.itemCountFallback,
+    this.paymentMethod = PaymentMethod.cash,
+    this.paymentStatus = CustomerPaymentStatus.pending,
+    this.paymentUrl,
+    this.paidAt,
   });
 
   factory CustomerOrder.fromJson(Map<String, dynamic> json) {
@@ -178,12 +220,17 @@ class CustomerOrder extends Equatable {
       // The list endpoint omits lines entirely — `item_count` is how many there
       // were, which is all a row needs.
       itemCountFallback: (json['item_count'] as num?)?.toInt(),
-      // Trust the server's own word on this where it gives one — it knows
-      // things the app can't, like whether the kitchen has already started.
-      // Otherwise fall back to the documented rule: cancellable while placed.
-      canCancel: json['can_cancel'] is bool
-          ? json['can_cancel'] as bool
-          : status == CustomerOrderStatus.placed,
+      // Only before cooking starts, and only if the server agrees.
+      //
+      // Both halves matter. The status check is the customer-facing promise:
+      // once the kitchen is cooking, food and time have been spent and calling
+      // it off is a conversation, not a button. The server's `can_cancel` can
+      // still veto -- it knows things the app cannot -- but it can never widen
+      // the window, which is why this is an AND rather than a preference for
+      // whichever value the server sent.
+      canCancel:
+          status == CustomerOrderStatus.placed &&
+          (json['can_cancel'] is bool ? json['can_cancel'] as bool : true),
       // `rejected` and `cancelled` are one state to a tracker, but not to the
       // person reading it: one is "we could not take this", the other is
       // "you or we called it off". The wording differs, so the raw value is
@@ -193,6 +240,14 @@ class CustomerOrder extends Equatable {
       // mandatory for exactly those two, so there is always something to show.
       cancellationReason: _text(json['cancellation_reason']),
       cancelledAt: _date(json['cancelled_at']),
+      paymentMethod: PaymentMethod.fromApi(json['payment_method']?.toString()),
+      paymentStatus: CustomerPaymentStatus.fromApi(
+        json['payment_status']?.toString(),
+      ),
+      // Present only while there is something to pay: the server nulls it once
+      // an order is paid, and after a decline until a fresh page is asked for.
+      paymentUrl: _text(json['payment_url']),
+      paidAt: _date(json['paid_at']),
     );
   }
 
@@ -246,6 +301,30 @@ class CustomerOrder extends Equatable {
   /// fetched order, where [items] is authoritative.
   final int? itemCountFallback;
 
+  final PaymentMethod paymentMethod;
+  final CustomerPaymentStatus paymentStatus;
+
+  /// Worldpay's hosted page, when there is one to open.
+  final String? paymentUrl;
+
+  final DateTime? paidAt;
+
+  bool get isCard => paymentMethod == PaymentMethod.card;
+  bool get isPaid => paymentStatus == CustomerPaymentStatus.paid;
+
+  /// A card order the customer still owes money on.
+  ///
+  /// A refunded order is deliberately excluded: money moved and then moved
+  /// back, and asking for it again would be asking them to pay twice.
+  bool get needsPayment =>
+      isCard && !isPaid && paymentStatus != CustomerPaymentStatus.refunded;
+
+  /// A card order that has been placed but not paid has **not** reached the
+  /// kitchen -- the backend holds it until the payment webhook lands -- so it
+  /// must never be described as being cooked.
+  bool get awaitingPayment =>
+      isCard && paymentStatus == CustomerPaymentStatus.pending;
+
   /// Whether the lines are known, or only how many there were.
   ///
   /// The list endpoint deliberately omits them, so a row shows the count and the
@@ -265,6 +344,12 @@ class CustomerOrder extends Equatable {
   /// order the customer is walking in to collect is simply wrong.
   String get statusLabel {
     if (wasRejected) return 'Declined';
+    // An unpaid card order has not been sent to the kitchen at all, so no
+    // kitchen-facing status describes it honestly.
+    if (awaitingPayment) return 'Awaiting payment';
+    if (isCard && paymentStatus == CustomerPaymentStatus.failed) {
+      return 'Payment declined';
+    }
     return !isDelivery && status == CustomerOrderStatus.outForDelivery
         ? 'Ready to collect'
         : status.label;
@@ -273,6 +358,16 @@ class CustomerOrder extends Equatable {
   String get statusExplanation {
     if (wasRejected) {
       return 'The restaurant could not take this order.';
+    }
+    // The backend holds a card order out of the kitchen until Worldpay's
+    // webhook confirms the money, so "we're preparing it" would be false and
+    // the customer would stop watching for the thing that still needs doing.
+    if (awaitingPayment) {
+      return 'Complete payment to confirm your order.';
+    }
+    if (isCard && paymentStatus == CustomerPaymentStatus.failed) {
+      return 'Your card was declined. Your order is saved - try again to '
+          'confirm it.';
     }
     return !isDelivery && status == CustomerOrderStatus.ready
         ? 'Your order is ready to collect from the counter.'
@@ -293,6 +388,10 @@ class CustomerOrder extends Equatable {
     wasRejected,
     cancellationReason,
     cancelledAt,
+    paymentMethod,
+    paymentStatus,
+    paymentUrl,
+    paidAt,
     itemCountFallback,
   ];
 }

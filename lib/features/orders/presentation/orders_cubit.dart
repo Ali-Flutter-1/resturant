@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/network/api_failure.dart';
 import '../domain/customer_order.dart';
 import '../domain/order_repository.dart';
+import '../domain/payment_flow.dart';
 
 enum OrdersStatus { loading, ready, failure }
 
@@ -13,6 +14,7 @@ class OrdersState extends Equatable {
     this.orders = const [],
     this.failure,
     this.cancellingId,
+    this.payingId,
   });
 
   final OrdersStatus status;
@@ -26,6 +28,9 @@ class OrdersState extends Equatable {
   /// The order whose cancellation is in flight, so only that row shows a
   /// spinner and only that row's button is disabled.
   final String? cancellingId;
+
+  /// The order whose payment sheet is open, or whose result is being confirmed.
+  final String? payingId;
 
   /// The orders still in progress, for the tracker at the top.
   List<CustomerOrder> get live =>
@@ -42,8 +47,10 @@ class OrdersState extends Equatable {
     List<CustomerOrder>? orders,
     ApiFailure? failure,
     String? cancellingId,
+    String? payingId,
     bool clearFailure = false,
     bool clearCancelling = false,
+    bool clearPaying = false,
   }) {
     return OrdersState(
       status: status ?? this.status,
@@ -52,11 +59,12 @@ class OrdersState extends Equatable {
       cancellingId: clearCancelling
           ? null
           : (cancellingId ?? this.cancellingId),
+      payingId: clearPaying ? null : (payingId ?? this.payingId),
     );
   }
 
   @override
-  List<Object?> get props => [status, orders, failure, cancellingId];
+  List<Object?> get props => [status, orders, failure, cancellingId, payingId];
 }
 
 /// The customer's order history, and the live tracker built from it.
@@ -65,11 +73,13 @@ class OrdersState extends Equatable {
 /// status, so splitting them in the state costs nothing and asking the API twice
 /// would only invite the two lists to disagree.
 class OrdersCubit extends Cubit<OrdersState> {
-  OrdersCubit({required OrderRepository repository})
+  OrdersCubit({required OrderRepository repository, PaymentFlow? paymentFlow})
     : _repository = repository,
+      _payments = paymentFlow ?? PaymentFlow(repository: repository),
       super(const OrdersState());
 
   final OrderRepository _repository;
+  final PaymentFlow _payments;
 
   /// Loads, or reloads after a failure.
   ///
@@ -127,18 +137,62 @@ class OrdersCubit extends Cubit<OrdersState> {
     }
   }
 
+  /// Opens the payment page for an unpaid card order, then adopts whatever the
+  /// server says afterwards.
+  ///
+  /// Covers all three ways an order can end up here unpaid: the customer closed
+  /// the sheet without paying, the card was declined, or Worldpay was
+  /// unreachable when the order was placed and it never got a page at all.
+  ///
+  /// Returns a message to show, or null when the payment went through.
+  Future<String?> payOrder(String id) async {
+    if (state.payingId != null) return null;
+    final order = state.orders.firstWhere(
+      (o) => o.id == id,
+      orElse: () => throw StateError('No order $id to pay for.'),
+    );
+    if (!order.needsPayment) return null;
+
+    emit(state.copyWith(payingId: id));
+    try {
+      final settled = await _payments.payFor(order);
+      emit(
+        state.copyWith(
+          orders: [
+            for (final existing in state.orders)
+              if (existing.id == id) settled else existing,
+          ],
+          clearPaying: true,
+        ),
+      );
+      return switch (settled.paymentStatus) {
+        CustomerPaymentStatus.paid => null,
+        CustomerPaymentStatus.failed =>
+          'Your card was declined. You can try again.',
+        // Placed and unpaid: either the sheet was closed without paying, or the
+        // webhook is still in transit. Both are honestly "not yet".
+        _ =>
+          "We're still confirming your payment. We'll update your order as "
+              'soon as it clears.',
+      };
+    } on ApiFailure catch (failure) {
+      emit(state.copyWith(clearPaying: true));
+      return failure.message;
+    }
+  }
+
   /// Cancels an order and adopts whatever the server says its status now is.
   ///
   /// Returns an error message to show, or null on success. The state is never
   /// updated optimistically: cancelling races the kitchen accepting the order,
   /// and showing "Cancelled" for an order that is already being cooked would be
   /// the one lie this screen must not tell.
-  Future<String?> cancelOrder(String id) async {
+  Future<String?> cancelOrder(String id, {String? reason}) async {
     if (state.cancellingId != null) return null;
     emit(state.copyWith(cancellingId: id));
 
     try {
-      final updated = await _repository.cancel(id);
+      final updated = await _repository.cancel(id, reason: reason);
       emit(
         state.copyWith(
           orders: [

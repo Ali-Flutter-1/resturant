@@ -35,7 +35,7 @@ void main() {
         BlocProvider(create: (_) => AuthFixtures.cubit(AuthFixtures.customer)),
         BlocProvider.value(value: cart),
       ],
-      child:      RepositoryProvider<ContactRepository>.value(
+      child: RepositoryProvider<ContactRepository>.value(
         value: contact,
         child: MaterialApp(theme: AppTheme.light, home: home),
       ),

@@ -28,6 +28,11 @@ abstract interface class OrderRepository {
     required List<CartLine> lines,
     required String contactName,
     required String contactPhone,
+
+    /// Cash is settled on handover; card holds the order out of the kitchen
+    /// until Worldpay confirms the money, so this choice changes what the
+    /// customer is told after placing.
+    PaymentMethod paymentMethod = PaymentMethod.cash,
     bool isAsap = true,
     String? requestedFor,
     String? addressLine1,
@@ -41,12 +46,25 @@ abstract interface class OrderRepository {
   /// Newest first.
   Future<List<CustomerOrder>> myOrders();
 
+  /// A payment page for an unpaid card order.
+  ///
+  /// Used when the order was placed while Worldpay was unreachable (the order
+  /// exists, with no `payment_url`), when a card was declined and the customer
+  /// taps "Try again", and when they come back later to an order they never
+  /// paid for.
+  Future<CustomerOrder> pay(String id);
+
   /// One order in full, including its lines.
   Future<CustomerOrder> orderById(String id);
 
   /// Cancels an order the kitchen hasn't started.
   ///
+  /// [reason] is what the customer typed, and is stored as the order's
+  /// `cancellation_reason` -- staff read it, so it is worth asking for. The
+  /// endpoint takes a JSON body even when there is nothing to say, so the key
+  /// is always sent, null and all.
+  ///
   /// Returns the updated order so the screen shows the server's verdict rather
   /// than assuming the cancellation stuck.
-  Future<CustomerOrder> cancel(String id);
+  Future<CustomerOrder> cancel(String id, {String? reason});
 }

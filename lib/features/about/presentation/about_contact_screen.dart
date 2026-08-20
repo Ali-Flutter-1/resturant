@@ -208,8 +208,6 @@ class _BentoGrid extends StatelessWidget {
               'supporting communities and ensuring unparalleled freshness.',
         ),
         const SizedBox(height: AppSpacing.x2),
-        const _BentoImageCard(title: 'Our Flagship Location'),
-        const SizedBox(height: AppSpacing.x2),
         const _BentoCard(
           icon: Icons.diversity_3_outlined,
           title: 'Community First',
@@ -258,61 +256,6 @@ class _BentoCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.x3),
           Text(body, style: context.texts.bodyMedium),
         ],
-      ),
-    );
-  }
-}
-
-/// The frame's "Card 2 (Image Focus)": a 250pt photograph with a scrim and the
-/// heading resting on it.
-class _BentoImageCard extends StatelessWidget {
-  const _BentoImageCard({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: SizedBox(
-        height: 250,
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // No exported asset for this frame, so the field stands in.
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.crimson100, AppColors.neutral200],
-                ),
-              ),
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Color(0xCC000000), Color(0x11000000)],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.x6),
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: Text(
-                  title,
-                  style: context.texts.headlineMedium?.copyWith(
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

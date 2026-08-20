@@ -213,11 +213,7 @@ class FakeVenueRepository implements VenueRepository {
     String? tableId,
   }) async {
     slotCalls++;
-    lastSlotQuery = {
-      'from': fromDate,
-      'to': toDate,
-      'table_id': tableId,
-    };
+    lastSlotQuery = {'from': fromDate, 'to': toDate, 'table_id': tableId};
     await _wait();
     _check();
     return [
@@ -266,10 +262,7 @@ class FakeVenueRepository implements VenueRepository {
   }
 
   @override
-  Future<VenueSlot> updateSlot(
-    String id,
-    Map<String, dynamic> changes,
-  ) async {
+  Future<VenueSlot> updateSlot(String id, Map<String, dynamic> changes) async {
     lastSlotPatch = changes;
     await _wait();
     _checkWrite();
