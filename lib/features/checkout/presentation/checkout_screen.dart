@@ -151,8 +151,14 @@ class _CheckoutViewState extends State<_CheckoutView> {
     // decides whether the kitchen has the order at all. A card order that has
     // not been paid for is held back until the payment webhook lands, so
     // telling them it is being prepared would be a lie they act on.
+    // A payment attempt that never got as far as a page reports its own
+    // reason. Falling through to "still confirming" would describe a payment
+    // that was never started.
+    final paymentFailure = cubit.state.failure;
     final message = switch (order) {
       _ when !order.isCard => 'Order ${order.reference} placed.',
+      _ when !order.isPaid && paymentFailure != null =>
+        '${order.reference} placed. ${paymentFailure.message}',
       _ when order.isPaid =>
         "Order ${order.reference} confirmed - we're preparing it.",
       _ when order.paymentStatus == CustomerPaymentStatus.failed =>

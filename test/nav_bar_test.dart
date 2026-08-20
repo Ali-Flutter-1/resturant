@@ -49,6 +49,17 @@ void main() {
     );
   }
 
+  /// The wrapper above is fixed at one index, which is right for the static
+  /// checks and useless for the animated ones -- a tap has to actually move the
+  /// selection or every frame looks identical.
+  Widget live({int initialIndex = 0}) => MaterialApp(
+    theme: AppTheme.light,
+    home: MediaQuery(
+      data: const MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+      child: _LiveBar(items: items, initialIndex: initialIndex),
+    ),
+  );
+
   testWidgets('spans the full width — it is not a floating card', (
     tester,
   ) async {
@@ -103,13 +114,13 @@ void main() {
     await tester.pumpWidget(wrap(currentIndex: 1));
     await tester.pumpAndSettle();
 
-    // Both indicators are built; the inactive one is scaled down and
-    // transparent, so selection can animate rather than pop in.
+    // Every tab builds its indicator; only the selected one is opaque, so
+    // selection can animate rather than pop in.
     final opacities = tester
-        .widgetList<AnimatedOpacity>(
+        .widgetList<Opacity>(
           find.descendant(
             of: find.byType(AppNavBar),
-            matching: find.byType(AnimatedOpacity),
+            matching: find.byType(Opacity),
           ),
         )
         .map((widget) => widget.opacity)
@@ -121,12 +132,13 @@ void main() {
     final pill = tester
         .widgetList<DecoratedBox>(
           find.descendant(
-            of: find.byType(AnimatedOpacity),
+            of: find.byType(AppNavBar),
             matching: find.byType(DecoratedBox),
           ),
         )
         .map((box) => box.decoration)
         .whereType<BoxDecoration>()
+        .where((box) => box.color == AppSurfaces.light.accentContainer)
         .first;
     expect(pill.color, AppSurfaces.light.accentContainer);
 
@@ -272,4 +284,125 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('the label keeps one weight, so nothing reflows on a tap', (
+    tester,
+  ) async {
+    await tester.pumpWidget(live());
+    await tester.pumpAndSettle();
+
+    Rect labelRect() => tester.getRect(find.text('Menu'));
+    final atRest = labelRect();
+
+    await tester.tap(find.text('Orders'));
+    // Mid-flight is where a weight change shows: the text re-measures every
+    // frame, so the label breathes wider and back under the finger.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(labelRect(), atRest);
+
+    await tester.pumpAndSettle();
+    expect(labelRect(), atRest);
+  });
+
+  testWidgets('the bar does not resize or move while switching', (
+    tester,
+  ) async {
+    await tester.pumpWidget(live());
+    await tester.pumpAndSettle();
+    final before = tester.getRect(find.byType(AppNavBar));
+
+    await tester.tap(find.text('Orders'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.getRect(find.byType(AppNavBar)), before);
+
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(AppNavBar)), before);
+  });
+
+  testWidgets('the two glyphs cross-fade as one, never both faint', (
+    tester,
+  ) async {
+    await tester.pumpWidget(live());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Orders'));
+    // The first pump starts the animation; the second lands inside it.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+
+    // Within the Orders cell the outline and filled glyphs are stacked, and
+    // their opacities are two halves of one value. Summing to less than one
+    // would show as a brief ghost of both.
+    final cell = find
+        .ancestor(of: find.text('Orders'), matching: find.byType(Column))
+        .first;
+    final pair = tester
+        .widgetList<Opacity>(
+          find.descendant(of: cell, matching: find.byType(Opacity)),
+        )
+        .map((o) => o.opacity)
+        .toList();
+
+    // Three: the indicator, then the outline and filled glyphs.
+    expect(pair, hasLength(3));
+    expect(pair[1] + pair[2], closeTo(1, 0.0001));
+    // Actually mid-flight, not settled at either end.
+    expect(pair[0], greaterThan(0));
+    expect(pair[0], lessThan(1));
+  });
+
+  testWidgets('a press answers immediately, and lets go', (tester) async {
+    await tester.pumpWidget(live());
+    await tester.pumpAndSettle();
+
+    double scaleOf(String label) => tester
+        .widget<AnimatedScale>(
+          find
+              .ancestor(
+                of: find.text(label),
+                matching: find.byType(AnimatedScale),
+              )
+              .first,
+        )
+        .scale;
+
+    expect(scaleOf('Orders'), 1);
+
+    final gesture = await tester.press(find.text('Orders'));
+    await tester.pump();
+    // Subtle, not a bounce: the whole cell dips as one.
+    expect(scaleOf('Orders'), lessThan(1));
+    expect(scaleOf('Orders'), greaterThan(0.9));
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(scaleOf('Orders'), 1);
+  });
+}
+
+/// Owns the selected index, so a tap moves it.
+class _LiveBar extends StatefulWidget {
+  const _LiveBar({required this.items, required this.initialIndex});
+
+  final List<AppNavItem> items;
+  final int initialIndex;
+
+  @override
+  State<_LiveBar> createState() => _LiveBarState();
+}
+
+class _LiveBarState extends State<_LiveBar> {
+  late int _index = widget.initialIndex;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.bottomCenter,
+    child: AppNavBar(
+      items: widget.items,
+      currentIndex: _index,
+      onTap: (index) => setState(() => _index = index),
+    ),
+  );
 }

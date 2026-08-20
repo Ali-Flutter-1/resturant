@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:practice/core/network/api_client.dart';
 import 'package:practice/features/orders/data/api_order_repository.dart';
+import 'package:practice/features/orders/domain/customer_order.dart';
 import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/core/network/connectivity_service.dart';
 import 'package:practice/core/network/token_store.dart';
@@ -539,6 +540,54 @@ void main() {
       // Truncated rather than refused: losing the tail of a long explanation
       // is better than refusing to cancel the order over it.
       expect((adapter.calls.single.data as Map)['reason'], hasLength(500));
+    });
+  });
+
+  group('placing a card order on the wire', () {
+    Future<ResponseBody> ok(RequestOptions _) async => _json(
+      201,
+      '{"success":true,"message":"Order placed.","data":{"id":"o1",'
+      '"payment_method":"card","payment_status":"pending",'
+      '"payment_url":"https://hpp-sandbox.worldpay.com/x"}}',
+    );
+
+    test('sends payment_method card, and never a price', () async {
+      final adapter = _StubAdapter(ok);
+      final repository = ApiOrderRepository(
+        client: _client(handler: ok, adapter: adapter),
+      );
+
+      final order = await repository.place(
+        idempotencyKey: 'key-1',
+        isDelivery: false,
+        lines: const [],
+        contactName: 'Ali',
+        contactPhone: '07700 900123',
+        paymentMethod: PaymentMethod.card,
+      );
+
+      final body = adapter.calls.single.data as Map;
+      expect(body['payment_method'], 'card');
+      // The server prices the basket and tells Worldpay the total; an amount
+      // from the app would be forgeable.
+      expect(body.keys, isNot(contains('total_pence')));
+      expect(order.paymentUrl, isNotNull);
+    });
+
+    test('reads the page back off the placement response', () async {
+      final repository = ApiOrderRepository(client: _client(handler: ok));
+      final order = await repository.place(
+        idempotencyKey: 'key-1',
+        isDelivery: false,
+        lines: const [],
+        contactName: 'Ali',
+        contactPhone: '07700 900123',
+        paymentMethod: PaymentMethod.card,
+      );
+
+      expect(order.isCard, isTrue);
+      expect(order.needsPayment, isTrue);
+      expect(order.paymentUrl, 'https://hpp-sandbox.worldpay.com/x');
     });
   });
 }

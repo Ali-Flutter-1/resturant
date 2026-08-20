@@ -173,8 +173,25 @@ void main() {
       });
       repository.orders = [order];
 
-      await expectLater(flowFor().payFor(order), throwsA(isA<ApiFailure>()));
+      // The message must not blame the customer or send them round the same
+      // loop, and must say the order survived -- it did.
+      await expectLater(
+        flowFor().payFor(order),
+        throwsA(
+          isA<ApiFailure>().having(
+            (f) => f.message,
+            'message',
+            allOf(
+              contains('unavailable'),
+              contains('saved'),
+              isNot(contains('try again')),
+            ),
+          ),
+        ),
+      );
       expect(opened, isEmpty);
+      // Asked once for a page before giving up, rather than assuming.
+      expect(repository.payCalls, 1);
     });
   });
 

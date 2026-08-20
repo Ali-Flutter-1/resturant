@@ -124,10 +124,7 @@ class RestaurantMapCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  RestaurantLocation.name,
-                  style: context.texts.titleMedium,
-                ),
+                Text(RestaurantLocation.name, style: context.texts.titleMedium),
                 const SizedBox(height: 2),
                 Text(
                   RestaurantLocation.fullAddress,

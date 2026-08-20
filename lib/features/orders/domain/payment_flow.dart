@@ -67,11 +67,20 @@ class PaymentFlow {
 
     final url = current.paymentUrl;
     if (url == null) {
-      // The server had nothing to open, which for an unpaid order means
-      // something is wrong upstream rather than that payment succeeded.
+      // Asked twice and given nothing to open. Per the integration guide this
+      // is what an unreachable Worldpay looks like from here, so it is the
+      // restaurant's payment provider that is down, not the customer's
+      // connection -- and telling them to "try again" as if it were their fault
+      // sends them round the same loop.
+      //
+      // The order itself exists and is still payable, which is the part worth
+      // saying: nothing they typed has been lost.
       throw const ApiFailure(
         kind: ApiFailureKind.server,
-        message: "We couldn't open the payment page. Please try again.",
+        message:
+            'Card payments are unavailable right now. Your order is saved and '
+            'unpaid - you can pay from My Orders once it is back, or ask the '
+            'restaurant to take cash.',
       );
     }
 
