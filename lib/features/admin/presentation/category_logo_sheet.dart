@@ -9,26 +9,35 @@ import '../../../core/network/api_failure.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/network_photo.dart';
+import '../../../shared/widgets/app_buttons.dart';
 import '../../../shared/widgets/app_sheet.dart';
 import '../../menu/domain/dish.dart';
 import '../domain/admin_menu_repository.dart';
 
-/// The picture on a menu section.
+/// Everything that can be done to a menu section: its picture, its name, and
+/// getting rid of it.
 ///
-/// Shown on the customer's home screen in place of a glyph, so it is worth
-/// getting right — and worth being able to remove when it is wrong.
+/// One sheet rather than three entry points. The picture is shown on the
+/// customer's home screen in place of a glyph, so it is worth getting right --
+/// and worth being able to remove when it is wrong.
 ///
-/// Returns the updated category, or null if nothing changed.
-Future<MenuCategory?> showCategoryLogoSheet(
-  BuildContext context,
-  MenuCategory category,
-) {
-  return showAppSheet<MenuCategory>(
+/// Returns the updated category, [CategoryDeleted] if it was archived, or null
+/// if nothing changed.
+Future<Object?> showCategorySheet(BuildContext context, MenuCategory category) {
+  return showAppSheet<Object>(
     context: context,
     title: category.name,
-    subtitle: 'The picture customers see on this section.',
+    subtitle: 'What customers see for this section.',
     child: _CategoryLogoSheet(category: category),
   );
+}
+
+/// Returned when the section was archived, so the caller drops it from its list
+/// rather than trying to show a category that is no longer there.
+class CategoryDeleted {
+  const CategoryDeleted(this.id);
+
+  final String id;
 }
 
 class _CategoryLogoSheet extends StatefulWidget {
@@ -44,6 +53,19 @@ class _CategoryLogoSheetState extends State<_CategoryLogoSheet> {
   late MenuCategory _category = widget.category;
   String? _preview;
   bool _busy = false;
+
+  /// Owned by the state, not by `_rename`.
+  ///
+  /// Disposing it as soon as the rename sheet returned killed it while that
+  /// sheet was still animating out -- the field rebuilds during the dismissal
+  /// and asserts on a controller that has been disposed.
+  final _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
 
   Future<void> _pick(ImageSource source) async {
     if (_busy) return;
@@ -101,6 +123,138 @@ class _CategoryLogoSheetState extends State<_CategoryLogoSheet> {
     }
   }
 
+  Future<void> _rename() async {
+    _name.text = _category.name;
+    final name = await showAppSheet<String>(
+      context: context,
+      title: 'Rename ${_category.name}',
+      child: Builder(
+        builder: (sheetContext) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.gutter,
+            0,
+            AppSpacing.gutter,
+            MediaQuery.viewInsetsOf(sheetContext).bottom +
+                MediaQuery.paddingOf(sheetContext).bottom +
+                AppSpacing.x4,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _name,
+                autofocus: true,
+                maxLength: 120,
+                textCapitalization: TextCapitalization.words,
+                onSubmitted: (value) =>
+                    Navigator.of(sheetContext).pop(value.trim()),
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              // The address customers may already have is left alone -- the
+              // API keeps name and slug separate for exactly this reason.
+              Text(
+                'The web address for this section does not change.',
+                style: sheetContext.texts.bodySmall?.copyWith(
+                  color: sheetContext.surfaces.inkSoft,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.x4),
+              PrimaryButton(
+                label: 'Save name',
+                onPressed: () =>
+                    Navigator.of(sheetContext).pop(_name.text.trim()),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (name == null || name.isEmpty || name == _category.name) return;
+    if (!mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final updated = await context.read<AdminMenuRepository>().renameCategory(
+        _category.id,
+        name,
+      );
+      if (!mounted) return;
+      AppHaptics.success();
+      setState(() {
+        _category = updated;
+        _busy = false;
+      });
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      AppHaptics.failure();
+      setState(() => _busy = false);
+      showAppSnack(context, failure.message, isError: true);
+    }
+  }
+
+  Future<void> _delete() async {
+    // Asked first. Archiving a section takes it off the customer's menu
+    // immediately, and the dishes in it go with it.
+    final confirmed = await showAppSheet<bool>(
+      context: context,
+      title: 'Delete ${_category.name}?',
+      child: Builder(
+        builder: (sheetContext) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.gutter,
+            0,
+            AppSpacing.gutter,
+            MediaQuery.paddingOf(sheetContext).bottom + AppSpacing.x4,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'It disappears from the menu straight away, and any dish that '
+                'was only in this section stops being listed. The restaurant '
+                'can restore it from the back office.',
+                style: sheetContext.texts.bodyMedium?.copyWith(
+                  color: sheetContext.surfaces.inkMuted,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.x5),
+              // Keeping it is the safe choice, so it gets the filled button.
+              PrimaryButton(
+                label: 'Keep this section',
+                onPressed: () => Navigator.of(sheetContext).pop(false),
+              ),
+              const SizedBox(height: AppSpacing.x2),
+              TextButton(
+                onPressed: () => Navigator.of(sheetContext).pop(true),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  foregroundColor: sheetContext.orderColors.overdue,
+                ),
+                child: const Text('Delete section'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await context.read<AdminMenuRepository>().deleteCategory(_category.id);
+      if (!mounted) return;
+      AppHaptics.success();
+      Navigator.of(context).pop(CategoryDeleted(_category.id));
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      AppHaptics.failure();
+      setState(() => _busy = false);
+      showAppSnack(context, failure.message, isError: true);
+    }
+  }
+
   Future<void> _remove() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -128,7 +282,11 @@ class _CategoryLogoSheetState extends State<_CategoryLogoSheet> {
     final url = _category.imageUrl;
     final hasLogo = url != null && url.isNotEmpty;
 
-    return Padding(
+    // Scrollable, because the sheet now carries the picture, both source
+    // buttons, the rename row and the delete row -- more than fits above the
+    // keyboard-free area of a small phone, where it overflowed by about a
+    // hundred pixels.
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.gutter,
         0,
@@ -231,6 +389,33 @@ class _CategoryLogoSheetState extends State<_CategoryLogoSheet> {
               ),
             ),
           ],
+
+          const Divider(height: AppSpacing.x6),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.edit_outlined, size: AppIconSize.lg),
+            title: const Text('Rename section'),
+            subtitle: Text(_category.name),
+            enabled: !_busy,
+            onTap: _busy ? null : _rename,
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              Icons.delete_outline,
+              size: AppIconSize.lg,
+              color: _busy ? null : context.orderColors.overdue,
+            ),
+            title: Text(
+              'Delete section',
+              style: TextStyle(
+                color: _busy ? null : context.orderColors.overdue,
+              ),
+            ),
+            subtitle: const Text('Takes it off the menu straight away'),
+            enabled: !_busy,
+            onTap: _busy ? null : _delete,
+          ),
 
           const SizedBox(height: AppSpacing.x2),
           TextButton(

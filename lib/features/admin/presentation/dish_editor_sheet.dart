@@ -14,6 +14,7 @@ import '../../../shared/widgets/app_sheet.dart';
 import '../../../shared/widgets/dish_image.dart';
 import '../../menu/domain/dish.dart';
 import '../domain/admin_menu_repository.dart';
+import 'category_logo_sheet.dart';
 
 /// Create or edit a dish, against the API. Returns the saved dish, or null if
 /// dismissed.
@@ -209,6 +210,30 @@ class _DishEditorState extends State<_DishEditor> {
     setState(() {
       _pendingCategories.add(value);
       _newCategory.clear();
+    });
+  }
+
+  /// Rename, re-picture or delete a saved section, from the sheet the menu
+  /// screen uses for the same job.
+  Future<void> _manageCategory(MenuCategory category) async {
+    AppHaptics.toggle();
+    final result = await showCategorySheet(context, category);
+    if (result == null || !mounted) return;
+
+    setState(() {
+      if (result is CategoryDeleted) {
+        // Gone from the list and from this dish: a dish cannot be filed under
+        // a section that no longer exists.
+        _categories = [..._categories]..removeWhere((c) => c.id == result.id);
+        _selected.remove(result.id);
+        return;
+      }
+      if (result is MenuCategory) {
+        _categories = [
+          for (final existing in _categories)
+            if (existing.id == result.id) result else existing,
+        ];
+      }
     });
   }
 
@@ -476,6 +501,13 @@ class _DishEditorState extends State<_DishEditor> {
                                 _selected.add(category.id);
                               }
                             }),
+                      // The glyph is the way in: rename, picture, delete. It
+                      // used to be a long press, which is invisible.
+                      onManage: _saving
+                          ? null
+                          : () => _manageCategory(category),
+                      manageIcon: Icons.edit_outlined,
+                      manageTooltip: 'Edit ${category.name}',
                     ),
                   // Queued for creation. Shown as selected because that is what
                   // they are — typing one is a statement that this dish is in
@@ -493,6 +525,16 @@ class _DishEditorState extends State<_DishEditor> {
                 ],
               ),
             ),
+            if (_categories.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.x2),
+              Text(
+                'Tap the pencil on a section to rename it, change its picture '
+                'or delete it.',
+                style: context.texts.bodySmall?.copyWith(
+                  color: context.surfaces.inkSoft,
+                ),
+              ),
+            ],
             const SizedBox(height: AppSpacing.x3),
             // The list used to be five hardcoded strings, so anything the
             // kitchen actually served that wasn't one of them had nowhere to go.

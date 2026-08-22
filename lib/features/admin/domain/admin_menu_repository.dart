@@ -17,6 +17,20 @@ abstract interface class AdminMenuRepository {
   /// default and one fewer thing for an admin to decide.
   Future<MenuCategory> createCategory(String name);
 
+  /// Renames a category.
+  ///
+  /// The slug is left alone deliberately: the server built it from the original
+  /// name, customers may have it in a link, and the API treats the two as
+  /// separate fields precisely so a typo fix does not break an address.
+  Future<MenuCategory> renameCategory(String id, String name);
+
+  /// Archives a category.
+  ///
+  /// Not a hard delete -- the API calls it archive, and offers a restore route
+  /// -- so dishes that were in it are not orphaned and the decision is
+  /// reversible from the backend. It disappears from the app either way.
+  Future<void> deleteCategory(String id);
+
   /// Uploads a section's logo, replacing any previous one.
   ///
   /// Returns the whole category back, so the caller shows the `image_url` the

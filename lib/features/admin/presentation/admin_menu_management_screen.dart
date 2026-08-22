@@ -357,24 +357,25 @@ class _CategoryStrip extends StatelessWidget {
             );
           }
           final category = categories[index - 1];
-          return GestureDetector(
-            // Long press opens the section's picture. A second tap target on a
-            // 38pt chip would be unhittable, and filtering is what a chip row is
-            // for — managing the logo is the rarer job.
-            onLongPress: () async {
-              AppHaptics.toggle();
-              final updated = await showCategoryLogoSheet(context, category);
-              if (updated != null && context.mounted) onLogoChanged?.call();
+          return SelectableChip(
+            label: category.name,
+            selected: selectedId == category.id,
+            // Tapping the selected section clears it, which is the same
+            // gesture as tapping "All" and is what a chip row is expected to
+            // do.
+            onSelected: () =>
+                onSelected(selectedId == category.id ? null : category.id),
+            // The pencil manages the section: its picture, its name, or
+            // getting rid of it. This was a long press, which nobody finds --
+            // the glyph costs a few points of chip width and says what it is.
+            onManage: () async {
+              final result = await showCategorySheet(context, category);
+              // A rename, a new picture or an archive all change what the
+              // strip and the customer's menu should show.
+              if (result != null && context.mounted) onLogoChanged?.call();
             },
-            child: SelectableChip(
-              label: category.name,
-              selected: selectedId == category.id,
-              // Tapping the selected section clears it, which is the same
-              // gesture as tapping "All" and is what a chip row is expected to
-              // do.
-              onSelected: () =>
-                  onSelected(selectedId == category.id ? null : category.id),
-            ),
+            manageIcon: Icons.edit_outlined,
+            manageTooltip: 'Edit ${category.name}',
           );
         },
       ),

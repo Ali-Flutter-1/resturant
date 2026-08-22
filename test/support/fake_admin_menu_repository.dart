@@ -34,6 +34,8 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
   ApiFailure? failure;
 
   final createdCategories = <String>[];
+  final renamedCategories = <(String, String)>[];
+  final deletedCategories = <String>[];
   final uploadedPaths = <String>[];
   Map<String, Object?>? lastCreate;
   Map<String, Object?>? lastUpdate;
@@ -67,6 +69,34 @@ class FakeAdminMenuRepository implements AdminMenuRepository {
     );
     _categories.add(created);
     return created;
+  }
+
+  @override
+  Future<MenuCategory> renameCategory(String id, String name) async {
+    _check();
+    renamedCategories.add((id, name));
+    final existing = _categories.firstWhere((c) => c.id == id);
+    // The slug deliberately stays as it was, exactly as the API behaves.
+    final renamed = MenuCategory(
+      id: existing.id,
+      slug: existing.slug,
+      name: name,
+      description: existing.description,
+      imageUrl: existing.imageUrl,
+      sortOrder: existing.sortOrder,
+    );
+    _categories = [
+      for (final c in _categories)
+        if (c.id == id) renamed else c,
+    ];
+    return renamed;
+  }
+
+  @override
+  Future<void> deleteCategory(String id) async {
+    _check();
+    deletedCategories.add(id);
+    _categories = [..._categories]..removeWhere((c) => c.id == id);
   }
 
   @override

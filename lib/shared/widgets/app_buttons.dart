@@ -17,12 +17,21 @@ class PrimaryButton extends StatefulWidget {
     this.icon,
     this.expand = true,
     this.onDark = false,
+    this.loading = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool expand;
+
+  /// Whether the action this button started is still in flight.
+  ///
+  /// Shows a spinner in place of the glyph and takes the button out of service,
+  /// so a request cannot be sent twice by an impatient second tap. The label
+  /// stays put: swapping it for "Saving…" moves the button's width, and a
+  /// control that resizes under the finger reads as a different control.
+  final bool loading;
 
   /// Set on photographic grounds, where the ambient shadow would be lost.
   final bool onDark;
@@ -36,13 +45,17 @@ class _PrimaryButtonState extends State<PrimaryButton> {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null;
+    final enabled = widget.onPressed != null && !widget.loading;
     final motion = context.motion;
+    final onPrimary = Theme.of(context).colorScheme.onPrimary;
 
     return Semantics(
       button: true,
       enabled: enabled,
       label: widget.label,
+      // Announced, because a spinner is invisible to a screen reader and the
+      // button going quiet would otherwise be unexplained.
+      hint: widget.loading ? 'Working' : null,
       child: GestureDetector(
         onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
         onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
@@ -82,11 +95,23 @@ class _PrimaryButtonState extends State<PrimaryButton> {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (widget.icon != null) ...[
-                  Icon(
-                    widget.icon,
-                    size: AppIconSize.lg,
-                    color: Theme.of(context).colorScheme.onPrimary,
+                // The spinner takes the glyph's place rather than sitting
+                // beside it, so the button's width does not change when the
+                // work starts.
+                if (widget.loading || widget.icon != null) ...[
+                  SizedBox(
+                    width: AppIconSize.lg,
+                    height: AppIconSize.lg,
+                    child: widget.loading
+                        ? CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: onPrimary,
+                          )
+                        : Icon(
+                            widget.icon,
+                            size: AppIconSize.lg,
+                            color: onPrimary,
+                          ),
                   ),
                   const SizedBox(width: AppSpacing.x2),
                 ],
@@ -94,9 +119,7 @@ class _PrimaryButtonState extends State<PrimaryButton> {
                   child: Text(
                     widget.label,
                     textAlign: TextAlign.center,
-                    style: context.texts.labelLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onPrimary,
-                    ),
+                    style: context.texts.labelLarge?.copyWith(color: onPrimary),
                   ),
                 ),
               ],

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/core/theme/app_theme.dart';
+import 'package:practice/features/admin/domain/admin_menu_repository.dart';
 import 'package:practice/features/admin/presentation/dish_editor_sheet.dart';
 import 'package:practice/features/menu/domain/dish.dart';
+import 'package:practice/shared/widgets/app_chip.dart';
 
 import 'support/fake_admin_menu_repository.dart';
 
@@ -384,6 +387,152 @@ void main() {
       // The picture and the category are one job rather than two screens.
       expect(find.text('No picture yet'), findsOneWidget);
       expect(find.text('Add logo'), findsOneWidget);
+    });
+  });
+
+  group('managing a section from the dish editor', () {
+    /// The manage sheet reads the repository from the tree, which the plain
+    /// editor harness does not provide.
+    Future<void> openWithProvider(WidgetTester tester) async {
+      await tester.pumpWidget(
+        RepositoryProvider<AdminMenuRepository>.value(
+          value: repository,
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () async => saved = await showDishEditor(
+                    context: context,
+                    repository: repository,
+                    categories: FakeAdminMenuRepository.defaultCategories,
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('every saved section carries a visible way in', (tester) async {
+      await openWithProvider(tester);
+
+      // A glyph on the chip rather than a hidden long press, and one per
+      // saved section.
+      expect(
+        find.descendant(
+          of: find.byType(SelectableChip),
+          matching: find.byIcon(Icons.edit_outlined),
+        ),
+        findsNWidgets(FakeAdminMenuRepository.defaultCategories.length),
+      );
+      expect(find.textContaining('Tap the pencil'), findsOneWidget);
+    });
+
+    /// The chip, specifically: the manage sheet repeats the section's name in
+    /// its title and in the rename row.
+    Finder chip(String label) => find.widgetWithText(SelectableChip, label);
+
+    /// The pencil on that chip, which is a target of its own -- tapping the
+    /// label still just picks the section.
+    Finder manage(String label) => find.descendant(
+      of: chip(label),
+      matching: find.byIcon(Icons.edit_outlined),
+    );
+
+    testWidgets('the pencil edits, the label still selects', (tester) async {
+      await openWithProvider(tester);
+      await tester.ensureVisible(chip('Curry Dishes'));
+      await tester.pumpAndSettle();
+
+      // Tapping the label picks the section for this dish...
+      await tester.tap(find.text('Curry Dishes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rename section'), findsNothing);
+
+      // ...and tapping the glyph beside it opens the manage sheet instead of
+      // toggling the selection underneath it.
+      await tester.tap(manage('Curry Dishes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rename section'), findsOneWidget);
+      expect(find.text('Delete section'), findsOneWidget);
+    });
+
+    testWidgets('renaming a section updates its chip', (tester) async {
+      await openWithProvider(tester);
+
+      // The chips sit below the fold on a test viewport.
+      await tester.ensureVisible(chip('Curry Dishes'));
+      await tester.pumpAndSettle();
+      await tester.tap(manage('Curry Dishes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename section'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, 'Curries');
+      await tester.tap(find.text('Save name'));
+      await tester.pumpAndSettle();
+
+      expect(repository.renamedCategories, [('cat-1', 'Curries')]);
+
+      // Back on the editor, the chip carries the new name. "Done" sits below
+      // the fold now that the sheet scrolls.
+      await tester.ensureVisible(find.text('Done'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(chip('Curries'), findsOneWidget);
+      expect(chip('Curry Dishes'), findsNothing);
+    });
+
+    testWidgets('deleting a section takes it off the dish too', (tester) async {
+      await openWithProvider(tester);
+
+      // Pick it first: the dish is filed under it, and that has to come undone
+      // with it -- a dish cannot belong to a section that is gone.
+      await tester.ensureVisible(chip('Curry Dishes'));
+      await tester.pumpAndSettle();
+      await tester.tap(chip('Curry Dishes'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(manage('Curry Dishes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete section'));
+      await tester.pumpAndSettle();
+
+      // Asked before it happens.
+      expect(find.text('Keep this section'), findsOneWidget);
+      await tester.tap(find.text('Delete section').last);
+      await tester.pumpAndSettle();
+
+      expect(repository.deletedCategories, ['cat-1']);
+      expect(chip('Curry Dishes'), findsNothing);
+    });
+
+    testWidgets('a refused delete leaves the section alone', (tester) async {
+      await openWithProvider(tester);
+
+      await tester.ensureVisible(chip('Curry Dishes'));
+      await tester.pumpAndSettle();
+      await tester.tap(manage('Curry Dishes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete section'));
+      await tester.pumpAndSettle();
+
+      // Second thoughts are the safe path, and the filled button.
+      await tester.tap(find.text('Keep this section'));
+      await tester.pumpAndSettle();
+
+      expect(repository.deletedCategories, isEmpty);
+      await tester.ensureVisible(find.text('Done'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(chip('Curry Dishes'), findsOneWidget);
     });
   });
 }

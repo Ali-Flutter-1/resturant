@@ -13,7 +13,7 @@ import '../../../shared/widgets/app_buttons.dart';
 import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/app_sheet.dart';
 import '../../../shared/widgets/app_surface.dart';
-import '../../../shared/widgets/dish_list_skeleton.dart';
+import '../../../shared/widgets/skeleton.dart';
 import '../domain/customer_order.dart';
 import '../domain/order_repository.dart';
 import 'order_status_palette.dart';
@@ -140,7 +140,11 @@ class _MyOrdersViewState extends State<_MyOrdersView> {
           if (state.status == OrdersStatus.loading) {
             // The same card-shaped skeleton the menu uses, at tracker height:
             // the page doesn't reflow when the orders land.
-            return const DishListSkeleton(rows: 3, imageHeight: 96);
+            // Shaped like an order card -- reference, status pill, and the
+            // action button under it -- rather than like the dish list. A
+            // placeholder that does not match what arrives reads as the screen
+            // being replaced rather than filled in.
+            return const OrderListSkeleton(rows: 3);
           }
 
           if (state.status == OrdersStatus.failure && state.failure != null) {

@@ -121,6 +121,23 @@ class ApiAdminMenuRepository implements AdminMenuRepository {
       _client.send(ApiConstants.adminDish(id), method: 'DELETE');
 
   @override
+  Future<MenuCategory> renameCategory(String id, String name) async =>
+      MenuCategory.fromJson(
+        await _client.object(
+          ApiConstants.adminCategory(id),
+          method: 'PATCH',
+          // Only the name. `slug`, `sort_order` and `is_active` are all
+          // updatable through the same route, and sending the ones nobody
+          // edited would let a stale copy overwrite a change made elsewhere.
+          body: {'name': name.trim()},
+        ),
+      );
+
+  @override
+  Future<void> deleteCategory(String id) async =>
+      _client.send(ApiConstants.adminCategory(id), method: 'DELETE');
+
+  @override
   Future<MenuCategory> setCategoryLogo(
     String categoryId,
     String filePath,

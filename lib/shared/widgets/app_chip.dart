@@ -137,6 +137,9 @@ class SelectableChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onSelected,
+    this.onManage,
+    this.manageIcon = Icons.more_horiz,
+    this.manageTooltip,
   });
 
   final String label;
@@ -145,6 +148,16 @@ class SelectableChip extends StatelessWidget {
   /// Null disables the chip — for a form mid-submit, where changing the
   /// selection would race the request already carrying the old one.
   final VoidCallback? onSelected;
+
+  /// A second action on the chip, shown as a glyph after the label.
+  ///
+  /// Only for something the chip *is* rather than something it filters: on a
+  /// category chip this edits the category itself. Left null the chip is
+  /// exactly as it was, with no glyph and no second target.
+  final VoidCallback? onManage;
+
+  final IconData manageIcon;
+  final String? manageTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -176,13 +189,53 @@ class SelectableChip extends StatelessWidget {
           ),
         ),
         alignment: Alignment.center,
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: context.texts.labelLarge?.copyWith(
-            color: selected ? scheme.onPrimary : scheme.onSurface,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.texts.labelLarge?.copyWith(
+                  color: selected ? scheme.onPrimary : scheme.onSurface,
+                ),
+              ),
+            ),
+            if (onManage != null) ...[
+              const SizedBox(width: AppSpacing.x2),
+              // Its own target, so tapping the glyph edits and tapping the
+              // label still selects. A hidden long-press was the only way in
+              // before, which meant nobody found it.
+              Semantics(
+                button: true,
+                label: manageTooltip ?? 'Edit $label',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    AppHaptics.toggle();
+                    onManage!();
+                  },
+                  child: Padding(
+                    // Widens the glyph's target without making the chip taller
+                    // -- 24pt of icon plus this reaches a comfortable thumb
+                    // size inside a chip that has to stay chip-sized.
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.x1,
+                      vertical: AppSpacing.x2,
+                    ),
+                    child: Icon(
+                      manageIcon,
+                      size: AppIconSize.md,
+                      color: selected
+                          ? scheme.onPrimary.withValues(alpha: 0.8)
+                          : context.surfaces.inkSoft,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
