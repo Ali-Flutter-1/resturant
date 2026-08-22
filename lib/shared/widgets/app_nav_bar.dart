@@ -293,25 +293,25 @@ class _NavButtonState extends State<_NavButton> {
                     children: [
                       // The two glyphs are the same size in the same place, so
                       // this is a weight change rather than a swap: their
-                      // opacities always sum to one, and neither ghosts.
+                      // alphas always sum to one, and neither ghosts.
+                      //
+                      // Faded through the colour rather than through `Opacity`.
+                      // A glyph is a single colour, so the result is identical
+                      // -- but `Opacity` between 0 and 1 pushes a saveLayer,
+                      // and this was two of them per tab on every frame of the
+                      // move.
                       Stack(
                         alignment: Alignment.center,
                         children: [
-                          Opacity(
-                            opacity: 1 - t,
-                            child: Icon(
-                              widget.item.icon,
-                              size: _glyphSize,
-                              color: colour,
-                            ),
+                          Icon(
+                            widget.item.icon,
+                            size: _glyphSize,
+                            color: colour.withValues(alpha: 1 - t),
                           ),
-                          Opacity(
-                            opacity: t,
-                            child: Icon(
-                              widget.item.selectedIcon,
-                              size: _glyphSize,
-                              color: colour,
-                            ),
+                          Icon(
+                            widget.item.selectedIcon,
+                            size: _glyphSize,
+                            color: colour.withValues(alpha: t),
                           ),
                         ],
                       ),

@@ -157,44 +157,55 @@ class _MyOrdersViewState extends State<_MyOrdersView> {
           final live = state.live;
           final past = state.past;
 
+          final rows = <WidgetBuilder>[
+            if (live.isNotEmpty) ...[
+              (_) => _SectionHeading(
+                label: live.length == 1
+                    ? 'Happening now'
+                    : '${live.length} orders in progress',
+              ),
+              for (final order in live)
+                (_) => Padding(
+                  key: ValueKey('live-${order.id}'),
+                  padding: const EdgeInsets.only(bottom: AppSpacing.x4),
+                  child: _LiveOrderCard(
+                    order: order,
+                    isCancelling: state.cancellingId == order.id,
+                    isPaying: state.payingId == order.id,
+                  ),
+                ),
+            ],
+            if (past.isNotEmpty) ...[
+              if (live.isNotEmpty) (_) => const SizedBox(height: AppSpacing.x4),
+              (_) => const _SectionHeading(label: 'Earlier orders'),
+              for (final order in past)
+                (_) => Padding(
+                  key: ValueKey('past-${order.id}'),
+                  padding: const EdgeInsets.only(bottom: AppSpacing.x3),
+                  child: _PastOrderRow(order: order),
+                ),
+            ],
+          ];
+
           return RefreshIndicator(
             onRefresh: () =>
                 refreshWithSession(context, () => cubit.load(silent: true)),
-            child: ListView(
+            // Built one row at a time rather than all at once. The list
+            // endpoint returns up to fifty orders, and this screen rebuilds on
+            // every poll tick -- constructing fifty cards to show three was
+            // most of the work the screen did.
+            //
+            // The closures below are the cheap part: making them costs nothing,
+            // and only the ones on screen are ever called.
+            child: ListView.builder(
               padding: pagePadding(
                 context,
                 top: AppSpacing.x4,
                 bottom: AppSpacing.x12,
               ),
-              children: [
-                if (live.isNotEmpty) ...[
-                  _SectionHeading(
-                    label: live.length == 1
-                        ? 'Happening now'
-                        : '${live.length} orders in progress',
-                  ),
-                  for (final order in live)
-                    Padding(
-                      key: ValueKey('live-${order.id}'),
-                      padding: const EdgeInsets.only(bottom: AppSpacing.x4),
-                      child: _LiveOrderCard(
-                        order: order,
-                        isCancelling: state.cancellingId == order.id,
-                        isPaying: state.payingId == order.id,
-                      ),
-                    ),
-                ],
-                if (past.isNotEmpty) ...[
-                  if (live.isNotEmpty) const SizedBox(height: AppSpacing.x4),
-                  const _SectionHeading(label: 'Earlier orders'),
-                  for (final order in past)
-                    Padding(
-                      key: ValueKey('past-${order.id}'),
-                      padding: const EdgeInsets.only(bottom: AppSpacing.x3),
-                      child: _PastOrderRow(order: order),
-                    ),
-                ],
-              ].revealStaggered(),
+              itemCount: rows.length,
+              itemBuilder: (context, index) =>
+                  rows[index](context).revealItem(index),
             ),
           );
         },

@@ -115,18 +115,19 @@ void main() {
     await tester.pumpWidget(wrap(currentIndex: 1));
     await tester.pumpAndSettle();
 
-    // Every tab builds its indicator; only the selected one is opaque, so
+    // Every tab builds its pill; only the selected one is filled in, so
     // selection can animate rather than pop in.
-    final opacities = tester
-        .widgetList<Opacity>(
+    final alphas = tester
+        .widgetList<Container>(
           find.descendant(
             of: find.byType(AppNavBar),
-            matching: find.byType(Opacity),
+            matching: find.byType(Container),
           ),
         )
-        .map((widget) => widget.opacity)
+        .map((c) => (c.decoration as BoxDecoration?)?.color?.a)
+        .whereType<double>()
         .toList();
-    expect(opacities, containsAll(<double>[1, 0]));
+    expect(alphas, containsAll(<double>[1.0, 0.0]));
 
     // Tinted with the app's own accent container, not M3's secondaryContainer:
     // selection should read as the brand crimson.
@@ -388,7 +389,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 90));
 
     final pair = tester
-        .widgetList<Opacity>(
+        .widgetList<Icon>(
           find.descendant(
             of: find
                 .ancestor(
@@ -396,13 +397,13 @@ void main() {
                   matching: find.byType(Stack),
                 )
                 .first,
-            matching: find.byType(Opacity),
+            matching: find.byType(Icon),
           ),
         )
-        .map((o) => o.opacity)
+        .map((icon) => icon.color!.a)
         .toList();
 
-    // Outline and filled, and their opacities are two halves of one value.
+    // Outline and filled, and their alphas are two halves of one value.
     // Summing to less than one would show as a ghost of both.
     expect(pair, hasLength(2));
     expect(pair[0] + pair[1], closeTo(1, 0.0001));
