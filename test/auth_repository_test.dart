@@ -284,4 +284,72 @@ void main() {
       );
     });
   });
+
+  group('the cached profile', () {
+    test('is written from /auth/me and read back as a user', () async {
+      final built = build(
+        (_) async => _json(
+          200,
+          '{"success":true,"message":"ok","data":{"id":"u1",'
+          '"email":"ali@example.com","first_name":"Ali","last_name":"Hassan",'
+          '"role":"admin"}}',
+        ),
+      );
+
+      await built.repo.currentUser();
+
+      // The role is the part that matters: it decides which half of the app
+      // opens when there is no network to ask.
+      expect(built.tokens.lastUser, isNotNull);
+      expect(built.repo.cachedUser?.role, UserRole.admin);
+      expect(built.repo.cachedUser?.email, 'ali@example.com');
+    });
+
+    test('is written on sign-in too, not only on restore', () async {
+      final built = build(
+        (_) async => _json(
+          200,
+          '{"success": true, "message": "Signed in", "data": {'
+          '"user": {"id": "1", "email": "boss@tscafe.co.uk", '
+          '"first_name": "Sam", "last_name": "Owner", "role": "staff"}, '
+          '"tokens": {"access_token": "a1", "refresh_token": "r1"}}}',
+        ),
+      );
+
+      await built.repo.login(email: 'boss@tscafe.co.uk', password: 'secret');
+
+      // Otherwise the first launch after signing in -- the one most likely to
+      // be on a patchy connection -- would have a token and no idea whose.
+      expect(built.repo.cachedUser?.role, UserRole.staff);
+    });
+
+    test('never stores what the API says to keep out of the app', () async {
+      final built = build(
+        (_) async => _json(
+          200,
+          '{"success":true,"message":"ok","data":{"id":"u1",'
+          '"email":"ali@example.com","first_name":"Ali","last_name":"Hassan",'
+          '"role":"customer","password_hash":"secret-hash-value",'
+          '"google_sub":"110169484474386276334"}}',
+        ),
+      );
+
+      await built.repo.currentUser();
+
+      // Written from the model rather than the response, so a server that
+      // starts sending these cannot leak them onto the device.
+      final stored = built.tokens.lastUser!;
+      expect(stored, isNot(contains('password_hash')));
+      expect(stored, isNot(contains('secret-hash-value')));
+      expect(stored, isNot(contains('google_sub')));
+    });
+
+    test('a corrupt cache reads as no cache, not as a crash', () async {
+      final built = build((_) async => _json(200, '{}'));
+      await built.tokens.saveUser('{not json at all');
+
+      // A cache written by an older build must not take startup down.
+      expect(built.repo.cachedUser, isNull);
+    });
+  });
 }

@@ -98,7 +98,7 @@ void main() {
       expect(cubit.state.isSignedIn, isFalse);
     });
 
-    test('a failed restore finishes too, signed out', () async {
+    test('no network does not sign anybody out', () async {
       final repository = FakeAuthRepository()
         ..storedSession = true
         ..failure = ApiFailure.offline;
@@ -106,6 +106,43 @@ void main() {
 
       await cubit.restore();
 
+      // Being unable to ask is not the same answer as being told no. The
+      // token is still valid, and the one place a customer cannot sign in
+      // again is exactly the place with no network.
+      expect(cubit.state.hasRestored, isTrue);
+      expect(cubit.state.isSignedIn, isTrue);
+      expect(cubit.state.role, FakeAuthRepository.defaultUser.role);
+    });
+
+    test('an offline start with nothing cached settles signed out', () async {
+      final repository = FakeAuthRepository()
+        ..storedSession = true
+        ..cached = null
+        ..failure = ApiFailure.offline;
+      final cubit = AuthCubit(repository: repository);
+
+      await cubit.restore();
+
+      // A token but no idea whose. There is no shell to open, so the sign-in
+      // screen is the honest place to land.
+      expect(cubit.state.hasRestored, isTrue);
+      expect(cubit.state.isSignedIn, isFalse);
+    });
+
+    test('a refused token signs out even with a cached profile', () async {
+      final repository = FakeAuthRepository()
+        ..storedSession = true
+        ..failure = const ApiFailure(
+          kind: ApiFailureKind.unauthorised,
+          message: 'Your session has expired.',
+          statusCode: 401,
+        );
+      final cubit = AuthCubit(repository: repository);
+
+      await cubit.restore();
+
+      // Only the server can end a session, and here it has. Keeping the
+      // cached profile would show a shell whose every request 401s.
       expect(cubit.state.hasRestored, isTrue);
       expect(cubit.state.isSignedIn, isFalse);
     });

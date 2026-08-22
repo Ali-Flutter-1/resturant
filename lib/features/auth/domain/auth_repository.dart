@@ -11,6 +11,13 @@ abstract interface class AuthRepository {
   /// worth trying to restore.
   bool get hasStoredSession;
 
+  /// The last profile the server gave, from local storage.
+  ///
+  /// Null when there has never been one. Used only when the server cannot be
+  /// reached at startup -- it says who *was* signed in, never whether they
+  /// still are.
+  AuthUser? get cachedUser;
+
   Future<AuthUser> register({
     required String firstName,
     required String lastName,

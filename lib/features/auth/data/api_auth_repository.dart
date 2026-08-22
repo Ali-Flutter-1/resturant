@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_constants.dart';
 import '../../../core/network/api_failure.dart';
@@ -30,6 +32,27 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   bool get hasStoredSession => _tokens.hasSession;
+
+  @override
+  AuthUser? get cachedUser {
+    final stored = _tokens.lastUser;
+    if (stored == null) return null;
+    try {
+      final decoded = jsonDecode(stored);
+      if (decoded is! Map) return null;
+      return AuthUser.fromJson(Map<String, dynamic>.from(decoded));
+    } on FormatException {
+      // Written by an older build, or truncated. A missing cache is a normal
+      // state, so this is not worth surfacing.
+      return null;
+    }
+  }
+
+  /// Keeps the local copy in step with whatever the server just said.
+  Future<AuthUser> _remember(AuthUser user) async {
+    await _tokens.saveUser(jsonEncode(user.toJson()));
+    return user;
+  }
 
   /// Creates an account and signs the new user in.
   @override
@@ -82,7 +105,7 @@ class ApiAuthRepository implements AuthRepository {
   @override
   Future<AuthUser> currentUser() async {
     final data = await _client.object(ApiConstants.me);
-    return AuthUser.fromJson(data);
+    return _remember(AuthUser.fromJson(data));
   }
 
   /// Revokes this device's refresh token, then forgets it locally.
@@ -225,7 +248,9 @@ class ApiAuthRepository implements AuthRepository {
     }
 
     final user = data['user'];
-    if (user is Map) return AuthUser.fromJson(Map<String, dynamic>.from(user));
+    if (user is Map) {
+      return _remember(AuthUser.fromJson(Map<String, dynamic>.from(user)));
+    }
 
     // Some deployments return only tokens. Asking who we are is cheaper than
     // guessing, and the role decides which half of the app opens.

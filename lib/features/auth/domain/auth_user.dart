@@ -57,6 +57,21 @@ class AuthUser extends Equatable {
   final UserRole role;
   final String? avatarUrl;
 
+  /// The same shape [AuthUser.fromJson] reads, for caching the profile.
+  ///
+  /// Written from the model rather than from the server's response, so only
+  /// these six fields can ever be stored -- the API's own guide is explicit
+  /// that `password_hash` and `google_sub` must never reach the app, and this
+  /// keeps that true even if a future response includes them.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'email': email,
+    'first_name': firstName,
+    'last_name': lastName,
+    'role': role.name,
+    'avatar_url': avatarUrl,
+  };
+
   /// Falls back to the email when a name is missing, so a greeting never reads
   /// as "Welcome back, ".
   String get displayName {

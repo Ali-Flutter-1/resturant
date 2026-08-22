@@ -259,8 +259,15 @@ class _NavButtonState extends State<_NavButton> {
             containedInkWell: true,
             highlightShape: BoxShape.rectangle,
             borderRadius: BorderRadius.circular(AppNavBar._pillHeight / 2),
-            splashColor: widget.accent.withValues(alpha: 0.10),
-            highlightColor: widget.accent.withValues(alpha: 0.05),
+            // No ripple and no highlight. The crimson wash spreading out of
+            // the tap read as a second, unexplained colour arriving beside the
+            // pill -- and it outlived the pill's own 200ms move, so the bar was
+            // still flushing red after the selection had finished. The press
+            // dip below is the feedback; it is faster and it moves the thing
+            // the finger is actually on.
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            hoverColor: Colors.transparent,
             child: Center(
               child: AnimatedScale(
                 // A press the eye can just about catch, and nothing more.

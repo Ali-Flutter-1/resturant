@@ -35,6 +35,14 @@ class FakeAuthRepository implements AuthRepository {
   @override
   bool get hasStoredSession => storedSession;
 
+  /// The profile the real repository writes to storage after every successful
+  /// `/auth/me`. Set it to null for a device that has a token but has never
+  /// completed a restore.
+  AuthUser? cached = defaultUser;
+
+  @override
+  AuthUser? get cachedUser => cached;
+
   int logoutCalls = 0;
   int currentUserCalls = 0;
   int deleteCalls = 0;

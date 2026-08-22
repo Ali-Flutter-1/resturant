@@ -1,0 +1,7 @@
+Welcome to T's Cafe.
+
+Order for collection or delivery, either as soon as possible or at a time that suits you. Browse the full menu with photos, prices and spice levels, then follow your order from the kitchen to your door.
+
+You can also reserve a table, see your booking at a glance, and keep every past order and receipt in one place.
+
+This is our first release. If something is not right, tell us and we will fix it.

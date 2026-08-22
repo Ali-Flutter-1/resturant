@@ -148,8 +148,27 @@ class AuthCubit extends Cubit<AuthState> {
       final user = await repository.currentUser();
       emit(AuthState(user: user, hasRestored: true));
       _announceSignIn();
-    } on ApiFailure {
-      emit(const AuthState(hasRestored: true));
+    } on ApiFailure catch (failure) {
+      // Only the server can sign somebody out.
+      //
+      // A 401 here means the refresh token is spent or revoked -- the session
+      // is genuinely over, and the stored copy goes with it. Anything else
+      // (no network, a timeout, a backend that is down) means we could not
+      // *ask*, which is not the same answer. Treating those as "signed out"
+      // is what put a customer with a valid token on the login screen every
+      // time they opened the app on the underground, where signing in again
+      // was equally impossible.
+      final cached = repository.cachedUser;
+      if (failure.requiresSignIn || cached == null) {
+        emit(const AuthState(hasRestored: true));
+        return;
+      }
+
+      // The last known profile, which is enough to open the right half of the
+      // app. Every screen still asks the server for its own data and shows its
+      // own offline state; nothing here is presented as fresh.
+      emit(AuthState(user: cached, hasRestored: true));
+      _announceSignIn();
     }
   }
 
