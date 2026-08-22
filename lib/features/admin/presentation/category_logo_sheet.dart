@@ -8,6 +8,7 @@ import '../../../core/haptics/app_haptics.dart';
 import '../../../core/network/api_failure.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/network_photo.dart';
 import '../../../shared/widgets/app_sheet.dart';
 import '../../menu/domain/dish.dart';
 import '../domain/admin_menu_repository.dart';
@@ -155,11 +156,8 @@ class _CategoryLogoSheetState extends State<_CategoryLogoSheet> {
                   else if (hasLogo)
                     // The server's own `image_url`, never a Cloudinary path
                     // assembled here — the guide is explicit about that.
-                    Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
+                    NetworkPhoto(
+                      url: url,
                       errorBuilder: (context, _, _) => Icon(
                         Icons.broken_image_outlined,
                         color: scheme.primary,

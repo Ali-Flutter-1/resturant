@@ -86,6 +86,17 @@ Future<void> _push(WidgetTester tester, Widget screen) async {
   await tester.pumpAndSettle();
 }
 
+/// Finds a tab by name.
+///
+/// Not by its visible text: the bar shows a label only on the selected tab, so
+/// the name of every other one lives in its [Semantics] and nowhere else.
+Finder navTab(String label) => find.descendant(
+  of: find.byType(AppNavBar),
+  matching: find.byWidgetPredicate(
+    (widget) => widget is Semantics && widget.properties.label == label,
+  ),
+);
+
 void main() {
   group('tab roots', () {
     // Nothing sits behind a tab root, so a back control there could only ever
@@ -277,7 +288,7 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 2));
 
-      await tester.tap(find.text('Products'));
+      await tester.tap(navTab('Products'));
       await tester.pump(const Duration(seconds: 2));
 
       final fab = tester.getRect(find.byType(FloatingActionButton));
@@ -336,16 +347,11 @@ void main() {
       await tester.pumpWidget(shellFor(AuthFixtures.admin));
       await tester.pump(const Duration(seconds: 2));
 
-      Finder tab(String label) => find.descendant(
-        of: find.byType(AppNavBar),
-        matching: find.text(label),
-      );
-
-      expect(tab('Analytics'), findsOneWidget);
-      expect(tab('Orders'), findsOneWidget);
-      expect(tab('Products'), findsOneWidget);
-      expect(tab('Reservations'), findsOneWidget);
-      expect(tab('Profile'), findsOneWidget);
+      expect(navTab('Analytics'), findsOneWidget);
+      expect(navTab('Orders'), findsOneWidget);
+      expect(navTab('Products'), findsOneWidget);
+      expect(navTab('Reservations'), findsOneWidget);
+      expect(navTab('Profile'), findsOneWidget);
     });
 
     testWidgets('staff get neither analytics nor the menu', (tester) async {
@@ -355,28 +361,20 @@ void main() {
       // Takings are the owner's view of the business, and managing the menu is
       // `canManageVenue` work — a staff member could open every control on that
       // screen and be refused by the API on each one.
-      Finder tab(String label) => find.descendant(
-        of: find.byType(AppNavBar),
-        matching: find.text(label),
-      );
-
-      expect(tab('Analytics'), findsNothing);
-      expect(tab('Products'), findsNothing);
+      expect(navTab('Analytics'), findsNothing);
+      expect(navTab('Products'), findsNothing);
 
       // What they do need is untouched.
-      expect(tab('Orders'), findsOneWidget);
-      expect(tab('Reservations'), findsOneWidget);
-      expect(tab('Profile'), findsOneWidget);
+      expect(navTab('Orders'), findsOneWidget);
+      expect(navTab('Reservations'), findsOneWidget);
+      expect(navTab('Profile'), findsOneWidget);
     });
-
-    Finder barTab(String label) =>
-        find.descendant(of: find.byType(AppNavBar), matching: find.text(label));
 
     testWidgets('an admin is offered the contact inbox', (tester) async {
       await tester.pumpWidget(shellFor(AuthFixtures.admin));
       await tester.pump(const Duration(seconds: 2));
 
-      await tester.tap(barTab('Profile'));
+      await tester.tap(navTab('Profile'));
       await tester.pump(const Duration(seconds: 2));
 
       expect(find.text('Messages'), findsOneWidget);
@@ -389,7 +387,7 @@ void main() {
       await tester.pumpWidget(shellFor(AuthFixtures.staff));
       await tester.pump(const Duration(seconds: 2));
 
-      await tester.tap(barTab('Profile'));
+      await tester.tap(navTab('Profile'));
       await tester.pump(const Duration(seconds: 2));
 
       expect(find.text('Messages'), findsNothing);

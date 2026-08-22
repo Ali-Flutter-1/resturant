@@ -95,6 +95,14 @@ class _CountsCreationsState extends State<_CountsCreations> {
       Scaffold(body: Center(child: Text(widget.label)));
 }
 
+/// Finds a tab by name.
+///
+/// The bar shows a label only on the selected tab, so every other tab's name
+/// lives in its [Semantics] rather than in any text on screen.
+Finder navTab(String label) => find.byWidgetPredicate(
+  (widget) => widget is Semantics && widget.properties.label == label,
+);
+
 void main() {
   Widget harness() => MaterialApp(
     theme: AppTheme.light,
@@ -124,15 +132,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('tab-one-root'), findsOneWidget);
-    expect(find.text('One'), findsOneWidget);
-    expect(find.text('Two'), findsOneWidget);
+    expect(navTab('One'), findsOneWidget);
+    expect(navTab('Two'), findsOneWidget);
   });
 
   testWidgets('switching tabs keeps both navigators mounted', (tester) async {
     await tester.pumpWidget(harness());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Two'));
+    await tester.tap(navTab('Two'));
     await tester.pumpAndSettle();
 
     // IndexedStack keeps the inactive tab in the tree, just not visible —
@@ -173,7 +181,7 @@ void main() {
     // swallowed. Consequence: tabs cannot be switched from a detail screen,
     // and "re-tap the active tab to pop to root" can never fire — the user
     // must use back or the screen's own control.
-    await tester.tap(find.text('Two'), warnIfMissed: false);
+    await tester.tap(navTab('Two'), warnIfMissed: false);
     await tester.pumpAndSettle();
 
     expect(find.text('tab-one-detail'), findsOneWidget);
@@ -189,11 +197,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('count: 2'), findsOneWidget);
 
-    await tester.tap(find.text('Two'));
+    await tester.tap(navTab('Two'));
     await tester.pumpAndSettle();
     expect(find.text('tab-two-root'), findsOneWidget);
 
-    await tester.tap(find.text('One'));
+    await tester.tap(navTab('One'));
     await tester.pumpAndSettle();
 
     expect(
@@ -226,7 +234,7 @@ void main() {
     await tester.pumpWidget(harness());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Two'));
+    await tester.tap(navTab('Two'));
     await tester.pumpAndSettle();
     expect(find.text('tab-two-root'), findsOneWidget);
 
@@ -297,15 +305,15 @@ void main() {
       expect(oneBuilt, 1);
       expect(twoBuilt, 0);
 
-      await tester.tap(find.text('Two'));
+      await tester.tap(navTab('Two'));
       await tester.pumpAndSettle();
       expect(twoBuilt, 1);
 
       // ...and going back does not rebuild it, so its state and its already
       // loaded data survive.
-      await tester.tap(find.text('One'));
+      await tester.tap(navTab('One'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Two'));
+      await tester.tap(navTab('Two'));
       await tester.pumpAndSettle();
       expect(twoBuilt, 1);
       expect(oneBuilt, 1);

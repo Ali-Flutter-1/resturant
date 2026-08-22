@@ -25,27 +25,32 @@ class AppNavItem {
 
 /// The tab bar everywhere iOS's own material isn't available — Android and web.
 ///
-/// Modelled on Material 3's `NavigationBar` rather than reusing it, because the
-/// shell needs the bar to be a plain widget it can slide off-screen and to
-/// report its own height. The M3 metrics are followed literally:
+/// The selected tab is a pill with its label *beside* the icon; the others are
+/// bare icons. The pill grows into the space the other tabs give up, so the
+/// selection reads as one object moving along the bar rather than four items
+/// each changing state.
 ///
-///  * **64pt of content, plus the system inset.** M3 specifies an 80pt bar; that
-///    is 64 of content and 16 of bottom padding, which on Android is the gesture
-///    inset. So the inset is added below the content rather than baked in, and a
-///    device without one gets [bottomPaddingWithoutInset] instead.
-///  * **A 64×32 active indicator.** The pill is the M3 selected-state signal.
-///    Tinted with the app's own `accentContainer` rather than
-///    `secondaryContainer`, so selection reads as the brand crimson.
-///  * **24pt glyphs, outlined → filled, with a 4pt gap to the label.** One icon
-///    size and one label style across every tab; the fill and the tint change
-///    together so the active item reads at a glance.
+/// Metrics still follow M3 where they apply:
+///
+///  * **64pt of content, plus the system inset.** M3 specifies an 80pt bar;
+///    that is 64 of content and 16 of bottom padding, which on Android is the
+///    gesture inset. So the inset is added below the content rather than baked
+///    in, and a device without one gets [bottomPaddingWithoutInset] instead.
+///  * **A 40pt-tall active pill**, tinted with the app's own `accentContainer`
+///    rather than `secondaryContainer`, so selection reads as the brand crimson.
+///  * **24pt glyphs, outlined → filled.** One icon size across every tab; the
+///    fill and the tint change together.
 ///  * **Edge to edge, flush to the bottom.** M3 anchors the bar to the screen
 ///    edge — a floating rounded card is an M2 idiom.
+///
+/// Hiding the inactive labels is the one real cost of this shape, so every tab
+/// keeps its name in [Semantics] and in a tooltip: a screen reader still reads
+/// "Orders, tab 2 of 5" whether or not the word is on screen.
 ///
 /// [BackdropFilter] is kept from the previous design: the shell sets
 /// `extendBody`, so content scrolls behind the bar, and a light blur under a
 /// near-opaque surface keeps that from looking like a clipping fault.
-class AppNavBar extends StatelessWidget {
+class AppNavBar extends StatefulWidget {
   const AppNavBar({
     super.key,
     required this.items,
@@ -61,9 +66,14 @@ class AppNavBar extends StatelessWidget {
   /// M3's 16pt bottom padding, for a device with no gesture inset of its own.
   static const double bottomPaddingWithoutInset = 16;
 
-  /// The active indicator, at M3's dimensions.
-  static const double _indicatorWidth = 64;
-  static const double _indicatorHeight = 32;
+  /// The active pill's height, and the corner radius that follows from it.
+  static const double _pillHeight = 40;
+
+  /// How much wider the selected tab is than an unselected one, as flex. The
+  /// row hands out space in these proportions, so the pill grows into exactly
+  /// what the others give up and the bar never changes size.
+  static const int _restingFlex = 100;
+  static const int _selectedExtraFlex = 130;
 
   final List<AppNavItem> items;
   final int currentIndex;
@@ -73,10 +83,50 @@ class AppNavBar extends StatelessWidget {
   final Color? tint;
 
   @override
+  State<AppNavBar> createState() => _AppNavBarState();
+}
+
+class _AppNavBarState extends State<AppNavBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Motion.fast,
+    value: 1,
+  );
+
+  /// The tab the pill is travelling *from*. Tracked explicitly rather than
+  /// inferred, because a jump from the first tab to the last must not light up
+  /// the two in between on the way past.
+  int? _leaving;
+
+  @override
+  void didUpdateWidget(AppNavBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentIndex != widget.currentIndex) {
+      _leaving = oldWidget.currentIndex;
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// How selected tab [index] is, from 0 to 1.
+  double _selectionOf(int index, double progress) {
+    if (index == widget.currentIndex) return progress;
+    if (index == _leaving) return 1 - progress;
+    return 0;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final surfaces = context.surfaces;
-    final accent = tint ?? theme.colorScheme.primary;
+    final accent = widget.tint ?? theme.colorScheme.primary;
+    final motion = context.motion;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     // M3's bar is an opaque `surfaceContainer`. Held just short of opaque so the
@@ -100,23 +150,42 @@ class AppNavBar extends StatelessWidget {
           ),
           child: Padding(
             padding: EdgeInsets.only(
-              bottom: bottomInset > 0 ? bottomInset : bottomPaddingWithoutInset,
+              bottom: bottomInset > 0
+                  ? bottomInset
+                  : AppNavBar.bottomPaddingWithoutInset,
             ),
             child: SizedBox(
-              height: barHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final (index, item) in items.indexed)
-                    Expanded(
-                      child: _NavButton(
-                        item: item,
-                        selected: index == currentIndex,
-                        accent: accent,
-                        onTap: () => onTap(index),
-                      ),
-                    ),
-                ],
+              height: AppNavBar.barHeight,
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) {
+                  // Eased once, here, and shared by every tab: the pill's
+                  // width, its colour, the glyph swap and the label's reveal
+                  // all read from this one number, so they cannot drift apart.
+                  final progress = motion.reduced
+                      ? 1.0
+                      : Motion.enter.transform(_controller.value);
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (index, item) in widget.items.indexed)
+                        Flexible(
+                          flex:
+                              AppNavBar._restingFlex +
+                              (AppNavBar._selectedExtraFlex *
+                                      _selectionOf(index, progress))
+                                  .round(),
+                          child: _NavButton(
+                            item: item,
+                            selection: _selectionOf(index, progress),
+                            accent: accent,
+                            onTap: () => widget.onTap(index),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -126,25 +195,22 @@ class AppNavBar extends StatelessWidget {
   }
 }
 
-/// One tab.
+/// One tab: a pill that carries its label when selected, and a bare glyph when
+/// not.
 ///
-/// Every part of the selected state -- the indicator's scale and opacity, the
-/// outline glyph fading into the filled one, the tint, the label -- is driven
-/// from a single 0..1 value rather than from four implicit animations of its
-/// own. That is what stops the switch looking busy: previously the pill grew
-/// over 300ms on an emphasised curve while its opacity finished in 200, so it
-/// was still expanding after it had gone solid, and the icon cross-faded on a
-/// third clock of its own, which showed as a brief double image.
+/// [selection] runs 0 to 1 and is computed once by the bar, so the pill's
+/// colour, the label's reveal, the glyph swap and the tint all move on exactly
+/// the same clock. Nothing here starts an animation of its own except the press.
 class _NavButton extends StatefulWidget {
   const _NavButton({
     required this.item,
-    required this.selected,
+    required this.selection,
     required this.accent,
     required this.onTap,
   });
 
   final AppNavItem item;
-  final bool selected;
+  final double selection;
   final Color accent;
   final VoidCallback onTap;
 
@@ -163,80 +229,67 @@ class _NavButtonState extends State<_NavButton> {
   Widget build(BuildContext context) {
     final motion = context.motion;
     final surfaces = context.surfaces;
+    final t = widget.selection;
+    final selected = t > 0.5;
+    final colour = Color.lerp(surfaces.inkMuted, widget.accent, t)!;
 
     return Semantics(
       button: true,
-      selected: widget.selected,
+      selected: selected,
+      // The name is here whether or not it is on screen, so hiding the
+      // inactive labels costs a screen-reader user nothing.
       label: widget.item.label,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkResponse(
-          // No haptic here: the shell plays the selection tick for whichever bar
-          // is on screen, and firing one from both places double-taps the motor.
-          onTap: widget.onTap,
-          // Tracked so the cell can answer the finger before the tab has
-          // changed. The ripple alone lags a fast tap on a slow frame.
-          onTapDown: (_) => _setPressed(true),
-          onTapUp: (_) => _setPressed(false),
-          onTapCancel: () => _setPressed(false),
-          // The whole cell is the target — 64pt tall by a fifth of the screen,
-          // comfortably past the 48pt minimum — but the ripple is a rounded rect
-          // inside it, so it never runs into the bar's edges or its neighbour.
-          containedInkWell: true,
-          highlightShape: BoxShape.rectangle,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          splashColor: widget.accent.withValues(alpha: 0.10),
-          highlightColor: widget.accent.withValues(alpha: 0.05),
-          child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(end: widget.selected ? 1 : 0),
-            // 200ms on an ease-out: the movement is over almost as soon as the
-            // finger lifts, which is what makes it feel answered rather than
-            // animated at.
-            duration: motion.move(Motion.fast),
-            curve: motion.enter,
-            builder: (context, t, child) {
-              final colour = Color.lerp(surfaces.inkMuted, widget.accent, t)!;
-
-              return AnimatedScale(
-                // A press the eye can just about catch, and nothing more. The
-                // whole cell moves as one, so nothing inside it shifts relative
-                // to anything else.
+      child: Tooltip(
+        message: widget.item.label,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkResponse(
+            // No haptic here: the shell plays the selection tick for whichever
+            // bar is on screen, and firing one from both places double-taps the
+            // motor.
+            onTap: widget.onTap,
+            // Tracked so the cell can answer the finger before the tab has
+            // changed. The ripple alone lags a fast tap on a slow frame.
+            onTapDown: (_) => _setPressed(true),
+            onTapUp: (_) => _setPressed(false),
+            onTapCancel: () => _setPressed(false),
+            // The whole cell is the target — 64pt tall, comfortably past the
+            // 48pt minimum — but the ripple is a rounded rect inside it, so it
+            // never runs into the bar's edges or its neighbour.
+            containedInkWell: true,
+            highlightShape: BoxShape.rectangle,
+            borderRadius: BorderRadius.circular(AppNavBar._pillHeight / 2),
+            splashColor: widget.accent.withValues(alpha: 0.10),
+            highlightColor: widget.accent.withValues(alpha: 0.05),
+            child: Center(
+              child: AnimatedScale(
+                // A press the eye can just about catch, and nothing more.
                 scale: _pressed ? motion.pressScale : 1,
                 duration: motion.move(Motion.instant),
                 curve: motion.standard,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: AppNavBar._indicatorWidth,
-                      height: AppNavBar._indicatorHeight,
-                      child: Stack(
+                child: Container(
+                  height: AppNavBar._pillHeight,
+                  padding: EdgeInsets.symmetric(
+                    // Room for the label to sit in, appearing as it does.
+                    horizontal: 12 + (4 * t),
+                  ),
+                  decoration: BoxDecoration(
+                    // Fades in with everything else rather than switching on.
+                    color: surfaces.accentContainer.withValues(alpha: t),
+                    borderRadius: BorderRadius.circular(
+                      AppNavBar._pillHeight / 2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // The two glyphs are the same size in the same place, so
+                      // this is a weight change rather than a swap: their
+                      // opacities always sum to one, and neither ghosts.
+                      Stack(
                         alignment: Alignment.center,
                         children: [
-                          // M3's active indicator, growing from the centre with
-                          // the same clock as everything else here. It starts
-                          // wide rather than tiny -- 0.72, not 0.6 -- so it
-                          // reads as the pill arriving, not as something
-                          // inflating.
-                          Opacity(
-                            opacity: t,
-                            child: Transform.scale(
-                              scale: 0.72 + (0.28 * t),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: surfaces.accentContainer,
-                                  borderRadius: BorderRadius.circular(
-                                    AppNavBar._indicatorHeight / 2,
-                                  ),
-                                ),
-                                child: const SizedBox.expand(),
-                              ),
-                            ),
-                          ),
-                          // The two glyphs are the same size and sit in the same
-                          // place, so this is a weight change rather than a
-                          // swap: one fades out exactly as the other fades in,
-                          // and their opacities always sum to one.
                           Opacity(
                             opacity: 1 - t,
                             child: Icon(
@@ -255,34 +308,45 @@ class _NavButtonState extends State<_NavButton> {
                           ),
                         ],
                       ),
-                    ),
-                    // M3's icon-to-label gap.
-                    const SizedBox(height: AppSpacing.x1),
-                    // Clamped, because the bar's height is fixed: past about 1.2
-                    // the label starts eating into the indicator rather than
-                    // wrapping.
-                    MediaQuery.withClampedTextScaling(
-                      maxScaleFactor: 1.2,
-                      child: DefaultTextStyle(
-                        // One weight in both states, which is also what M3
-                        // specifies. Animating the weight re-measured the text
-                        // on every frame, so the label breathed a pixel wider
-                        // and back on each tap -- the "jump" this bar had.
-                        style: AppTypography.navLabel(colour),
-                        child: child!,
-                      ),
-                    ),
-                  ],
+                      // Revealed by width rather than faded in place: the label
+                      // slides out from behind the icon as the pill opens, so
+                      // there is never text sitting in a space too small for
+                      // it. `Flexible` is what bounds it -- a non-flex child of
+                      // a Row is laid out unbounded, and an unbounded Text
+                      // cannot ellipsise, it overflows.
+                      if (t > 0)
+                        Flexible(
+                          child: ClipRect(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: t,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  left: AppSpacing.x2,
+                                ),
+                                child: MediaQuery.withClampedTextScaling(
+                                  // Clamped, because the bar's height is fixed:
+                                  // past about 1.2 the label starts fighting
+                                  // the pill rather than wrapping.
+                                  maxScaleFactor: 1.2,
+                                  child: Text(
+                                    widget.item.label,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.navLabel(
+                                      colour,
+                                    ).copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              );
-            },
-            // Built once and handed to every frame: the label's text never
-            // changes, only the style wrapped around it.
-            child: Text(
-              widget.item.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
+              ),
             ),
           ),
         ),

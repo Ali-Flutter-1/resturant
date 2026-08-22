@@ -7,6 +7,7 @@ import '../../../core/haptics/app_haptics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/network_photo.dart';
 import '../../../shared/widgets/api_error_view.dart';
 import '../../../shared/widgets/app_chip.dart';
 import '../../../shared/widgets/app_sheet.dart';
@@ -438,11 +439,8 @@ class _Avatar extends StatelessWidget {
                 color: scheme.primary,
               ),
             )
-          : Image.network(
-              avatar,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
+          : NetworkPhoto(
+              url: avatar,
               errorBuilder: (context, _, _) =>
                   Center(child: Icon(Icons.person, color: scheme.primary)),
             ),

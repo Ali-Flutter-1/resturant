@@ -3,6 +3,8 @@ import 'dart:io' show File;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'network_photo.dart';
+
 import '../../core/animations/motion.dart';
 import '../../core/animations/skeleton.dart';
 import '../../core/theme/app_colors.dart';
@@ -64,34 +66,46 @@ class DishImage extends StatelessWidget {
               errorBuilder: (context, _, _) => _Placeholder(name: name),
             );
     } else if (url != null && url.isNotEmpty) {
-      image = Image.network(
-        url,
-        fit: fit,
-        // Fill the box, always.
-        //
-        // Without these, the image reports its *intrinsic* size whenever it is
-        // given loose constraints — and the `frameBuilder` below hands it
-        // exactly that, because `AnimatedSwitcher` lays its children out in a
-        // Stack. So a small photograph drew smaller than its slot while a large
-        // one filled it, and `wasSyncLoaded` skips the switcher entirely for a
-        // cached image — which is why the same dish looked right on a second
-        // visit and wrong on the first. `double.infinity` resolves to whatever
-        // the box allows, so `cover` crops into it either way.
-        width: double.infinity,
-        height: double.infinity,
-        // Cross-fade from the shimmer rather than popping in.
-        frameBuilder: (context, child, frame, wasSyncLoaded) {
-          if (wasSyncLoaded) return child;
-          return AnimatedSwitcher(
-            duration: context.motion.fade(Motion.base),
-            child: frame == null
-                ? _Placeholder(name: name, shimmer: true)
-                : child,
-          );
-        },
-        loadingBuilder: (context, child, progress) =>
-            progress == null ? child : _Placeholder(name: name, shimmer: true),
-        errorBuilder: (context, _, _) => _Placeholder(name: name),
+      image = LayoutBuilder(
+        builder: (context, constraints) => Image.network(
+          url,
+          fit: fit,
+          // Decoded at the size it is drawn, not the size it was uploaded.
+          //
+          // A dish photograph off the server can be two thousand pixels wide and
+          // is shown in a card a couple of hundred wide. Without this the full
+          // bitmap is decoded and held in the image cache -- roughly sixteen
+          // megabytes for one 2000x2000 photo, against a default cache budget of
+          // a hundred -- so a menu of a dozen dishes evicts itself while
+          // scrolling and decodes everything again on the way back.
+          cacheWidth: decodeWidthFor(context, constraints.maxWidth),
+          // Fill the box, always.
+          //
+          // Without these, the image reports its *intrinsic* size whenever it is
+          // given loose constraints — and the `frameBuilder` below hands it
+          // exactly that, because `AnimatedSwitcher` lays its children out in a
+          // Stack. So a small photograph drew smaller than its slot while a large
+          // one filled it, and `wasSyncLoaded` skips the switcher entirely for a
+          // cached image — which is why the same dish looked right on a second
+          // visit and wrong on the first. `double.infinity` resolves to whatever
+          // the box allows, so `cover` crops into it either way.
+          width: double.infinity,
+          height: double.infinity,
+          // Cross-fade from the shimmer rather than popping in.
+          frameBuilder: (context, child, frame, wasSyncLoaded) {
+            if (wasSyncLoaded) return child;
+            return AnimatedSwitcher(
+              duration: context.motion.fade(Motion.base),
+              child: frame == null
+                  ? _Placeholder(name: name, shimmer: true)
+                  : child,
+            );
+          },
+          loadingBuilder: (context, child, progress) => progress == null
+              ? child
+              : _Placeholder(name: name, shimmer: true),
+          errorBuilder: (context, _, _) => _Placeholder(name: name),
+        ),
       );
     } else {
       image = _Placeholder(name: name);

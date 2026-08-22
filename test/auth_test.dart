@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:practice/features/cart/cart_cubit.dart';
+import 'package:practice/features/menu/domain/dish.dart';
 
 import 'package:practice/core/network/api_failure.dart';
 import 'package:practice/core/theme/app_theme.dart';
@@ -517,6 +519,35 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 2));
+    });
+  });
+
+  group('what sign-out has to take with it', () {
+    test('per-account state is emptied before the next person signs in', () async {
+      // Whatever the app holds in memory for one account must not survive into
+      // the next session on the same phone. The wiring lives in main(), so this
+      // pins the contract the hook exists for.
+      final cart = CartCubit()
+        ..addDish(
+          const Dish(
+            id: 'd1',
+            name: 'Kottu',
+            description: '',
+            pricePence: 1200,
+          ),
+        );
+      expect(cart.state.count, 1);
+
+      final auth = AuthCubit(repository: FakeAuthRepository(user: _admin));
+      await auth.signIn(email: 'boss@tscafe.co.uk', password: 'secret');
+      auth.onSigningOut = () async => cart.clear();
+
+      await auth.signOut();
+
+      expect(cart.state.count, 0);
+      expect(cart.state.lines, isEmpty);
+      await cart.close();
+      await auth.close();
     });
   });
 }

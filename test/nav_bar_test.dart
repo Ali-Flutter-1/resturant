@@ -11,8 +11,9 @@ import 'package:practice/shared/widgets/app_nav_bar.dart';
 /// This is the bar on Android and web; iOS gets the real `UITabBar`. It follows
 /// Material 3's `NavigationBar` metrics, and what is asserted here is the set of
 /// things easy to break while changing something else and invisible in a diff:
-/// the 64×32 active indicator, one icon size, the outlined-to-filled swap, an
-/// edge-to-edge bar with no shadow, and the system inset sitting inside it.
+/// the selected tab being a pill with its label beside the icon, one icon size,
+/// the outlined-to-filled swap, an edge-to-edge bar with no shadow, and the
+/// system inset sitting inside it.
 void main() {
   const items = [
     AppNavItem(
@@ -152,18 +153,23 @@ void main() {
     expect(unselected.color, isNot(accent));
   });
 
-  testWidgets('the indicator is M3\'s 64 by 32 and icons are one size', (
-    tester,
-  ) async {
+  testWidgets('every pill is 40 tall and icons are one size', (tester) async {
     await tester.pumpWidget(wrap(currentIndex: 1));
     await tester.pumpAndSettle();
 
-    for (final indicator in find.byType(AnimatedOpacity).evaluate()) {
-      expect(
-        tester.getSize(find.byWidget(indicator.widget)),
-        const Size(64, 32),
-      );
-    }
+    // Selected or not, each tab's pill is the same height -- only its width and
+    // its fill change -- so nothing rises or drops as the selection moves.
+    final heights = tester
+        .widgetList<Container>(
+          find.descendant(
+            of: find.byType(AppNavBar),
+            matching: find.byType(Container),
+          ),
+        )
+        .map((c) => c.constraints?.maxHeight)
+        .whereType<double>()
+        .toSet();
+    expect(heights, {40.0});
 
     // One icon size across every tab. A 24 beside a 25 reads as a mistake
     // without ever looking obviously wrong.
@@ -269,7 +275,8 @@ void main() {
     await tester.pumpWidget(wrap(onTap: taps.add));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Orders'));
+    // By glyph, not by label: an unselected tab no longer shows its name.
+    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
     expect(taps, [1]);
 
     // Selection must reach assistive tech; a tint and a pill are both invisible
@@ -285,36 +292,84 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the label keeps one weight, so nothing reflows on a tap', (
+  testWidgets('only the selected tab shows its name', (tester) async {
+    await tester.pumpWidget(live());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Menu'), findsOneWidget);
+    // The inactive tab is a bare glyph...
+    expect(find.text('Orders'), findsNothing);
+
+    // ...but it still has a name, so hiding the word costs a screen-reader
+    // user nothing.
+    expect(
+      tester.getSemantics(find.byIcon(Icons.receipt_long_outlined)),
+      matchesSemantics(
+        label: 'Orders',
+        isButton: true,
+        isFocusable: true,
+        hasSelectedState: true,
+        isSelected: false,
+        hasTapAction: true,
+        hasFocusAction: true,
+        tooltip: 'Orders',
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
+    await tester.pumpAndSettle();
+
+    // The name follows the selection rather than both being shown at once.
+    expect(find.text('Orders'), findsOneWidget);
+    expect(find.text('Menu'), findsNothing);
+  });
+
+  testWidgets('the pill grows into what the other tabs give up', (
     tester,
   ) async {
     await tester.pumpWidget(live());
     await tester.pumpAndSettle();
 
-    Rect labelRect() => tester.getRect(find.text('Menu'));
-    final atRest = labelRect();
+    Size pillFor(IconData icon) => tester.getSize(
+      find
+          .ancestor(of: find.byIcon(icon), matching: find.byType(Container))
+          .first,
+    );
 
-    await tester.tap(find.text('Orders'));
-    // Mid-flight is where a weight change shows: the text re-measures every
-    // frame, so the label breathes wider and back under the finger.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(labelRect(), atRest);
+    final selectedAtRest = pillFor(Icons.restaurant);
+    final unselectedAtRest = pillFor(Icons.receipt_long_outlined);
+    expect(selectedAtRest.width, greaterThan(unselectedAtRest.width));
+    // Height never changes -- only width does. A pill that grew taller would
+    // push the glyph off the bar's centre line.
+    expect(selectedAtRest.height, unselectedAtRest.height);
 
+    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
     await tester.pumpAndSettle();
-    expect(labelRect(), atRest);
+
+    // The two have swapped roles. The exact widths differ because the labels
+    // do -- "Orders" is wider than "Menu" -- so what is pinned is the
+    // relationship, not a number.
+    expect(
+      pillFor(Icons.receipt_long).width,
+      greaterThan(pillFor(Icons.restaurant_outlined).width),
+    );
+    expect(
+      pillFor(Icons.restaurant_outlined).width,
+      closeTo(unselectedAtRest.width, 1),
+    );
   });
 
-  testWidgets('the bar does not resize or move while switching', (
+  testWidgets('the bar itself never resizes or moves while switching', (
     tester,
   ) async {
     await tester.pumpWidget(live());
     await tester.pumpAndSettle();
     final before = tester.getRect(find.byType(AppNavBar));
 
-    await tester.tap(find.text('Orders'));
+    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
+    // Mid-flight is where a bar that reflows shows it.
     expect(tester.getRect(find.byType(AppNavBar)), before);
 
     await tester.pumpAndSettle();
@@ -327,58 +382,66 @@ void main() {
     await tester.pumpWidget(live());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Orders'));
+    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
     // The first pump starts the animation; the second lands inside it.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
 
-    // Within the Orders cell the outline and filled glyphs are stacked, and
-    // their opacities are two halves of one value. Summing to less than one
-    // would show as a brief ghost of both.
-    final cell = find
-        .ancestor(of: find.text('Orders'), matching: find.byType(Column))
-        .first;
     final pair = tester
         .widgetList<Opacity>(
-          find.descendant(of: cell, matching: find.byType(Opacity)),
+          find.descendant(
+            of: find
+                .ancestor(
+                  of: find.byIcon(Icons.receipt_long),
+                  matching: find.byType(Stack),
+                )
+                .first,
+            matching: find.byType(Opacity),
+          ),
         )
         .map((o) => o.opacity)
         .toList();
 
-    // Three: the indicator, then the outline and filled glyphs.
-    expect(pair, hasLength(3));
-    expect(pair[1] + pair[2], closeTo(1, 0.0001));
+    // Outline and filled, and their opacities are two halves of one value.
+    // Summing to less than one would show as a ghost of both.
+    expect(pair, hasLength(2));
+    expect(pair[0] + pair[1], closeTo(1, 0.0001));
     // Actually mid-flight, not settled at either end.
-    expect(pair[0], greaterThan(0));
-    expect(pair[0], lessThan(1));
+    expect(pair[1], greaterThan(0));
+    expect(pair[1], lessThan(1));
   });
 
   testWidgets('a press answers immediately, and lets go', (tester) async {
     await tester.pumpWidget(live());
     await tester.pumpAndSettle();
 
-    double scaleOf(String label) => tester
+    double scaleOf(IconData icon) => tester
         .widget<AnimatedScale>(
           find
               .ancestor(
-                of: find.text(label),
+                of: find.byIcon(icon),
                 matching: find.byType(AnimatedScale),
               )
               .first,
         )
         .scale;
 
-    expect(scaleOf('Orders'), 1);
+    expect(scaleOf(Icons.receipt_long_outlined), 1);
 
-    final gesture = await tester.press(find.text('Orders'));
-    await tester.pump();
-    // Subtle, not a bounce: the whole cell dips as one.
-    expect(scaleOf('Orders'), lessThan(1));
-    expect(scaleOf('Orders'), greaterThan(0.9));
+    final gesture = await tester.press(
+      find.byIcon(Icons.receipt_long_outlined),
+    );
+    // The tooltip's long-press recogniser is in the arena too, so the tap
+    // recogniser holds `onTapDown` until it wins rather than firing on the
+    // first frame.
+    await tester.pump(const Duration(milliseconds: 150));
+    // Subtle, not a bounce: the whole pill dips as one.
+    expect(scaleOf(Icons.receipt_long_outlined), lessThan(1));
+    expect(scaleOf(Icons.receipt_long_outlined), greaterThan(0.9));
 
     await gesture.up();
     await tester.pumpAndSettle();
-    expect(scaleOf('Orders'), 1);
+    expect(scaleOf(Icons.receipt_long), 1);
   });
 }
 

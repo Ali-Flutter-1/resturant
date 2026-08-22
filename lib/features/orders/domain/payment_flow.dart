@@ -84,7 +84,22 @@ class PaymentFlow {
       );
     }
 
-    await _open(url);
+    // Checked before it is handed to the platform. `launchUrl` will open
+    // whatever scheme it is given -- `javascript:`, `intent://`, `file:` -- so
+    // a tampered or mistaken response could turn this into an arbitrary launch
+    // on the customer's phone. A hosted payment page is always https, so
+    // anything else is refused rather than opened and hoped for.
+    final target = Uri.tryParse(url);
+    if (target == null || target.scheme.toLowerCase() != 'https') {
+      throw const ApiFailure(
+        kind: ApiFailureKind.server,
+        message:
+            'That payment link did not look right, so it was not opened. Your '
+            'order is saved and unpaid.',
+      );
+    }
+
+    await _open(target.toString());
     return confirm(current.id);
   }
 

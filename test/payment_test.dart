@@ -195,6 +195,33 @@ void main() {
     });
   });
 
+  test('refuses a payment link that is not https', () async {
+    for (final hostile in [
+      'javascript:alert(1)',
+      'intent://evil#Intent;scheme=http;end',
+      'file:///etc/passwd',
+      'http://hpp-sandbox.worldpay.com/x',
+    ]) {
+      repository.payUrl = hostile;
+      final order = CustomerOrder.fromJson({
+        'id': 'new-order',
+        'payment_method': 'card',
+        'payment_status': 'pending',
+        'payment_url': hostile,
+      });
+      repository.orders = [order];
+
+      // launchUrl opens whatever scheme it is handed, so a tampered response
+      // could otherwise become an arbitrary launch on the customer's phone.
+      await expectLater(
+        flowFor().payFor(order),
+        throwsA(isA<ApiFailure>()),
+        reason: hostile,
+      );
+    }
+    expect(opened, isEmpty);
+  });
+
   group('paying from the orders screen', () {
     test('a successful payment updates that order and nothing else', () async {
       await placeCardOrder();

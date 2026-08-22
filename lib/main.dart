@@ -99,6 +99,13 @@ Future<void> main() async {
   // count until the bell happened to be rebuilt.
   final inbox = NotificationsCubit(repository: notifications);
 
+  // App-level too, and hoisted here for the same reason the inbox was: it has
+  // to be emptied on sign-out. A basket left in memory belongs to whoever
+  // filled it, and the next person to sign in on this phone would otherwise
+  // find somebody else's dinner in their cart -- and their address on the
+  // checkout screen after it.
+  final cart = CartCubit();
+
   // A push that arrives while the app is open moves the badge without the user
   // opening anything.
   pushes.received.listen((_) => inbox.refreshBadge());
@@ -124,6 +131,7 @@ Future<void> main() async {
   // the same reason.
   auth.onSigningOut = () async {
     inbox.clear();
+    cart.clear();
     await pushes.unregister();
   };
 
@@ -152,6 +160,7 @@ Future<void> main() async {
       venue: ApiVenueRepository(client: client),
       notifications: notifications,
       inbox: inbox,
+      cart: cart,
       workingHours: ApiWorkingHoursRepository(client: client),
       orders: AppConfig.useDemoOrders
           ? DemoOrderRepository()
@@ -164,6 +173,7 @@ class TsCafeApp extends StatelessWidget {
   const TsCafeApp({
     super.key,
     required this.auth,
+    required this.cart,
     required this.menu,
     required this.adminMenu,
     required this.contact,
@@ -225,6 +235,9 @@ class TsCafeApp extends StatelessWidget {
   /// The notification inbox and badge, shared by the bell and the inbox screen.
   final NotificationsCubit inbox;
 
+  /// Held by the app rather than created in `build`, so sign-out can empty it.
+  final CartCubit cart;
+
   /// Opening hours. The read is public — somebody deciding whether to walk over
   /// does not have an account — and only an admin may edit the week.
   final WorkingHoursRepository workingHours;
@@ -253,7 +266,7 @@ class TsCafeApp extends StatelessWidget {
       child: MultiBlocProvider(
         providers: [
           BlocProvider.value(value: auth),
-          BlocProvider(create: (_) => CartCubit()),
+          BlocProvider.value(value: cart),
           BlocProvider.value(value: inbox),
         ],
         child: ScreenUtilInit(
